@@ -1,0 +1,419 @@
+from __future__ import annotations
+
+import json
+import shutil
+import sqlite3
+import threading
+import uuid
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from agent_harness.config import Settings
+
+
+def utc_now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+class ControlStore:
+    """Persistent control-plane state and session-isolated workspaces."""
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        self.settings.ensure_directories()
+        self.path = settings.state_dir / "control.sqlite"
+        self._lock = threading.RLock()
+        self._connection = sqlite3.connect(self.path, check_same_thread=False)
+        self._connection.row_factory = sqlite3.Row
+        self._connection.execute("PRAGMA foreign_keys = ON")
+        self._setup()
+
+    def _setup(self) -> None:
+        with self._lock, self._connection:
+            self._connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                    run_id TEXT,
+                    role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS runs (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                    status TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    error TEXT,
+                    usage_json TEXT NOT NULL DEFAULT '{}'
+                );
+                CREATE TABLE IF NOT EXISTS events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+                    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                    type TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_messages_session
+                    ON messages(session_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_runs_session
+                    ON runs(session_id, started_at);
+                CREATE INDEX IF NOT EXISTS idx_events_run
+                    ON events(run_id, id);
+                """
+            )
+            self._connection.execute(
+                """
+                UPDATE runs
+                SET status = 'failed',
+                    completed_at = ?,
+                    error = 'Backend riavviato durante esecuzione.'
+                WHERE status IN ('queued', 'running', 'waiting_approval')
+                """,
+                (utc_now(),),
+            )
+            columns = {
+                row["name"]
+                for row in self._connection.execute("PRAGMA table_info(messages)")
+            }
+            if "attachments_json" not in columns:
+                self._connection.execute(
+                    "ALTER TABLE messages ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'"
+                )
+
+    def create_session(self, title: str = "Nuova sessione") -> dict[str, Any]:
+        session_id = str(uuid.uuid4())
+        now = utc_now()
+        with self._lock, self._connection:
+            self._connection.execute(
+                "INSERT INTO sessions(id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (session_id, title.strip()[:120] or "Nuova sessione", now, now),
+            )
+        self.prepare_session_root(session_id)
+        return self.get_session(session_id)
+
+    def session_exists(self, session_id: str) -> bool:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT 1 FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+        return row is not None
+
+    def get_session(self, session_id: str) -> dict[str, Any]:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT s.*,
+                       (SELECT status FROM runs r WHERE r.session_id = s.id
+                        ORDER BY started_at DESC LIMIT 1) AS last_status
+                FROM sessions s WHERE s.id = ?
+                """,
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(session_id)
+        return dict(row)
+
+    def list_sessions(self, search: str = "") -> list[dict[str, Any]]:
+        query = """
+            SELECT s.*,
+                   (SELECT content FROM messages m WHERE m.session_id = s.id
+                    ORDER BY created_at DESC LIMIT 1) AS preview,
+                   (SELECT status FROM runs r WHERE r.session_id = s.id
+                    ORDER BY started_at DESC LIMIT 1) AS last_status
+            FROM sessions s
+        """
+        parameters: tuple[Any, ...] = ()
+        if search:
+            query += """
+                WHERE s.title LIKE ?
+                   OR EXISTS (
+                       SELECT 1 FROM messages m
+                       WHERE m.session_id = s.id AND m.content LIKE ?
+                   )
+            """
+            term = f"%{search[:200]}%"
+            parameters = (term, term)
+        query += " ORDER BY s.updated_at DESC LIMIT 100"
+        with self._lock:
+            rows = self._connection.execute(query, parameters).fetchall()
+        return [dict(row) for row in rows]
+
+    def rename_session(self, session_id: str, title: str) -> dict[str, Any]:
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                "UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?",
+                (title.strip()[:120] or "Nuova sessione", utc_now(), session_id),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(session_id)
+        return self.get_session(session_id)
+
+    def delete_session(self, session_id: str) -> None:
+        with self._lock, self._connection:
+            cursor = self._connection.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        if cursor.rowcount == 0:
+            raise KeyError(session_id)
+        shutil.rmtree(self.session_root(session_id), ignore_errors=True)
+
+    def add_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        *,
+        run_id: str | None = None,
+        attachments: list[str] | None = None,
+    ) -> dict[str, Any]:
+        message_id = str(uuid.uuid4())
+        now = utc_now()
+        attachment_names = list(attachments or [])
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO messages(
+                    id, session_id, run_id, role, content, created_at, attachments_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    message_id,
+                    session_id,
+                    run_id,
+                    role,
+                    content,
+                    now,
+                    json.dumps(attachment_names, ensure_ascii=False),
+                ),
+            )
+            self._connection.execute(
+                "UPDATE sessions SET updated_at = ? WHERE id = ?",
+                (now, session_id),
+            )
+            count = self._connection.execute(
+                "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()[0]
+            if role == "user" and count == 1:
+                title = " ".join(content.split())[:60]
+                self._connection.execute(
+                    "UPDATE sessions SET title = ? WHERE id = ?",
+                    (title or "Nuova sessione", session_id),
+                )
+        return {
+            "id": message_id,
+            "session_id": session_id,
+            "run_id": run_id,
+            "role": role,
+            "content": content,
+            "created_at": now,
+            "attachments": attachment_names,
+        }
+
+    def list_messages(self, session_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at, rowid",
+                (session_id,),
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["attachments"] = json.loads(item.pop("attachments_json", None) or "[]")
+            result.append(item)
+        return result
+
+    def create_run(self, session_id: str) -> dict[str, Any]:
+        run_id = str(uuid.uuid4())
+        now = utc_now()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO runs(id, session_id, status, started_at)
+                VALUES (?, ?, 'queued', ?)
+                """,
+                (run_id, session_id, now),
+            )
+        return self.get_run(run_id)
+
+    def get_run(self, run_id: str) -> dict[str, Any]:
+        with self._lock:
+            row = self._connection.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+        if row is None:
+            raise KeyError(run_id)
+        result = dict(row)
+        result["usage"] = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "output_tokens_per_second": 0,
+            "context_categories": [],
+            "estimated_context": True,
+            **json.loads(result.pop("usage_json") or "{}"),
+        }
+        return result
+
+    def latest_run(self, session_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT id FROM runs WHERE session_id = ? ORDER BY started_at DESC LIMIT 1",
+                (session_id,),
+            ).fetchone()
+        return self.get_run(row["id"]) if row else None
+
+    def update_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        error: str | None = None,
+        usage: dict[str, Any] | None = None,
+    ) -> None:
+        terminal = status in {"completed", "failed", "cancelled"}
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                UPDATE runs
+                SET status = ?, completed_at = ?, error = ?, usage_json = ?
+                WHERE id = ?
+                """,
+                (
+                    status,
+                    utc_now() if terminal else None,
+                    error,
+                    json.dumps(usage or {}, ensure_ascii=False),
+                    run_id,
+                ),
+            )
+
+    def add_event(
+        self,
+        run_id: str,
+        session_id: str,
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        now = utc_now()
+        clean_payload = payload or {}
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                """
+                INSERT INTO events(run_id, session_id, type, payload_json, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (run_id, session_id, event_type, json.dumps(clean_payload), now),
+            )
+        return {
+            "id": cursor.lastrowid,
+            "run_id": run_id,
+            "session_id": session_id,
+            "type": event_type,
+            "payload": clean_payload,
+            "created_at": now,
+        }
+
+    def list_events(
+        self,
+        run_id: str,
+        *,
+        after_id: int = 0,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT * FROM events
+                WHERE run_id = ? AND id > ?
+                ORDER BY id LIMIT ?
+                """,
+                (run_id, after_id, limit),
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["payload"] = json.loads(item.pop("payload_json"))
+            result.append(item)
+        return result
+
+    def list_session_events(
+        self,
+        session_id: str,
+        *,
+        limit: int = 2_000,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT * FROM events
+                WHERE session_id = ?
+                ORDER BY id DESC LIMIT ?
+                """,
+                (session_id, limit),
+            ).fetchall()
+        result = []
+        for row in reversed(rows):
+            item = dict(row)
+            item["payload"] = json.loads(item.pop("payload_json"))
+            result.append(item)
+        return result
+
+    def session_root(self, session_id: str) -> Path:
+        return self.settings.state_dir / "sessions" / session_id
+
+    def workspace_dir(self, session_id: str) -> Path:
+        return self.session_root(session_id) / "workspace"
+
+    def prepare_session_root(self, session_id: str) -> Path:
+        root = self.session_root(session_id)
+        workspace = root / "workspace"
+        workspace.mkdir(parents=True, exist_ok=True)
+        (root / "memories").mkdir(exist_ok=True)
+        (root / "skills").mkdir(exist_ok=True)
+        if self.settings.skills_dir.exists():
+            shutil.copytree(self.settings.skills_dir, root / "skills", dirs_exist_ok=True)
+        source_memory = self.settings.project_root / "memories" / "AGENTS.md"
+        if source_memory.exists():
+            shutil.copy2(source_memory, root / "memories" / "AGENTS.md")
+        else:
+            (root / "memories" / "AGENTS.md").write_text("# Memoria sessione\n", encoding="utf-8")
+        return root
+
+    def list_files(self, session_id: str) -> list[dict[str, Any]]:
+        workspace = self.workspace_dir(session_id)
+        result: list[dict[str, Any]] = []
+        if not workspace.exists():
+            return result
+        for path in sorted(workspace.rglob("*")):
+            if not path.is_file() or path.is_symlink():
+                continue
+            try:
+                relative = path.relative_to(workspace)
+                stat = path.stat()
+            except (OSError, ValueError):
+                continue
+            result.append(
+                {
+                    "name": relative.as_posix(),
+                    "size": stat.st_size,
+                    "type": path.suffix.lstrip(".").upper(),
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
+                }
+            )
+            if len(result) >= 500:
+                break
+        return result
+
+    def close(self) -> None:
+        with self._lock:
+            self._connection.close()

@@ -1,0 +1,118 @@
+import { ArrowUp, Paperclip, ShieldCheck, X } from "lucide-react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { ACCEPTED_FILES } from "../../lib/constants";
+import type { SessionFile } from "../../types";
+import { FileIcon } from "../shared/FileIcon";
+
+export function ChatComposer({
+  disabled,
+  files,
+  onSend,
+  onUpload,
+  onDeleteFile,
+}: {
+  disabled: boolean;
+  files: SessionFile[];
+  onSend: (content: string) => void;
+  onUpload: (files: FileList | null) => void;
+  onDeleteFile: (name: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const clean = value.trim();
+    if (!clean || disabled) return;
+    onSend(clean);
+    setValue("");
+    if (inputRef.current) inputRef.current.style.height = "auto";
+  };
+
+  const resize = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    setValue(event.target.value);
+    event.target.style.height = "auto";
+    event.target.style.height = `${Math.min(event.target.scrollHeight, 160)}px`;
+  };
+
+  return (
+    <form
+      className="relative z-10 shrink-0 border-t border-border bg-surface p-3"
+      onSubmit={submit}
+    >
+      {files.length ? (
+        <div className="mb-3 flex flex-wrap gap-2" aria-label="Allegati conversazione">
+          {files.map((file) => (
+            <span
+              key={file.name}
+              className="inline-flex max-w-[220px] items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm"
+              title={file.name}
+            >
+              <FileIcon type={file.type} />
+              <span className="truncate">{file.name}</span>
+              <button
+                type="button"
+                className="text-muted hover:text-foreground"
+                aria-label={`Rimuovi ${file.name}`}
+                onClick={() => onDeleteFile(file.name)}
+              >
+                <X size={14} />
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="rounded-xl border border-border bg-background shadow-sm transition-[border-color,box-shadow] focus-within:border-muted focus-within:shadow-[0_0_0_1px_rgba(139,92,246,0.12)]">
+        <textarea
+          ref={inputRef}
+          className="block w-full resize-none bg-transparent px-4 pt-4 text-base leading-relaxed outline-none focus:outline-none focus-visible:outline-none placeholder:text-muted"
+          value={value}
+          onChange={resize}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) submit(event);
+          }}
+          placeholder="Dai un obiettivo all'agente…"
+          aria-label="Messaggio"
+          maxLength={20_000}
+          rows={1}
+        />
+        <div className="flex items-center justify-between gap-3 px-3 pb-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted hover:bg-surface-raised hover:text-foreground"
+              onClick={() => fileRef.current?.click()}
+            >
+              <Paperclip size={16} />
+              Allega
+            </button>
+            <input
+              ref={fileRef}
+              hidden
+              multiple
+              type="file"
+              accept={ACCEPTED_FILES}
+              onChange={(event) => onUpload(event.target.files)}
+            />
+            <span className="hidden items-center gap-1.5 text-xs text-muted sm:inline-flex">
+              <ShieldCheck size={14} />
+              Sandbox con approvazione
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="hidden text-xs text-muted md:inline">Invio ↵ · A capo ⇧↵</span>
+            <button
+              type="submit"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-soft disabled:opacity-40"
+              disabled={disabled || !value.trim()}
+              aria-label="Invia messaggio"
+            >
+              <ArrowUp size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  );
+}
