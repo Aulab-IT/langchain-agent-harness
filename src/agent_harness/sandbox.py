@@ -170,7 +170,8 @@ class SessionSandboxManager:
                 check=False,
                 timeout=15,
             )
-            command = self.run_flags(workspace, image) + [
+            command = [
+                *self.run_flags(workspace, image),
                 "--name",
                 name,
                 "-d",
@@ -272,7 +273,8 @@ class DockerSandbox:
     def run_command_line(self, command: str = "sleep infinity") -> list[str]:
         """Compatibilità test: comando docker run per avviare il container."""
         flags = self.manager.run_flags(self.workspace, self.image)
-        return flags + [
+        return [
+            *flags,
             "--name",
             self.manager.container_name(self.session_id),
             "-d",

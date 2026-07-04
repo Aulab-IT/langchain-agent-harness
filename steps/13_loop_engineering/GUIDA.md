@@ -1,0 +1,39 @@
+# Step 13 — Loop engineering
+
+## Obiettivo
+
+Oltre all'anatomia dell'harness, l'articolo
+[*The Art of Loop Engineering*](https://www.langchain.com/blog/the-art-of-loop-engineering)
+descrive quattro loop impilati. Il Loop 1 (agente + tool) è già tutto l'harness costruito
+negli step precedenti. Qui aggiungiamo i tre loop che lo circondano, in versione locale.
+
+## Loop 2 — Verifica con rubric
+
+Il gate deterministico dello step 09 dice se un comando è uscito con codice zero, ma non
+se la risposta è davvero buona. Il modulo `verification.py` aggiunge un `RubricGrader`: un
+giudice basato sul modello forte assegna un punteggio per criterio (completezza, prove di
+verifica, aderenza, sicurezza) e restituisce un feedback. La soglia resta deterministica in
+Python. Se la risposta non passa, il `GoalRunner` reinietta il feedback nel budget di
+continuazione già esistente, invece di limitarsi a ripetere l'obiettivo.
+
+## Loop 3 — Trigger a eventi
+
+Finora ogni run parte da una richiesta esplicita. `triggers.py` aggiunge uno scheduler
+asincrono che valuta espressioni cron (`cron_matches`) e un endpoint webhook protetto da
+token: un evento avvia un run autonomo. Il payload dell'evento è trattato come dato non
+attendibile, mai come istruzioni.
+
+## Loop 4 — Hill climbing
+
+`improve.py` legge i trace persistiti (eventi, audit, feedback del grader) e produce un
+report aggregato. Un agente d'analisi propone modifiche alla configurazione entro una
+whitelist (`system_prompt_addendum`, `harness_max_tool_calls`, `harness_rubric_threshold`).
+La proposta è solo scritta su disco: viene applicata a un file di override reversibile solo
+dopo revisione umana, mai come patch diretta al codice.
+
+## Procedura manuale
+
+Esegui `app.py` per vedere i tre loop in sequenza: una verifica a rubric, un match cron e una
+proposta di miglioramento generata dai trace. Servono `OPENAI_API_KEY` e un modello forte
+configurato. Il comando `harness improve` e la vista "Miglioramenti" del Control Center usano
+la stessa pipeline.

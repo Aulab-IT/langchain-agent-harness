@@ -105,4 +105,59 @@ export type RuntimeStatus = {
     memory: string;
     cpu: string;
   };
+  verification: { enabled: boolean; threshold: number };
+  triggers: { enabled: boolean; tick_seconds: number };
+  overrides: Record<string, unknown>;
+};
+
+export type Trigger = {
+  id: string;
+  kind: "cron" | "webhook";
+  name: string;
+  cron_expr: string | null;
+  token: string | null;
+  goal_template: string;
+  session_id: string | null;
+  enabled: boolean;
+  created_at: string;
+  last_fired_at: string | null;
+};
+
+export type ImprovementSummary = {
+  name: string;
+  size: number;
+  modified_at: string;
+};
+
+export type ImprovementDetail = {
+  name: string;
+  content: string;
+  overrides: Record<string, unknown>;
+};
+
+export type ContextEntry = {
+  index: number;
+  kind: "system" | "memory" | "user" | "assistant" | "tool" | "other";
+  role: string;
+  name: string | null;
+  text: string;
+  tool_calls: Array<{ name: string; args: string }>;
+  tokens: number;
+  category: string;
+};
+
+export type ContextData = {
+  total_tokens: number;
+  context_window: number;
+  categories: Array<{ name: string; tokens: number; percent: number; color: string }>;
+  entries: ContextEntry[];
+};
+
+export type ImproveResult = {
+  name: string;
+  summary: string;
+  findings: string[];
+  overrides: Record<string, unknown>;
+  applied: Record<string, unknown>;
+  report: string;
 };

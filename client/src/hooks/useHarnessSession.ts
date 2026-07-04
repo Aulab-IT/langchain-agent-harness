@@ -234,14 +234,26 @@ export function useHarnessSession() {
   const latestLiveUsage = [...events]
     .reverse()
     .find((event) => event.type === "usage.live")?.payload;
+  const latestSnapshot = [...events]
+    .reverse()
+    .find((event) => event.type === "usage.snapshot")?.payload;
+
+  const active = Boolean(run && !["completed", "failed", "cancelled"].includes(run.status));
 
   const usage: Usage =
-    run && !["completed", "failed", "cancelled"].includes(run.status) && latestLiveUsage
+    active && (latestSnapshot || latestLiveUsage)
       ? {
           ...EMPTY_USAGE,
-          output_tokens: Number(latestLiveUsage.output_tokens ?? 0),
-          total_tokens: Number(latestLiveUsage.output_tokens ?? 0),
-          output_tokens_per_second: Number(latestLiveUsage.output_tokens_per_second ?? 0),
+          // Input/contesto: esatto per-turno dal provider; output: stima live dallo streaming.
+          input_tokens: Number(latestSnapshot?.input_tokens ?? 0),
+          output_tokens: Number(
+            latestSnapshot?.output_tokens ?? latestLiveUsage?.output_tokens ?? 0,
+          ),
+          total_tokens: Number(
+            latestSnapshot?.total_tokens ?? latestLiveUsage?.output_tokens ?? 0,
+          ),
+          output_tokens_per_second: Number(latestLiveUsage?.output_tokens_per_second ?? 0),
+          estimated_context: true,
         }
       : (run?.usage ?? EMPTY_USAGE);
 

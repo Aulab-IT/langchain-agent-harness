@@ -6,6 +6,17 @@ from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langgraph.types import Interrupt
 
 from agent_harness.runner import GoalRunner, final_text
+from agent_harness.verification import GradeResult
+
+
+class FakeGrader:
+    def __init__(self, results: list[GradeResult]) -> None:
+        self.results = list(results)
+        self.calls: list[tuple[str, str]] = []
+
+    async def grade(self, goal: str, answer: str) -> GradeResult:
+        self.calls.append((goal, answer))
+        return self.results.pop(0)
 
 
 class FakeGraph:
@@ -17,6 +28,11 @@ class FakeGraph:
         self.inputs.append(value)
         return self.outputs.pop(0)
 
+    async def astream(self, value: Any, config: dict[str, Any], stream_mode: list[str]) -> Any:
+        del stream_mode
+        self.inputs.append(value)
+        yield "values", self.outputs.pop(0)
+
 
 class FakeStreamingGraph:
     async def astream(self, value: Any, config: dict[str, Any], stream_mode: list[str]) -> Any:
@@ -25,10 +41,11 @@ class FakeStreamingGraph:
         yield "values", {"messages": [AIMessage(content="Ciao")]}
 
 
-def fake_harness(graph: FakeGraph, continuations: int = 3) -> Any:
+def fake_harness(graph: FakeGraph, continuations: int = 3, grader: Any = None) -> Any:
     return SimpleNamespace(
         graph=graph,
         settings=SimpleNamespace(harness_max_continuations=continuations),
+        grader=grader,
     )
 
 
@@ -97,6 +114,45 @@ async def test_mutating_goal_requires_successful_sandbox_verification() -> None:
     result = await GoalRunner(fake_harness(graph, 2)).run("Crea un file", thread_id="t-5")
     assert result.completed is True
     assert result.iterations == 2
+
+
+@pytest.mark.asyncio
+async def test_runner_accepts_when_grader_passes() -> None:
+    graph = FakeGraph([{"messages": [AIMessage(content="Ecco la risposta. [GOAL_COMPLETE]")]}])
+    grader = FakeGrader([GradeResult(passed=True, score=0.9, feedback="")])
+    events: list[dict[str, Any]] = []
+    result = await GoalRunner(
+        fake_harness(graph, grader=grader),
+        event_callback=events.append,
+    ).run("Rispondi alla domanda", thread_id="g-1")
+
+    assert result.completed is True
+    assert result.iterations == 1
+    assert len(grader.calls) == 1
+    assert {event["type"] for event in events} == {"grader.started", "grader.completed"}
+
+
+@pytest.mark.asyncio
+async def test_runner_reinjects_feedback_when_grader_fails() -> None:
+    graph = FakeGraph(
+        [
+            {"messages": [AIMessage(content="Prima risposta. [GOAL_COMPLETE]")]},
+            {"messages": [AIMessage(content="Risposta corretta. [GOAL_COMPLETE]")]},
+        ]
+    )
+    grader = FakeGrader(
+        [
+            GradeResult(passed=False, score=0.4, feedback="Manca la verifica dei risultati."),
+            GradeResult(passed=True, score=0.85, feedback=""),
+        ]
+    )
+    result = await GoalRunner(fake_harness(graph, 2, grader)).run(
+        "Rispondi alla domanda", thread_id="g-2"
+    )
+
+    assert result.completed is True
+    assert result.iterations == 2
+    assert "Manca la verifica dei risultati." in graph.inputs[1]["messages"][0]["content"]
 
 
 @pytest.mark.asyncio

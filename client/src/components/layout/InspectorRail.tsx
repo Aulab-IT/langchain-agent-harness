@@ -1,4 +1,4 @@
-import { Layers3, PanelRight, X } from "lucide-react";
+import { ChevronDown, Layers3, PanelRight, X } from "lucide-react";
 import type { InspectorTab } from "../../lib/constants";
 import type {
   ActivityItem,
@@ -53,13 +53,15 @@ export function InspectorRail({
   events: RunEvent[];
   onUpload: (files: FileList | null) => void;
   onDeleteFile: (name: string) => void;
-  variant?: "rail" | "sheet";
+  variant?: "rail" | "sheet" | "dock";
   onClose?: () => void;
 }) {
   const shellClass =
     variant === "sheet"
       ? "fixed inset-x-0 bottom-0 z-40 flex h-[55vh] flex-col rounded-t-2xl border border-border bg-surface shadow-2xl xl:hidden"
-      : "hidden h-full max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface xl:flex";
+      : variant === "dock"
+        ? "flex h-full max-h-full min-h-0 flex-col overflow-hidden bg-surface"
+        : "hidden h-full max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface xl:flex";
 
   return (
     <aside className={shellClass}>
@@ -100,6 +102,16 @@ export function InspectorRail({
             </button>
           ))}
         </div>
+        {variant === "dock" && onClose ? (
+          <button
+            type="button"
+            className="mr-2 shrink-0 rounded-lg p-2 text-muted hover:bg-surface-raised hover:text-foreground"
+            aria-label="Comprimi pannello"
+            onClick={onClose}
+          >
+            <ChevronDown size={16} />
+          </button>
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {tab === "files" ? (
@@ -114,7 +126,7 @@ export function InspectorRail({
           <CapabilitiesPanel skills={skills} tools={tools} />
         ) : null}
         {tab === "context" ? (
-          <ContextPanel usage={usage} contextWindow={contextWindow} />
+          <ContextPanel usage={usage} contextWindow={contextWindow} sessionId={sessionId} />
         ) : null}
         {tab === "sandbox" ? (
           <SandboxPanel

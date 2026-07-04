@@ -2,6 +2,14 @@ import { Activity } from "lucide-react";
 import { timeLabel } from "../../lib/format";
 import type { RunEvent } from "../../types";
 
+function dotColor(type: string): string {
+  if (type.startsWith("grader.")) return "bg-accent";
+  if (type.endsWith(".failed") || type === "run.cancelled") return "bg-danger";
+  if (type === "run.completed" || type.endsWith(".completed")) return "bg-success";
+  if (type.startsWith("approval.")) return "bg-warning";
+  return "bg-info";
+}
+
 export function TraceView({ events }: { events: RunEvent[] }) {
   return (
     <section className="mx-auto w-full max-w-4xl rounded-xl border border-border bg-surface">
@@ -24,7 +32,7 @@ export function TraceView({ events }: { events: RunEvent[] }) {
                 key={event.id}
                 className="grid gap-2 rounded-lg border border-border bg-surface-raised/30 px-4 py-3 sm:grid-cols-[auto_auto_1fr]"
               >
-                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-info" />
+                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dotColor(event.type)}`} />
                 <time className="font-mono text-xs text-muted">{timeLabel(event.created_at)}</time>
                 <div className="min-w-0 sm:col-span-1">
                   <strong className="text-sm">{event.type}</strong>

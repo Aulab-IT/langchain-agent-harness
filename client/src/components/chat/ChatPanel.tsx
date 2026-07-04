@@ -16,6 +16,7 @@ export function ChatPanel({
   onUpload,
   onRemovePending,
   onTimeline,
+  onStop,
   className = "",
 }: {
   session: SessionDetail;
@@ -27,6 +28,7 @@ export function ChatPanel({
   onUpload: (files: FileList | null) => void;
   onRemovePending: (name: string) => void;
   onTimeline: () => void;
+  onStop: () => void;
   className?: string;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -182,7 +184,7 @@ export function ChatPanel({
             Run fallito: {run.error}
           </div>
         ) : null}
-        {active ? <ThinkingTrace events={events} /> : null}
+        {active ? <ThinkingTrace events={events} run={run} onStop={onStop} /> : null}
         <div ref={endRef} />
         </div>
       </div>

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent_harness.browser import read_web_page, validate_public_url
+from agent_harness.browser import read_web_page, read_web_page_safe, validate_public_url
 
 
 def resolver_for(address: str):
@@ -35,6 +35,12 @@ def test_unsafe_url_shapes_are_rejected(url: str) -> None:
 def test_non_public_addresses_are_rejected(address: str) -> None:
     with pytest.raises(ValueError, match="privati"):
         validate_public_url("https://example.com/", resolver_for(address))
+
+
+def test_read_web_page_safe_returns_observation_on_failure() -> None:
+    result = read_web_page_safe("http://localhost/segreto")
+
+    assert result.startswith("browser_read non riuscito")
 
 
 def test_read_web_page_truncates_large_response(monkeypatch: pytest.MonkeyPatch) -> None:

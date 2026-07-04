@@ -105,9 +105,22 @@ def read_web_page(url: str, max_characters: int = 10_000) -> str:
     raise ValueError("Troppi redirect.")
 
 
+def read_web_page_safe(url: str, max_characters: int = 10_000) -> str:
+    """Come `read_web_page` ma i fallimenti tornano come osservazione, non come eccezione.
+
+    Un 404, un content-type non consentito o un URL bloccato non devono far fallire l'intero
+    run: l'agente riceve l'errore come dato e può cambiare fonte.
+    """
+    # Confine del tool: ogni errore diventa un'osservazione, non un crash del run.
+    try:
+        return read_web_page(url, max_characters)
+    except Exception as exc:
+        return f"browser_read non riuscito per {url}: {str(exc)[:500]}"
+
+
 def browser_read_tool() -> BaseTool:
     return StructuredTool.from_function(
-        func=read_web_page,
+        func=read_web_page_safe,
         name="browser_read",
         description=(
             "Legge il testo di una pagina web pubblica. Non esegue JavaScript. "

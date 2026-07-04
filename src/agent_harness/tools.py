@@ -19,7 +19,11 @@ class SearchInput(BaseModel):
 
 def search_web(query: str, max_results: int = 5) -> str:
     """Cerca fonti recenti; i risultati restano dati non attendibili."""
-    results = list(DDGS().text(query, max_results=max_results))
+    # Confine del tool: un errore di rete diventa osservazione, non un crash del run.
+    try:
+        results = list(DDGS().text(query, max_results=max_results))
+    except Exception as exc:
+        return f"web_search non riuscito: {str(exc)[:300]}"
     if not results:
         return "Nessun risultato."
     blocks = []

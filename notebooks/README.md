@@ -41,6 +41,11 @@ I notebook usano:
    - audit middleware;
    - gate di verifica deterministico.
 
+6. `06_loop_engineering.ipynb`
+   - Loop 2: verifica con rubric e feedback;
+   - Loop 3: trigger a eventi (match cron) che avvia un run;
+   - Loop 4: hill climbing, dai trace a una proposta di configurazione.
+
 ## Configurazione
 
 Inserire una chiave valida:

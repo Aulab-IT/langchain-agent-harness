@@ -11,6 +11,16 @@ export function SettingsView({ runtime }: { runtime: RuntimeStatus }) {
     ["Sandbox image", runtime.sandbox.image],
     ["Approvazione sandbox", runtime.sandbox.approval_required ? "richiesta" : "disabilitata"],
     ["Rete sandbox", runtime.sandbox.network],
+    [
+      "Verifica rubric (Loop 2)",
+      runtime.verification.enabled
+        ? `attiva · soglia ${runtime.verification.threshold}`
+        : "disattiva",
+    ],
+    [
+      "Trigger scheduler (Loop 3)",
+      runtime.triggers.enabled ? `attivo · ${runtime.triggers.tick_seconds}s` : "spento",
+    ],
   ];
 
   return (

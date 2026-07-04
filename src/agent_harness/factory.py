@@ -21,9 +21,11 @@ from pydantic import SecretStr
 
 from agent_harness.audit import AuditMiddleware, EventCallback
 from agent_harness.config import Settings
+from agent_harness.improve import load_overrides
 from agent_harness.middleware import build_model_router
 from agent_harness.prompts import SYSTEM_PROMPT
 from agent_harness.tools import build_tools
+from agent_harness.verification import RubricGrader
 
 
 @dataclass
@@ -31,6 +33,7 @@ class Harness:
     graph: Any
     settings: Settings
     tools: list[BaseTool]
+    grader: RubricGrader | None = None
 
 
 def build_workspace_permissions() -> list[FilesystemPermission]:
@@ -70,6 +73,15 @@ async def _load_mcp_tools(settings: Settings) -> list[BaseTool]:
     return list(await client.get_tools())
 
 
+def build_strong_model(settings: Settings) -> ChatOpenAI:
+    """Modello forte isolato, riusato dal loop hill-climbing lato server."""
+    return _openai_model(
+        settings.openai_strong_model,
+        settings.require_openai_key(),
+        reasoning_effort="medium",
+    )
+
+
 def _openai_model(name: str, api_key: str, *, reasoning_effort: str) -> ChatOpenAI:
     return ChatOpenAI(
         model=name,
@@ -101,6 +113,29 @@ async def build_harness(
 
     default_model = _openai_model(settings.openai_model, api_key, reasoning_effort="low")
     strong_model = _openai_model(settings.openai_strong_model, api_key, reasoning_effort="medium")
+
+    # Override applicati dal loop hill-climbing (propose-only + review umana), fuori dal codice.
+    overrides = load_overrides(settings.state_dir / "harness_overrides.toml")
+    system_prompt = SYSTEM_PROMPT
+    addendum = str(overrides.get("system_prompt_addendum", "")).strip()
+    if addendum:
+        system_prompt = f"{SYSTEM_PROMPT}\n\n{addendum}\n"
+    max_tool_calls = int(overrides.get("harness_max_tool_calls", settings.harness_max_tool_calls))
+    max_tool_calls = max(1, min(200, max_tool_calls))
+    rubric_threshold = float(
+        overrides.get("harness_rubric_threshold", settings.harness_rubric_threshold)
+    )
+    rubric_threshold = max(0.0, min(1.0, rubric_threshold))
+
+    grader: RubricGrader | None = None
+    if settings.harness_enable_rubric:
+        rubric_file = settings.state_dir / "rubric.md"
+        extra_guidance = rubric_file.read_text(encoding="utf-8") if rubric_file.exists() else ""
+        grader = RubricGrader.from_chat_model(
+            strong_model,
+            threshold=rubric_threshold,
+            extra_guidance=extra_guidance,
+        )
 
     tools = build_tools(
         active_workspace,
@@ -179,14 +214,14 @@ async def build_harness(
             build_model_router(default_model, strong_model),
             AuditMiddleware(settings.state_dir / "audit.jsonl", event_callback),
             ToolCallLimitMiddleware(
-                run_limit=settings.harness_max_tool_calls,
+                run_limit=max_tool_calls,
                 exit_behavior="end",
             ),
         ]
         graph = create_deep_agent(
             model=default_model,
             tools=tools,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             middleware=middleware,
             subagents=subagents,
             skills=["/skills/"],
@@ -197,4 +232,4 @@ async def build_harness(
             checkpointer=checkpointer,
             name="educational-harness",
         )
-        yield Harness(graph=graph, settings=settings, tools=tools)
+        yield Harness(graph=graph, settings=settings, tools=tools, grader=grader)

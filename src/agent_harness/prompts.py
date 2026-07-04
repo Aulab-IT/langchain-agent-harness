@@ -25,3 +25,16 @@ manca, esegui la prossima parte utile e verifica. Non ripetere lavoro già compl
 Usa [GOAL_COMPLETE] solo dopo prova concreta.
 """
 
+VERIFICATION_FEEDBACK_PROMPT = """
+La tua risposta non ha superato la verifica di qualità per questo obiettivo:
+
+{goal}
+
+Feedback del valutatore:
+{feedback}
+
+Iterazione {iteration}/{maximum}. Correggi i punti indicati riprendendo dai file e dal piano
+persistente. Porta prove concrete di ogni correzione. Usa [GOAL_COMPLETE] solo quando il
+feedback è risolto e verificato.
+"""
+

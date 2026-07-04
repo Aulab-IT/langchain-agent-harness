@@ -9,7 +9,7 @@ def test_every_increment_has_code_and_guide() -> None:
         for path in (ROOT / "steps").iterdir()
         if path.is_dir() and path.name[:2].isdigit()
     )
-    assert [path.name[:2] for path in steps] == [f"{index:02d}" for index in range(13)]
+    assert [path.name[:2] for path in steps] == [f"{index:02d}" for index in range(14)]
     for step in steps:
         assert (step / "app.py").is_file(), step
         guide = step / "GUIDA.md"
@@ -19,7 +19,7 @@ def test_every_increment_has_code_and_guide() -> None:
 
 def test_didactic_notebooks_are_present() -> None:
     notebooks = sorted((ROOT / "notebooks").glob("*.ipynb"))
-    assert len(notebooks) == 5
+    assert len(notebooks) == 6
     for notebook in notebooks:
         source = notebook.read_text(encoding="utf-8")
         assert "ChatOpenAI" in source

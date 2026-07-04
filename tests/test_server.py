@@ -120,6 +120,77 @@ def test_attachment_manifest_empty_without_files(client: TestClient) -> None:
     assert server._attachment_manifest(session["id"]) == ""
 
 
+def test_context_endpoint_includes_system_and_memory(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={}).json()
+
+    context = client.get(f"/api/sessions/{session['id']}/context").json()
+
+    assert context["total_tokens"] > 0
+    kinds = {entry["kind"] for entry in context["entries"]}
+    assert "system" in kinds
+    assert any(cat["name"] == "System & memoria" for cat in context["categories"])
+
+
+def test_status_exposes_loop_features(client: TestClient) -> None:
+    payload = client.get("/api/status").json()
+
+    assert "verification" in payload and "enabled" in payload["verification"]
+    assert "triggers" in payload and "enabled" in payload["triggers"]
+    assert "overrides" in payload
+
+
+def test_improvements_list_empty_and_run_requires_key(client: TestClient) -> None:
+    assert client.get("/api/improvements").json() == []
+
+    response = client.post("/api/improve", json={"since": 100, "apply": False})
+
+    assert response.status_code == 400
+
+
+def test_apply_missing_improvement_is_404(client: TestClient) -> None:
+    response = client.post("/api/improvements/nope.md/apply")
+
+    assert response.status_code == 404
+
+
+def test_clear_overrides_is_idempotent(client: TestClient) -> None:
+    response = client.delete("/api/overrides")
+
+    assert response.status_code == 204
+
+
+def test_cron_trigger_rejects_invalid_expression(client: TestClient) -> None:
+    response = client.post(
+        "/api/triggers",
+        json={"kind": "cron", "name": "c", "goal_template": "fai", "cron_expr": "nope"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_webhook_trigger_requires_valid_token(client: TestClient) -> None:
+    trigger = client.post(
+        "/api/triggers",
+        json={"kind": "webhook", "name": "wh", "goal_template": "elabora l'evento"},
+    ).json()
+    assert trigger["token"]
+
+    bad = client.post(
+        f"/api/triggers/{trigger['id']}/webhook",
+        headers={"X-Trigger-Token": "sbagliato"},
+        json={"payload": 1},
+    )
+    assert bad.status_code == 403
+
+    ok = client.post(
+        f"/api/triggers/{trigger['id']}/webhook",
+        headers={"X-Trigger-Token": trigger["token"]},
+        json={"payload": 1},
+    )
+    assert ok.status_code == 202
+    assert ok.json()["run_id"]
+
+
 def test_delete_session_removes_scoped_workspace(client: TestClient) -> None:
     session = client.post("/api/sessions", json={}).json()
     workspace = server.store.workspace_dir(session["id"])

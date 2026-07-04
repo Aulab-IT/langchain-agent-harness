@@ -1,4 +1,7 @@
+import { Maximize2 } from "lucide-react";
+import { useState } from "react";
 import type { Usage } from "../../types";
+import { ContextModal } from "./ContextModal";
 
 function buildGradient(categories: Usage["context_categories"]): string {
   if (!categories.length) return "conic-gradient(#202631 0 100%)";
@@ -14,12 +17,15 @@ function buildGradient(categories: Usage["context_categories"]): string {
 export function ContextPanel({
   usage,
   contextWindow,
+  sessionId,
 }: {
   usage: Usage;
   contextWindow: number;
+  sessionId: string;
 }) {
   const percent = Math.min(100, Math.round((usage.input_tokens / contextWindow) * 100));
   const gradient = buildGradient(usage.context_categories);
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -30,21 +36,34 @@ export function ContextPanel({
             {usage.total_tokens ? `${percent}% finestra modello` : "Nessun dato provider"}
           </p>
         </div>
-        <span className="rounded-lg border border-border bg-surface-raised px-2.5 py-1 font-mono text-xs">
-          {usage.input_tokens} / {Math.round(contextWindow / 1_000)}k
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-lg border border-border bg-surface-raised px-2.5 py-1 font-mono text-xs">
+            {usage.input_tokens} / {Math.round(contextWindow / 1_000)}k
+          </span>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-foreground"
+            onClick={() => setOpen(true)}
+          >
+            <Maximize2 size={13} />
+            Dettaglio
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col items-center gap-6 p-6 sm:flex-row sm:items-start">
-        <div
-          className="relative flex h-[140px] w-[140px] shrink-0 items-center justify-center rounded-full p-3"
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          title="Apri il contesto completo"
+          className="relative flex h-[140px] w-[140px] shrink-0 items-center justify-center rounded-full p-3 transition-transform hover:scale-[1.03]"
           style={{ background: gradient }}
         >
           <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-surface text-center">
             <strong className="text-xl font-semibold">{usage.total_tokens || "—"}</strong>
             <span className="text-xs text-muted">token totali</span>
           </div>
-        </div>
+        </button>
         <div className="w-full flex-1 space-y-3">
           {usage.context_categories.length ? (
             usage.context_categories.map((category) => (
@@ -70,6 +89,8 @@ export function ContextPanel({
         Totale provider esatto: {usage.input_tokens} input + {usage.output_tokens} output.
         Breakdown categorie {usage.estimated_context ? "stimato dallo stato graph" : "esatto"}.
       </div>
+
+      {open ? <ContextModal sessionId={sessionId} onClose={() => setOpen(false)} /> : null}
     </div>
   );
 }

@@ -9,7 +9,8 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
 from agent_harness.factory import Harness
-from agent_harness.prompts import CONTINUATION_PROMPT
+from agent_harness.prompts import CONTINUATION_PROMPT, VERIFICATION_FEEDBACK_PROMPT
+from agent_harness.verification import GradeResult
 
 ApprovalCallback = Callable[[dict[str, Any]], Awaitable[bool]]
 RunEventCallback = Callable[[dict[str, Any]], None]
@@ -67,6 +68,7 @@ class GoalRunner:
         self.harness = harness
         self.approval_callback = approval_callback
         self.event_callback = event_callback
+        self._last_snapshot: tuple[int, int] | None = None
 
     async def _invoke_graph(
         self,
@@ -84,6 +86,7 @@ class GoalRunner:
         ):
             if mode == "values" and isinstance(chunk, dict):
                 latest = chunk
+                self._emit_usage_snapshot(chunk.get("messages", []))
             elif mode == "messages" and isinstance(chunk, tuple) and chunk:
                 message = chunk[0]
                 if isinstance(message, AIMessageChunk):
@@ -132,17 +135,21 @@ class GoalRunner:
         for iteration in range(1, maximum + 1):
             messages = result.get("messages", [])
             text = final_text(messages)
-            verified = (
+            heuristic_ok = (
                 not requires_environment_verification(clean_goal)
                 or has_successful_verification(messages)
             )
-            if text and verified:
-                return RunResult(
-                    text=text,
-                    iterations=iteration,
-                    completed=True,
-                    messages=messages,
-                )
+            feedback = ""
+            if text and heuristic_ok:
+                grade = await self._grade(clean_goal, text)
+                if grade is None or grade.passed:
+                    return RunResult(
+                        text=text,
+                        iterations=iteration,
+                        completed=True,
+                        messages=messages,
+                    )
+                feedback = grade.feedback
             if iteration == maximum:
                 return RunResult(
                     text=text,
@@ -150,13 +157,66 @@ class GoalRunner:
                     completed=False,
                     messages=messages,
                 )
-            continuation = CONTINUATION_PROMPT.format(
-                goal=clean_goal,
-                iteration=iteration + 1,
-                maximum=maximum,
-            )
+            if feedback:
+                continuation = VERIFICATION_FEEDBACK_PROMPT.format(
+                    goal=clean_goal,
+                    feedback=feedback,
+                    iteration=iteration + 1,
+                    maximum=maximum,
+                )
+            else:
+                continuation = CONTINUATION_PROMPT.format(
+                    goal=clean_goal,
+                    iteration=iteration + 1,
+                    maximum=maximum,
+                )
             result = await self._invoke_with_approval(
                 {"messages": [{"role": "user", "content": continuation}]},
                 config,
             )
         raise AssertionError("Ciclo di continuazione terminato in stato impossibile.")
+
+    async def _grade(self, goal: str, answer: str) -> GradeResult | None:
+        """Valuta la risposta col grader a rubric, se presente, emettendo eventi trace."""
+        grader = self.harness.grader
+        if grader is None:
+            return None
+        self._emit_event({"type": "grader.started"})
+        grade = await grader.grade(goal, answer)
+        self._emit_event(
+            {
+                "type": "grader.completed",
+                "passed": grade.passed,
+                "score": grade.score,
+            }
+        )
+        return grade
+
+    def _emit_event(self, event: dict[str, Any]) -> None:
+        if self.event_callback is not None:
+            self.event_callback(event)
+
+    def _emit_usage_snapshot(self, messages: list[Any]) -> None:
+        """Emette il conteggio token cumulato (esatto dal provider) a ogni turno del modello."""
+        if self.event_callback is None:
+            return
+        input_tokens = 0
+        output_tokens = 0
+        for message in messages:
+            if isinstance(message, AIMessage) and message.usage_metadata:
+                input_tokens += int(message.usage_metadata.get("input_tokens", 0))
+                output_tokens += int(message.usage_metadata.get("output_tokens", 0))
+        if input_tokens == 0 and output_tokens == 0:
+            return
+        snapshot = (input_tokens, output_tokens)
+        if snapshot == self._last_snapshot:
+            return  # niente da segnalare: evita eventi duplicati identici
+        self._last_snapshot = snapshot
+        self._emit_event(
+            {
+                "type": "usage.snapshot",
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens,
+            }
+        )

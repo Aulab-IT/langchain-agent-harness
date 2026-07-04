@@ -64,12 +64,26 @@ class ControlStore:
                     payload_json TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS triggers (
+                    id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL CHECK(kind IN ('cron', 'webhook')),
+                    name TEXT NOT NULL,
+                    cron_expr TEXT,
+                    token TEXT,
+                    goal_template TEXT NOT NULL,
+                    session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    last_fired_at TEXT
+                );
                 CREATE INDEX IF NOT EXISTS idx_messages_session
                     ON messages(session_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_runs_session
                     ON runs(session_id, started_at);
                 CREATE INDEX IF NOT EXISTS idx_events_run
                     ON events(run_id, id);
+                CREATE INDEX IF NOT EXISTS idx_triggers_token
+                    ON triggers(token);
                 """
             )
             self._connection.execute(
@@ -368,6 +382,20 @@ class ControlStore:
             result.append(item)
         return result
 
+    def recent_events(self, *, limit: int = 1_000) -> list[dict[str, Any]]:
+        """Ultimi eventi su tutte le sessioni, per l'analisi hill-climbing."""
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM events ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        result = []
+        for row in reversed(rows):
+            item = dict(row)
+            item["payload"] = json.loads(item.pop("payload_json"))
+            result.append(item)
+        return result
+
     def session_root(self, session_id: str) -> Path:
         return self.settings.state_dir / "sessions" / session_id
 
@@ -413,6 +441,111 @@ class ControlStore:
             if len(result) >= 500:
                 break
         return result
+
+    @staticmethod
+    def _trigger(row: sqlite3.Row) -> dict[str, Any]:
+        item = dict(row)
+        item["enabled"] = bool(item["enabled"])
+        return item
+
+    def create_trigger(
+        self,
+        *,
+        kind: str,
+        name: str,
+        goal_template: str,
+        cron_expr: str | None = None,
+        session_id: str | None = None,
+        token: str | None = None,
+    ) -> dict[str, Any]:
+        trigger_id = str(uuid.uuid4())
+        now = utc_now()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO triggers(
+                    id, kind, name, cron_expr, token, goal_template,
+                    session_id, enabled, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    trigger_id,
+                    kind,
+                    name.strip()[:120] or kind,
+                    cron_expr,
+                    token,
+                    goal_template,
+                    session_id,
+                    now,
+                ),
+            )
+        return self.get_trigger(trigger_id)
+
+    def get_trigger(self, trigger_id: str) -> dict[str, Any]:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM triggers WHERE id = ?",
+                (trigger_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(trigger_id)
+        return self._trigger(row)
+
+    def get_trigger_by_token(self, token: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM triggers WHERE token = ?",
+                (token,),
+            ).fetchone()
+        return self._trigger(row) if row else None
+
+    def list_triggers(self) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM triggers ORDER BY created_at DESC LIMIT 200",
+            ).fetchall()
+        return [self._trigger(row) for row in rows]
+
+    def enabled_cron_triggers(self) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM triggers WHERE kind = 'cron' AND enabled = 1",
+            ).fetchall()
+        return [self._trigger(row) for row in rows]
+
+    def set_trigger_enabled(self, trigger_id: str, enabled: bool) -> dict[str, Any]:
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                "UPDATE triggers SET enabled = ? WHERE id = ?",
+                (1 if enabled else 0, trigger_id),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(trigger_id)
+        return self.get_trigger(trigger_id)
+
+    def attach_trigger_session(self, trigger_id: str, session_id: str) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                "UPDATE triggers SET session_id = ? WHERE id = ?",
+                (session_id, trigger_id),
+            )
+
+    def mark_trigger_fired(self, trigger_id: str) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                "UPDATE triggers SET last_fired_at = ? WHERE id = ?",
+                (utc_now(), trigger_id),
+            )
+
+    def delete_trigger(self, trigger_id: str) -> None:
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                "DELETE FROM triggers WHERE id = ?",
+                (trigger_id,),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(trigger_id)
 
     def close(self) -> None:
         with self._lock:

@@ -24,6 +24,10 @@ class Settings(BaseSettings):
 
     harness_max_continuations: int = Field(default=3, ge=1, le=10)
     harness_max_tool_calls: int = Field(default=40, ge=1, le=200)
+    harness_enable_rubric: bool = True
+    harness_rubric_threshold: float = Field(default=0.7, ge=0, le=1)
+    harness_enable_triggers: bool = False
+    harness_trigger_tick_seconds: int = Field(default=30, ge=5, le=3600)
     harness_tool_output_limit: int = Field(default=12_000, ge=1_000, le=100_000)
     harness_enable_web_search: bool = True
     harness_enable_browser: bool = True

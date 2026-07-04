@@ -7,6 +7,8 @@ import {
   Plus,
   Search,
   Settings2,
+  Timer,
+  TrendingUp,
   X,
 } from "lucide-react";
 import type { View } from "../../lib/constants";
@@ -58,7 +60,7 @@ export function Sidebar({
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        <div className="flex items-center gap-3 px-5 pb-5 pt-6">
+        <div className="flex shrink-0 items-center gap-3 px-5 pb-5 pt-6">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
             <BrainCircuit size={20} />
           </div>
@@ -76,6 +78,7 @@ export function Sidebar({
           </button>
         </div>
 
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-2">
         <div className="px-4">
           <button
             type="button"
@@ -116,16 +119,30 @@ export function Sidebar({
               Impostazioni
             </button>
           </div>
+
+          <p className="mb-2 mt-5 px-3 text-xs font-medium uppercase tracking-wide text-muted-2">
+            Loop engineering
+          </p>
+          <div className="space-y-1">
+            <button type="button" className={navClass(view === "triggers")} onClick={() => onView("triggers")}>
+              <Timer size={17} />
+              Triggers
+            </button>
+            <button type="button" className={navClass(view === "improve")} onClick={() => onView("improve")}>
+              <TrendingUp size={17} />
+              Miglioramenti
+            </button>
+          </div>
         </nav>
 
-        <div className="mt-5 flex min-h-0 flex-1 flex-col px-4">
+        <div className="mt-5 px-4">
           <div className="mb-2 flex items-center justify-between px-3">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-2">Sessioni</p>
             <span className="rounded-full bg-surface-raised px-2 py-0.5 text-xs text-muted">
               {sessions.length}
             </span>
           </div>
-          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pb-4">
+          <div className="space-y-1 pb-2">
             {sessions.length ? (
               sessions.map((item) => (
                 <button
@@ -155,8 +172,9 @@ export function Sidebar({
             )}
           </div>
         </div>
+        </div>
 
-        <div className="flex items-center gap-3 border-t border-border px-5 py-4">
+        <div className="flex shrink-0 items-center gap-3 border-t border-border px-5 py-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/20 text-sm font-semibold text-accent">
             LA
           </div>

@@ -1,10 +1,15 @@
 import type {
+  ContextData,
+  ImproveResult,
+  ImprovementDetail,
+  ImprovementSummary,
   Run,
   RunEvent,
   RuntimeStatus,
   SessionDetail,
   SessionFile,
   SessionSummary,
+  Trigger,
 } from "./types";
 
 const API_URL = (import.meta.env.VITE_HARNESS_API_URL as string | undefined) ?? "";
@@ -44,6 +49,10 @@ export function getSession(sessionId: string): Promise<SessionDetail> {
   return request(`/api/sessions/${sessionId}`);
 }
 
+export function getSessionContext(sessionId: string): Promise<ContextData> {
+  return request(`/api/sessions/${sessionId}/context`);
+}
+
 export function renameSession(sessionId: string, title: string): Promise<SessionSummary> {
   return request(`/api/sessions/${sessionId}`, jsonOptions("PATCH", { title }));
 }
@@ -75,10 +84,13 @@ const RUN_EVENT_TYPES = [
   "tool.failed",
   "skill.started",
   "skill.completed",
+  "grader.started",
+  "grader.completed",
   "approval.requested",
   "approval.resolved",
   "assistant.delta",
   "usage.live",
+  "usage.snapshot",
   "usage.updated",
   "assistant.completed",
   "file.created",
@@ -145,4 +157,67 @@ export function deleteContextFile(sessionId: string, fileName: string): Promise<
 
 export function fileDownloadUrl(sessionId: string, fileName: string): string {
   return `${API_URL}/api/sessions/${sessionId}/files/${encodeURIComponent(fileName)}`;
+}
+
+// --- Loop 3: triggers ---
+
+export function listTriggers(): Promise<Trigger[]> {
+  return request("/api/triggers");
+}
+
+export function createTrigger(body: {
+  kind: "cron" | "webhook";
+  name: string;
+  goal_template: string;
+  cron_expr?: string | null;
+  session_id?: string | null;
+}): Promise<Trigger> {
+  return request("/api/triggers", jsonOptions("POST", body));
+}
+
+export function toggleTrigger(triggerId: string, enabled: boolean): Promise<Trigger> {
+  return request(`/api/triggers/${triggerId}`, jsonOptions("PATCH", { enabled }));
+}
+
+export function deleteTrigger(triggerId: string): Promise<void> {
+  return request(`/api/triggers/${triggerId}`, { method: "DELETE" });
+}
+
+export function fireWebhook(
+  triggerId: string,
+  token: string,
+  payload: unknown,
+): Promise<{ status: string; run_id: string | null }> {
+  return request(`/api/triggers/${triggerId}/webhook`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Trigger-Token": token },
+    body: JSON.stringify(payload ?? {}),
+  });
+}
+
+export function webhookUrl(triggerId: string): string {
+  const base = API_URL || window.location.origin;
+  return `${base}/api/triggers/${triggerId}/webhook`;
+}
+
+// --- Loop 4: hill-climbing improvements ---
+
+export function listImprovements(): Promise<ImprovementSummary[]> {
+  return request("/api/improvements");
+}
+
+export function getImprovement(name: string): Promise<ImprovementDetail> {
+  return request(`/api/improvements/${encodeURIComponent(name)}`);
+}
+
+export function runImprove(since: number, apply: boolean): Promise<ImproveResult> {
+  return request("/api/improve", jsonOptions("POST", { since, apply }));
+}
+
+export function applyImprovement(name: string): Promise<{ applied: Record<string, unknown> }> {
+  return request(`/api/improvements/${encodeURIComponent(name)}/apply`, { method: "POST" });
+}
+
+export function clearOverrides(): Promise<void> {
+  return request("/api/overrides", { method: "DELETE" });
 }

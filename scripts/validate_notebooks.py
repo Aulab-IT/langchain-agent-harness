@@ -49,8 +49,8 @@ def validate_notebook(path: Path) -> nbformat.NotebookNode:
 def main() -> None:
     args = parse_args()
     notebooks = sorted((ROOT / "notebooks").glob("*.ipynb"))
-    if len(notebooks) != 5:
-        raise RuntimeError(f"Attesi 5 notebook, trovati {len(notebooks)}.")
+    if len(notebooks) != 6:
+        raise RuntimeError(f"Attesi 6 notebook, trovati {len(notebooks)}.")
 
     loaded = [(path, validate_notebook(path)) for path in notebooks]
     for path, _ in loaded:

@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { ApprovalDialog } from "./components/shared/ApprovalDialog";
 import { ChatPanel } from "./components/chat/ChatPanel";
 import { AppShell } from "./components/layout/AppShell";
+import { InspectorDock } from "./components/layout/InspectorDock";
 import {
   InspectorMobileTrigger,
   InspectorRail,
@@ -11,6 +12,8 @@ import { Topbar } from "./components/layout/Topbar";
 import { SettingsView } from "./components/settings/SettingsView";
 import { Spinner } from "./components/shared/PanelEmpty";
 import { TraceView } from "./components/traces/TraceView";
+import { TriggersView } from "./components/triggers/TriggersView";
+import { ImproveView } from "./components/improve/ImproveView";
 import { useHarnessSession } from "./hooks/useHarnessSession";
 import { useInspectorSheet, useInspectorTab } from "./hooks/useInspectorTab";
 
@@ -68,6 +71,28 @@ export default function App() {
           onView={setView}
         />
       }
+      dock={
+        runtime && session ? (
+          <InspectorDock
+            tab={tab}
+            onTabChange={selectTab}
+            sessionId={session.id}
+            sessionTitle={session.title}
+            messageCount={session.messages.filter((message) => message.role !== "system").length}
+            files={session.files}
+            skills={skillItems}
+            tools={toolItems}
+            usage={usage}
+            contextWindow={runtime.context_window}
+            runtime={runtime}
+            sessionSandbox={session.sandbox}
+            run={run}
+            events={events}
+            onUpload={handleUpload}
+            onDeleteFile={handleDeleteFile}
+          />
+        ) : null
+      }
     >
       <Topbar
         session={session}
@@ -103,15 +128,23 @@ export default function App() {
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <TraceView events={traceEvents} />
           </div>
+        ) : view === "triggers" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <TriggersView runtime={runtime} />
+          </div>
+        ) : view === "improve" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <ImproveView runtime={runtime} />
+          </div>
         ) : view === "settings" ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <SettingsView runtime={runtime} />
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-hidden">
-            <div className="grid h-full min-h-0 overflow-hidden p-3 xl:grid-cols-[minmax(0,1fr)_380px] xl:gap-4 xl:p-4">
+            <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3 xl:gap-3 xl:p-4">
             <ChatPanel
-              className="min-h-0 max-h-full"
+              className="min-h-0 flex-1"
             session={session}
             runtime={runtime}
             run={run}
@@ -121,23 +154,7 @@ export default function App() {
             onUpload={handleComposerUpload}
             onRemovePending={handleRemovePending}
             onTimeline={() => setView("traces")}
-          />
-          <InspectorRail
-            variant="rail"
-            tab={tab}
-            onTabChange={selectTab}
-            sessionId={session.id}
-            files={session.files}
-            skills={skillItems}
-            tools={toolItems}
-            usage={usage}
-            contextWindow={runtime.context_window}
-            runtime={runtime}
-            sessionSandbox={session.sandbox}
-            run={run}
-            events={events}
-            onUpload={handleUpload}
-            onDeleteFile={handleDeleteFile}
+            onStop={handleStop}
           />
           <InspectorMobileTrigger onClick={inspectorSheet.openSheet} />
           {inspectorSheet.open ? (
