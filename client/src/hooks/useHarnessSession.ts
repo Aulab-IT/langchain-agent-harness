@@ -12,6 +12,8 @@ import {
   rejectRun,
   renameSession,
   sendMessage,
+  setSessionAutoApprove,
+  stopSandbox,
   subscribeRun,
   uploadContextFile,
 } from "../api";
@@ -231,12 +233,16 @@ export function useHarnessSession() {
     [events, runtime?.skills],
   );
 
-  const latestLiveUsage = [...events]
-    .reverse()
-    .find((event) => event.type === "usage.live")?.payload;
-  const latestSnapshot = [...events]
-    .reverse()
-    .find((event) => event.type === "usage.snapshot")?.payload;
+  const { latestLiveUsage, latestSnapshot } = useMemo(() => {
+    let live: Record<string, unknown> | undefined;
+    let snapshot: Record<string, unknown> | undefined;
+    for (let i = events.length - 1; i >= 0 && (!live || !snapshot); i--) {
+      const event = events[i];
+      if (!live && event.type === "usage.live") live = event.payload;
+      if (!snapshot && event.type === "usage.snapshot") snapshot = event.payload;
+    }
+    return { latestLiveUsage: live, latestSnapshot: snapshot };
+  }, [events]);
 
   const active = Boolean(run && !["completed", "failed", "cancelled"].includes(run.status));
 
@@ -359,6 +365,16 @@ export function useHarnessSession() {
     }
   };
 
+  const handleStopSandbox = async () => {
+    if (!session) return;
+    try {
+      const sandbox = await stopSandbox(session.id);
+      setSession((current) => (current ? { ...current, sandbox } : current));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Arresto sandbox fallito");
+    }
+  };
+
   const handleRename = async () => {
     if (!session) return;
     const title = window.prompt("Titolo sessione", session.title)?.trim();
@@ -368,6 +384,19 @@ export function useHarnessSession() {
       await Promise.all([loadSession(session.id), refreshSessions()]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Rinomina fallita");
+    }
+  };
+
+  const handleToggleAutoApprove = async (enabled: boolean) => {
+    if (!session) return;
+    // Aggiornamento ottimistico: il toggle risponde subito, senza attendere il round-trip.
+    setSession((current) => (current ? { ...current, auto_approve: enabled } : current));
+    try {
+      await setSessionAutoApprove(session.id, enabled);
+      await refreshSessions();
+    } catch (reason) {
+      setSession((current) => (current ? { ...current, auto_approve: !enabled } : current));
+      setError(reason instanceof Error ? reason.message : "Aggiornamento autonomia fallito");
     }
   };
 
@@ -427,7 +456,9 @@ export function useHarnessSession() {
     handleDeleteFile,
     handleDeleteSession,
     handleRename,
+    handleToggleAutoApprove,
     handleStop,
+    handleStopSandbox,
     resolveApproval,
     selectSession,
   };

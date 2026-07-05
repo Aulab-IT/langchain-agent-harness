@@ -47,6 +47,33 @@ def test_message_attachments_default_empty(tmp_path: Path) -> None:
     store.close()
 
 
+def test_auto_approve_defaults_false_and_can_be_toggled(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    session = store.create_session()
+
+    assert store.get_session(session["id"])["auto_approve"] is False
+    assert session["auto_approve"] is False
+
+    updated = store.set_session_auto_approve(session["id"], True)
+    assert updated["auto_approve"] is True
+    assert store.get_session(session["id"])["auto_approve"] is True
+
+    reverted = store.set_session_auto_approve(session["id"], False)
+    assert reverted["auto_approve"] is False
+    store.close()
+
+
+def test_list_sessions_reflects_auto_approve(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    session = store.create_session()
+    store.set_session_auto_approve(session["id"], True)
+
+    listed = store.list_sessions()
+
+    assert listed[0]["auto_approve"] is True
+    store.close()
+
+
 def test_session_root_copies_runtime_context(tmp_path: Path) -> None:
     store = make_store(tmp_path)
     session = store.create_session()

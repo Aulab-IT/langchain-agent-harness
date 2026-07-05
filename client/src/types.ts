@@ -54,6 +54,7 @@ export type SessionSummary = {
   updated_at: string;
   preview?: string | null;
   last_status?: string | null;
+  auto_approve: boolean;
 };
 
 export type SessionSandbox = {
@@ -95,7 +96,7 @@ export type RuntimeStatus = {
   model: string;
   strong_model: string;
   context_window: number;
-  skills: Array<{ name: string; status: string }>;
+  skills: Array<{ name: string; status: string; description?: string }>;
   tools: Array<{ name: string; status: string }>;
   sandbox: {
     image: string;
@@ -109,6 +110,24 @@ export type RuntimeStatus = {
   triggers: { enabled: boolean; tick_seconds: number };
   overrides: Record<string, unknown>;
 };
+
+export type Skill = {
+  name: string;
+  declared_name: string | null;
+  description: string;
+  license: string | null;
+  compatibility: string | null;
+  allowed_tools: string | null;
+  metadata: Record<string, string>;
+  has_scripts: boolean;
+  has_references: boolean;
+  has_assets: boolean;
+  body_lines: number;
+  valid: boolean;
+  errors: string[];
+};
+
+export type SkillDetail = Skill & { content: string };
 
 export type Trigger = {
   id: string;

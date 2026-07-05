@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import logging
 import os
 import subprocess
 import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -10,6 +15,8 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field
 
 from agent_harness.config import PROJECT_ROOT
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class DockerExecInput(BaseModel):
@@ -31,6 +38,7 @@ class SessionSandboxManager:
     def __init__(self) -> None:
         self._locks: dict[str, threading.Lock] = {}
         self._registry_lock = threading.Lock()
+        self._last_used: dict[str, float] = {}
 
     def container_name(self, session_id: str) -> str:
         safe = session_id.replace("-", "")[:20]
@@ -39,6 +47,39 @@ class SessionSandboxManager:
     def _session_lock(self, session_id: str) -> threading.Lock:
         with self._registry_lock:
             return self._locks.setdefault(session_id, threading.Lock())
+
+    def touch(self, session_id: str) -> None:
+        """Segna un uso della sandbox della sessione (per il reaper di inattività)."""
+        with self._registry_lock:
+            self._last_used[session_id] = time.monotonic()
+
+    def idle_seconds(self, session_id: str) -> float | None:
+        """Secondi dall'ultimo uso, o None se non ancora osservato in questo processo."""
+        with self._registry_lock:
+            last = self._last_used.get(session_id)
+        return None if last is None else time.monotonic() - last
+
+    def forget(self, session_id: str) -> None:
+        with self._registry_lock:
+            self._last_used.pop(session_id, None)
+
+    def list_container_names(self, *, only_running: bool = False) -> list[str]:
+        """Nomi dei container harness-sbx-*; usato per sweep di inattività e orfani."""
+        command = ["docker", "ps", "--format", "{{.Names}}", "--filter", "name=harness-sbx-"]
+        if not only_running:
+            command.append("-a")
+        try:
+            result = subprocess.run(
+                command, capture_output=True, text=True, check=False, timeout=10
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return []
+        if result.returncode != 0:
+            return []
+        return [line for line in result.stdout.splitlines() if line.strip()]
+
+    def remove_container_by_name(self, name: str) -> None:
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False, timeout=30)
 
     def docker_available(self) -> bool:
         if not shutil_which("docker"):
@@ -117,6 +158,13 @@ class SessionSandboxManager:
         }
 
     def run_flags(self, workspace: Path, image: str) -> list[str]:
+        """Flag di sicurezza per `docker run`, SENZA l'immagine.
+
+        In `docker run [OPTIONS] IMAGE [COMMAND]` tutto ciò che segue l'immagine è il
+        comando eseguito nel container, non un'opzione docker. L'immagine va quindi
+        aggiunta dal chiamante subito prima del comando (es. `--name` deve stare tra
+        queste opzioni e l'immagine, mai dopo).
+        """
         if "\x00" in image:
             raise ValueError("Nome immagine non valido.")
         workspace = workspace.resolve()
@@ -147,7 +195,6 @@ class SessionSandboxManager:
             f"type=bind,src={workspace},dst=/workspace",
             "--workdir",
             "/workspace",
-            image,
         ]
 
     def ensure_running(
@@ -175,6 +222,7 @@ class SessionSandboxManager:
                 "--name",
                 name,
                 "-d",
+                image,
                 "sleep",
                 "infinity",
             ]
@@ -201,6 +249,7 @@ class SessionSandboxManager:
                 check=False,
                 timeout=30,
             )
+        self.forget(session_id)
 
     def execute(
         self,
@@ -215,6 +264,7 @@ class SessionSandboxManager:
     ) -> str:
         if "\x00" in command:
             raise ValueError("Il comando contiene un byte NUL.")
+        self.touch(session_id)
         try:
             container = self.ensure_running(session_id, workspace, image, project_root)
             result = subprocess.run(
@@ -252,6 +302,85 @@ def shutil_which(cmd: str) -> str | None:
 session_sandbox_manager = SessionSandboxManager()
 
 
+def cleanup_orphan_sandboxes(
+    manager: SessionSandboxManager, known_session_ids: list[str]
+) -> list[str]:
+    """Rimuove i container harness-sbx-* la cui sessione non esiste più nel DB.
+
+    Copre i residui lasciati da sessioni cancellate mentre il container era attivo
+    (es. crash) o da bug passati. Va chiamata all'avvio del backend.
+    """
+    if not manager.docker_available():
+        return []
+    known_names = {manager.container_name(session_id) for session_id in known_session_ids}
+    orphans = [name for name in manager.list_container_names() if name not in known_names]
+    for name in orphans:
+        manager.remove_container_by_name(name)
+    return orphans
+
+
+class SandboxIdleReaper:
+    """Ferma i container sandbox inattivi da troppo tempo, per liberare risorse.
+
+    L'inattività è tracciata in memoria da `SessionSandboxManager.touch()`, quindi
+    riguarda l'uso avvenuto nel processo backend corrente: dopo un riavvio il timer
+    riparte da zero per i container già in esecuzione (nessuno spegnimento improvviso
+    di un container che magari sta per essere riusato).
+    """
+
+    def __init__(
+        self,
+        manager: SessionSandboxManager,
+        list_known_session_ids: Callable[[], list[str]],
+        is_session_busy: Callable[[str], bool],
+        *,
+        idle_seconds: float,
+        tick_seconds: float = 60,
+    ) -> None:
+        self.manager = manager
+        self.list_known_session_ids = list_known_session_ids
+        self.is_session_busy = is_session_busy
+        self.idle_seconds = idle_seconds
+        self.tick_seconds = tick_seconds
+        self._task: asyncio.Task[None] | None = None
+
+    def sweep(self) -> list[str]:
+        """Valuta una volta i container attivi e ferma quelli inattivi. Ritorna gli id fermati."""
+        running_names = set(self.manager.list_container_names(only_running=True))
+        if not running_names:
+            return []
+        stopped: list[str] = []
+        for session_id in self.list_known_session_ids():
+            if self.manager.container_name(session_id) not in running_names:
+                continue
+            if self.is_session_busy(session_id):
+                continue
+            idle = self.manager.idle_seconds(session_id)
+            if idle is not None and idle >= self.idle_seconds:
+                self.manager.stop(session_id)
+                stopped.append(session_id)
+        return stopped
+
+    async def _loop(self) -> None:
+        while True:
+            try:
+                self.sweep()
+            except Exception:
+                _LOGGER.exception("Sweep di inattività sandbox fallito")
+            await asyncio.sleep(self.tick_seconds)
+
+    def start(self) -> None:
+        if self._task is None:
+            self._task = asyncio.create_task(self._loop(), name="sandbox-idle-reaper")
+
+    async def stop_task(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
+            self._task = None
+
+
 @dataclass(frozen=True)
 class DockerSandbox:
     """Esegue comandi nel container persistente della conversazione."""
@@ -278,6 +407,7 @@ class DockerSandbox:
             "--name",
             self.manager.container_name(self.session_id),
             "-d",
+            self.image,
             *command.split(),
         ]
 

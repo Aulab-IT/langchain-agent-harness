@@ -7,6 +7,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
+# Mount point delle directory host dentro il container sandbox.
+SANDBOX_WORKSPACE_MOUNT = "/workspace"
+SANDBOX_SKILLS_MOUNT = "/skills"
+
 
 class Settings(BaseSettings):
     """Configurazione validata, caricata da ambiente o file .env."""
@@ -34,6 +38,8 @@ class Settings(BaseSettings):
     harness_enable_mcp: bool = True
     harness_require_approval: bool = True
     harness_sandbox_image: str = "langchain-harness-sandbox:latest"
+    harness_sandbox_idle_minutes: int = Field(default=30, ge=1, le=1_440)
+    harness_sandbox_sweep_seconds: int = Field(default=60, ge=10, le=3_600)
 
     project_root: Path = PROJECT_ROOT
 

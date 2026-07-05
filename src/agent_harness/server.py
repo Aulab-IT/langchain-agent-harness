@@ -20,7 +20,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from pydantic import BaseModel, Field
 from starlette.responses import Response
 
-from agent_harness.config import Settings
+from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
 from agent_harness.control_store import ControlStore
 from agent_harness.factory import build_harness, build_strong_model
 from agent_harness.improve import (
@@ -36,7 +36,19 @@ from agent_harness.improve import (
 )
 from agent_harness.prompts import SYSTEM_PROMPT
 from agent_harness.runner import GoalRunner
-from agent_harness.sandbox import session_sandbox_manager
+from agent_harness.sandbox import (
+    SandboxIdleReaper,
+    cleanup_orphan_sandboxes,
+    session_sandbox_manager,
+)
+from agent_harness.skills import (
+    build_skill_md,
+    confine_to_directory,
+    delete_skill,
+    list_skills,
+    read_skill,
+    write_skill,
+)
 from agent_harness.triggers import TriggerScheduler, cron_matches
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,6 +95,10 @@ class SessionUpdate(BaseModel):
     title: Annotated[str, Field(min_length=1, max_length=120)]
 
 
+class AutoApproveUpdate(BaseModel):
+    enabled: bool
+
+
 class MessageCreate(BaseModel):
     content: Annotated[str, Field(min_length=1, max_length=20_000)]
     attachments: Annotated[list[str], Field(default_factory=list, max_length=50)]
@@ -103,6 +119,16 @@ class TriggerToggle(BaseModel):
 class ImproveRequest(BaseModel):
     since: Annotated[int, Field(default=1_000, ge=1, le=10_000)]
     apply: bool = False
+
+
+class SkillCreate(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=64)]
+    description: Annotated[str, Field(min_length=1, max_length=1_024)]
+    body: Annotated[str, Field(default="", max_length=50_000)]
+
+
+class SkillUpdate(BaseModel):
+    content: Annotated[str, Field(min_length=1, max_length=100_000)]
 
 
 class Usage(BaseModel):
@@ -153,26 +179,19 @@ def _context_categories(messages: list[Any]) -> list[dict[str, Any]]:
         elif isinstance(message, ToolMessage):
             estimated = _token_estimate(message.content)
             path = tool_paths.get(message.tool_call_id, "")
-            if path.startswith("/skills/"):
+            if path.startswith(f"{SANDBOX_SKILLS_MOUNT}/"):
                 totals["Skills"] += estimated
-            elif path.startswith("/workspace/"):
+            elif path.startswith(f"{SANDBOX_WORKSPACE_MOUNT}/"):
                 totals["File letti"] += estimated
             else:
                 totals["Tool output"] += estimated
     denominator = max(sum(totals.values()), 1)
-    colors = {
-        "System & memoria": "#60a5fa",
-        "Conversazione": "#8b5cf6",
-        "File letti": "#34d399",
-        "Skills": "#f472b6",
-        "Tool output": "#f59e0b",
-    }
     return [
         {
             "name": name,
             "tokens": tokens,
             "percent": round(tokens / denominator * 100),
-            "color": colors[name],
+            "color": _CATEGORY_COLORS[name],
         }
         for name, tokens in totals.items()
     ]
@@ -251,9 +270,9 @@ def _serialize_context_message(
     if isinstance(message, ToolMessage):
         content = str(message.content)
         path = tool_paths.get(message.tool_call_id, "")
-        if path.startswith("/skills/"):
+        if path.startswith(f"{SANDBOX_SKILLS_MOUNT}/"):
             category = "Skills"
-        elif path.startswith("/workspace/"):
+        elif path.startswith(f"{SANDBOX_WORKSPACE_MOUNT}/"):
             category = "File letti"
         else:
             category = "Tool output"
@@ -359,12 +378,14 @@ def _sandbox_available() -> bool:
     return session_sandbox_manager.docker_available()
 
 
-def _skills() -> list[dict[str, str]]:
-    if not settings.skills_dir.exists():
-        return []
+def _skills() -> list[dict[str, Any]]:
     return [
-        {"name": path.parent.name, "status": "ready"}
-        for path in sorted(settings.skills_dir.glob("*/SKILL.md"))
+        {
+            "name": skill["name"],
+            "status": "ready" if skill["valid"] else "error",
+            "description": skill["description"],
+        }
+        for skill in list_skills(settings.skills_dir)
     ]
 
 
@@ -533,6 +554,11 @@ class RunManager:
             command = _extract_command(payload)
             if command:
                 safe_payload["command"] = command
+            # Letto live a ogni richiesta: se la sessione lavora in autonomia, l'agente
+            # procede subito, senza fermare il run né mostrare il modale di conferma.
+            if store.get_session(session_id).get("auto_approve"):
+                self._emit(run_id, session_id, "approval.auto", safe_payload)
+                return True
             future: asyncio.Future[bool] = loop.create_future()
             self.approvals[run_id] = future
             store.update_run(run_id, status="waiting_approval")
@@ -555,7 +581,7 @@ class RunManager:
         try:
             if not settings.openai_api_key:
                 raise RuntimeError("OPENAI_API_KEY non configurata")
-            root = store.prepare_session_root(session_id)
+            root = await asyncio.to_thread(store.prepare_session_root, session_id)
             async with build_harness(
                 settings,
                 session_id=session_id,
@@ -574,13 +600,20 @@ class RunManager:
             usage = _usage(result.messages, elapsed)
             _persist_context(session_id, result.messages)
             clean_text = result.text.replace("[GOAL_COMPLETE]", "").strip()
-            store.add_message(session_id, "assistant", clean_text, run_id=run_id)
             files_after = {item["name"]: item for item in store.list_files(session_id)}
+            changed_files: list[str] = []
             for name, metadata in files_after.items():
                 if name not in files_before:
+                    changed_files.append(name)
                     self._emit(run_id, session_id, "file.created", metadata)
                 elif metadata["modified_at"] != files_before[name]["modified_at"]:
+                    changed_files.append(name)
                     self._emit(run_id, session_id, "file.updated", metadata)
+            # I file nuovi/modificati dal run compaiono anche come allegati del messaggio,
+            # non solo nel pannello File: la produzione è visibile subito in chat.
+            store.add_message(
+                session_id, "assistant", clean_text, run_id=run_id, attachments=changed_files
+            )
             store.update_run(run_id, status="completed", usage=usage)
             self._emit(run_id, session_id, "usage.updated", usage)
             self._emit(
@@ -700,14 +733,31 @@ trigger_scheduler = TriggerScheduler(
 )
 
 
+def _session_is_busy(session_id: str) -> bool:
+    latest = store.latest_run(session_id)
+    return bool(latest and latest["status"] not in _TERMINAL_RUN_STATES)
+
+
+sandbox_reaper = SandboxIdleReaper(
+    session_sandbox_manager,
+    store.list_all_session_ids,
+    _session_is_busy,
+    idle_seconds=settings.harness_sandbox_idle_minutes * 60,
+    tick_seconds=settings.harness_sandbox_sweep_seconds,
+)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    cleanup_orphan_sandboxes(session_sandbox_manager, store.list_all_session_ids())
     if settings.harness_enable_triggers:
         trigger_scheduler.start()
+    sandbox_reaper.start()
     try:
         yield
     finally:
         await trigger_scheduler.stop()
+        await sandbox_reaper.stop_task()
 
 
 app = FastAPI(
@@ -796,6 +846,19 @@ async def get_session(session_id: str) -> dict[str, Any]:
     }
 
 
+@app.post("/api/sessions/{session_id}/sandbox/stop", status_code=status.HTTP_202_ACCEPTED)
+async def stop_session_sandbox(session_id: str) -> dict[str, Any]:
+    """Ferma il container sandbox della sessione senza cancellare la sessione."""
+    _require_session(session_id)
+    if _session_is_busy(session_id):
+        raise HTTPException(status_code=409, detail="Run in corso: impossibile fermare ora.")
+    session_sandbox_manager.stop(session_id)
+    return {
+        **session_sandbox_manager.status(session_id),
+        "image": settings.harness_sandbox_image,
+    }
+
+
 @app.get("/api/sessions/{session_id}/context")
 async def session_context(session_id: str) -> dict[str, Any]:
     """Tutto ciò che l'agente ha in contesto: system prompt, memoria, messaggi, tool."""
@@ -813,6 +876,14 @@ async def session_context(session_id: str) -> dict[str, Any]:
 async def update_session(session_id: str, payload: SessionUpdate) -> dict[str, Any]:
     _require_session(session_id)
     return store.rename_session(session_id, payload.title)
+
+
+@app.patch("/api/sessions/{session_id}/auto-approve")
+async def update_session_auto_approve(
+    session_id: str, payload: AutoApproveUpdate
+) -> dict[str, Any]:
+    _require_session(session_id)
+    return store.set_session_auto_approve(session_id, payload.enabled)
 
 
 @app.delete("/api/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -967,9 +1038,11 @@ def _improvements_dir() -> Path:
 
 
 def _safe_improvement(name: str) -> Path:
-    directory = _improvements_dir().resolve()
-    candidate = (directory / Path(name).name).resolve()
-    if candidate.parent != directory or candidate.suffix != ".md":
+    try:
+        candidate = confine_to_directory(_improvements_dir(), Path(name).name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Nome proposta non valido.") from exc
+    if candidate.suffix != ".md":
         raise HTTPException(status_code=400, detail="Nome proposta non valido.")
     return candidate
 
@@ -1048,6 +1121,50 @@ async def run_improve(payload: ImproveRequest) -> dict[str, Any]:
         "applied": applied,
         "report": report_text,
     }
+
+
+@app.get("/api/skills")
+async def get_skills() -> list[dict[str, Any]]:
+    return list_skills(settings.skills_dir)
+
+
+@app.get("/api/skills/{name}")
+async def get_skill(name: str) -> dict[str, Any]:
+    try:
+        return read_skill(settings.skills_dir, name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Skill non trovata.") from exc
+
+
+@app.post("/api/skills", status_code=status.HTTP_201_CREATED)
+async def create_skill(payload: SkillCreate) -> dict[str, Any]:
+    if (settings.skills_dir / payload.name / "SKILL.md").exists():
+        raise HTTPException(status_code=409, detail="Skill già esistente.")
+    content = build_skill_md(payload.name, payload.description, payload.body)
+    try:
+        return write_skill(settings.skills_dir, payload.name, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.put("/api/skills/{name}")
+async def update_skill(name: str, payload: SkillUpdate) -> dict[str, Any]:
+    try:
+        return write_skill(settings.skills_dir, name, payload.content)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.delete("/api/skills/{name}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_skill(name: str) -> None:
+    try:
+        delete_skill(settings.skills_dir, name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Skill non trovata.") from exc
 
 
 @app.post("/api/sessions/{session_id}/files", status_code=status.HTTP_201_CREATED)

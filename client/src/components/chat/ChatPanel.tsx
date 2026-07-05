@@ -192,6 +192,7 @@ export function ChatPanel({
       <ChatComposer
         disabled={active}
         files={pending}
+        autoApprove={session.auto_approve}
         onSend={onSend}
         onUpload={onUpload}
         onDeleteFile={onRemovePending}

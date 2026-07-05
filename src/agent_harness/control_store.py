@@ -104,6 +104,14 @@ class ControlStore:
                 self._connection.execute(
                     "ALTER TABLE messages ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'"
                 )
+            session_columns = {
+                row["name"]
+                for row in self._connection.execute("PRAGMA table_info(sessions)")
+            }
+            if "auto_approve" not in session_columns:
+                self._connection.execute(
+                    "ALTER TABLE sessions ADD COLUMN auto_approve INTEGER NOT NULL DEFAULT 0"
+                )
 
     def create_session(self, title: str = "Nuova sessione") -> dict[str, Any]:
         session_id = str(uuid.uuid4())
@@ -124,6 +132,18 @@ class ControlStore:
             ).fetchone()
         return row is not None
 
+    def list_all_session_ids(self) -> list[str]:
+        """Tutti gli id sessione, senza limite: usato per lo sweep sandbox (orfani/inattività)."""
+        with self._lock:
+            rows = self._connection.execute("SELECT id FROM sessions").fetchall()
+        return [row["id"] for row in rows]
+
+    @staticmethod
+    def _session(row: sqlite3.Row) -> dict[str, Any]:
+        item = dict(row)
+        item["auto_approve"] = bool(item.get("auto_approve", 0))
+        return item
+
     def get_session(self, session_id: str) -> dict[str, Any]:
         with self._lock:
             row = self._connection.execute(
@@ -137,7 +157,7 @@ class ControlStore:
             ).fetchone()
         if row is None:
             raise KeyError(session_id)
-        return dict(row)
+        return self._session(row)
 
     def list_sessions(self, search: str = "") -> list[dict[str, Any]]:
         query = """
@@ -162,13 +182,25 @@ class ControlStore:
         query += " ORDER BY s.updated_at DESC LIMIT 100"
         with self._lock:
             rows = self._connection.execute(query, parameters).fetchall()
-        return [dict(row) for row in rows]
+        return [self._session(row) for row in rows]
 
     def rename_session(self, session_id: str, title: str) -> dict[str, Any]:
         with self._lock, self._connection:
             cursor = self._connection.execute(
                 "UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?",
                 (title.strip()[:120] or "Nuova sessione", utc_now(), session_id),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(session_id)
+        return self.get_session(session_id)
+
+    def set_session_auto_approve(self, session_id: str, enabled: bool) -> dict[str, Any]:
+        """Attiva/disattiva l'autonomia della sessione: se attiva, le richieste di
+        approvazione (es. docker_exec) vengono accettate subito, senza fermare il run."""
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                "UPDATE sessions SET auto_approve = ? WHERE id = ?",
+                (1 if enabled else 0, session_id),
             )
         if cursor.rowcount == 0:
             raise KeyError(session_id)
@@ -407,6 +439,9 @@ class ControlStore:
         workspace = root / "workspace"
         workspace.mkdir(parents=True, exist_ok=True)
         (root / "memories").mkdir(exist_ok=True)
+        # Ricopia le skill da zero a ogni run, così modifiche ed eliminazioni dal pannello
+        # si riflettono nel run successivo.
+        shutil.rmtree(root / "skills", ignore_errors=True)
         (root / "skills").mkdir(exist_ok=True)
         if self.settings.skills_dir.exists():
             shutil.copytree(self.settings.skills_dir, root / "skills", dirs_exist_ok=True)

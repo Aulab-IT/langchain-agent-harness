@@ -61,6 +61,33 @@ def test_upload_blocks_traversal_and_unsupported_extension(client: TestClient) -
     assert response.status_code == 400
 
 
+def test_auto_approve_toggle_persists(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={}).json()
+    assert session["auto_approve"] is False
+
+    enabled = client.patch(
+        f"/api/sessions/{session['id']}/auto-approve", json={"enabled": True}
+    )
+    assert enabled.status_code == 200
+    assert enabled.json()["auto_approve"] is True
+
+    refetched = client.get(f"/api/sessions/{session['id']}").json()
+    assert refetched["auto_approve"] is True
+
+    disabled = client.patch(
+        f"/api/sessions/{session['id']}/auto-approve", json={"enabled": False}
+    )
+    assert disabled.json()["auto_approve"] is False
+
+
+def test_auto_approve_missing_session_is_404(client: TestClient) -> None:
+    response = client.patch(
+        "/api/sessions/11111111-1111-1111-1111-111111111111/auto-approve",
+        json={"enabled": True},
+    )
+    assert response.status_code == 404
+
+
 def test_chat_rejects_empty_message(client: TestClient) -> None:
     session = client.post("/api/sessions", json={}).json()
     response = client.post(
@@ -159,6 +186,39 @@ def test_clear_overrides_is_idempotent(client: TestClient) -> None:
     assert response.status_code == 204
 
 
+def test_skills_crud_and_validation(client: TestClient) -> None:
+    assert client.get("/api/skills").json() == []
+
+    created = client.post(
+        "/api/skills",
+        json={
+            "name": "data-analysis",
+            "description": "Analizza CSV e produce statistiche. Usala per i dati.",
+            "body": "# Analisi\n1. Leggi il CSV.",
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["valid"] is True
+
+    assert {s["name"] for s in client.get("/api/skills").json()} == {"data-analysis"}
+    assert client.get("/api/skills/data-analysis").json()["description"].startswith("Analizza")
+
+    duplicate = client.post(
+        "/api/skills",
+        json={"name": "data-analysis", "description": "altra descrizione valida"},
+    )
+    assert duplicate.status_code == 409
+
+    invalid = client.post(
+        "/api/skills",
+        json={"name": "Bad Name", "description": "descrizione valida abbastanza"},
+    )
+    assert invalid.status_code == 422
+
+    assert client.delete("/api/skills/data-analysis").status_code == 204
+    assert client.get("/api/skills").json() == []
+
+
 def test_cron_trigger_rejects_invalid_expression(client: TestClient) -> None:
     response = client.post(
         "/api/triggers",
@@ -189,6 +249,38 @@ def test_webhook_trigger_requires_valid_token(client: TestClient) -> None:
     )
     assert ok.status_code == 202
     assert ok.json()["run_id"]
+
+
+def test_stop_sandbox_missing_session_is_404(client: TestClient) -> None:
+    response = client.post(
+        "/api/sessions/11111111-1111-1111-1111-111111111111/sandbox/stop"
+    )
+    assert response.status_code == 404
+
+
+def test_stop_sandbox_rejects_while_run_busy(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = client.post("/api/sessions", json={}).json()
+    run = server.store.create_run(session["id"])
+    server.store.update_run(run["id"], status="running")
+
+    response = client.post(f"/api/sessions/{session['id']}/sandbox/stop")
+
+    assert response.status_code == 409
+
+
+def test_stop_sandbox_calls_manager_when_idle(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = client.post("/api/sessions", json={}).json()
+    stopped: list[str] = []
+    monkeypatch.setattr(server.session_sandbox_manager, "stop", stopped.append)
+
+    response = client.post(f"/api/sessions/{session['id']}/sandbox/stop")
+
+    assert response.status_code == 202
+    assert stopped == [session["id"]]
 
 
 def test_delete_session_removes_scoped_workspace(client: TestClient) -> None:

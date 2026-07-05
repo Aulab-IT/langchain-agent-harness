@@ -8,7 +8,10 @@ import type {
   RuntimeStatus,
   SessionDetail,
   SessionFile,
+  SessionSandbox,
   SessionSummary,
+  Skill,
+  SkillDetail,
   Trigger,
 } from "./types";
 
@@ -57,8 +60,22 @@ export function renameSession(sessionId: string, title: string): Promise<Session
   return request(`/api/sessions/${sessionId}`, jsonOptions("PATCH", { title }));
 }
 
+export function setSessionAutoApprove(
+  sessionId: string,
+  enabled: boolean,
+): Promise<SessionSummary> {
+  return request(
+    `/api/sessions/${sessionId}/auto-approve`,
+    jsonOptions("PATCH", { enabled }),
+  );
+}
+
 export function deleteSession(sessionId: string): Promise<void> {
   return request(`/api/sessions/${sessionId}`, { method: "DELETE" });
+}
+
+export function stopSandbox(sessionId: string): Promise<SessionSandbox> {
+  return request(`/api/sessions/${sessionId}/sandbox/stop`, { method: "POST" });
 }
 
 export function sendMessage(
@@ -88,6 +105,7 @@ const RUN_EVENT_TYPES = [
   "grader.completed",
   "approval.requested",
   "approval.resolved",
+  "approval.auto",
   "assistant.delta",
   "usage.live",
   "usage.snapshot",
@@ -212,6 +230,32 @@ export function getImprovement(name: string): Promise<ImprovementDetail> {
 
 export function runImprove(since: number, apply: boolean): Promise<ImproveResult> {
   return request("/api/improve", jsonOptions("POST", { since, apply }));
+}
+
+// --- Agent Skills (standard agentskills.io) ---
+
+export function listSkills(): Promise<Skill[]> {
+  return request("/api/skills");
+}
+
+export function getSkill(name: string): Promise<SkillDetail> {
+  return request(`/api/skills/${encodeURIComponent(name)}`);
+}
+
+export function createSkill(body: {
+  name: string;
+  description: string;
+  body: string;
+}): Promise<SkillDetail> {
+  return request("/api/skills", jsonOptions("POST", body));
+}
+
+export function updateSkill(name: string, content: string): Promise<SkillDetail> {
+  return request(`/api/skills/${encodeURIComponent(name)}`, jsonOptions("PUT", { content }));
+}
+
+export function deleteSkill(name: string): Promise<void> {
+  return request(`/api/skills/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
 
 export function applyImprovement(name: string): Promise<{ applied: Record<string, unknown> }> {

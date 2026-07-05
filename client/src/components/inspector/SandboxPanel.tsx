@@ -1,4 +1,4 @@
-import { Box, Check, ShieldCheck, TerminalSquare, X } from "lucide-react";
+import { Box, Check, Square, ShieldCheck, TerminalSquare, X } from "lucide-react";
 import type { Run, RunEvent, RuntimeStatus, SessionSandbox } from "../../types";
 
 export function SandboxPanel({
@@ -6,11 +6,13 @@ export function SandboxPanel({
   sessionSandbox,
   run,
   events,
+  onStop,
 }: {
   runtime: RuntimeStatus;
   sessionSandbox: SessionSandbox;
   run: Run | null;
   events: RunEvent[];
+  onStop: () => void;
 }) {
   const activeTool = [...events]
     .reverse()
@@ -43,6 +45,7 @@ export function SandboxPanel({
     : containerRunning
       ? "Attiva"
       : "On-demand";
+  const busy = Boolean(run && ["queued", "running", "waiting_approval"].includes(run.status));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -51,18 +54,36 @@ export function SandboxPanel({
           <h3 className="text-sm font-semibold">Sandbox</h3>
           <p className="truncate text-xs text-muted">{sessionSandbox.image}</p>
         </div>
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
-            dockerReady
-              ? containerRunning
-                ? "border-success/30 text-success"
-                : "border-border text-muted"
-              : "border-danger/30 text-danger"
-          }`}
-        >
-          {dockerReady ? <Check size={12} /> : <X size={12} />}
-          {badgeLabel}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
+              dockerReady
+                ? containerRunning
+                  ? "border-success/30 text-success"
+                  : "border-border text-muted"
+                : "border-danger/30 text-danger"
+            }`}
+          >
+            {dockerReady ? <Check size={12} /> : <X size={12} />}
+            {badgeLabel}
+          </span>
+          {containerRunning ? (
+            <button
+              type="button"
+              onClick={onStop}
+              disabled={busy}
+              title={
+                busy
+                  ? "Impossibile fermare la sandbox mentre un run è in corso"
+                  : "Ferma il container: si riavvia automaticamente al prossimo comando"
+              }
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs text-muted hover:border-danger/40 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Square size={10} fill="currentColor" />
+              Ferma
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex items-center gap-4 border-b border-border px-5 py-4">

@@ -1,4 +1,4 @@
-import { ArrowUp, Paperclip, ShieldCheck, X } from "lucide-react";
+import { ArrowUp, Paperclip, ShieldCheck, X, Zap } from "lucide-react";
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ACCEPTED_FILES } from "../../lib/constants";
 import type { SessionFile } from "../../types";
@@ -7,12 +7,14 @@ import { FileIcon } from "../shared/FileIcon";
 export function ChatComposer({
   disabled,
   files,
+  autoApprove,
   onSend,
   onUpload,
   onDeleteFile,
 }: {
   disabled: boolean;
   files: SessionFile[];
+  autoApprove: boolean;
   onSend: (content: string) => void;
   onUpload: (files: FileList | null) => void;
   onDeleteFile: (name: string) => void;
@@ -95,9 +97,18 @@ export function ChatComposer({
               accept={ACCEPTED_FILES}
               onChange={(event) => onUpload(event.target.files)}
             />
-            <span className="hidden items-center gap-1.5 text-xs text-muted sm:inline-flex">
-              <ShieldCheck size={14} />
-              Sandbox con approvazione
+            <span
+              className={`hidden items-center gap-1.5 text-xs sm:inline-flex ${
+                autoApprove ? "text-warning" : "text-muted"
+              }`}
+              title={
+                autoApprove
+                  ? "L'agente esegue comandi sandbox senza chiedere conferma per questa sessione."
+                  : "L'agente chiede conferma prima di eseguire comandi nella sandbox Docker isolata."
+              }
+            >
+              {autoApprove ? <Zap size={14} /> : <ShieldCheck size={14} />}
+              {autoApprove ? "Sandbox autonoma" : "Sandbox con approvazione"}
             </span>
           </div>
           <div className="flex items-center gap-3">

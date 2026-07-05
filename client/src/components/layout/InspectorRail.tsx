@@ -36,6 +36,7 @@ export function InspectorRail({
   events,
   onUpload,
   onDeleteFile,
+  onStopSandbox,
   variant = "rail",
   onClose,
 }: {
@@ -53,6 +54,7 @@ export function InspectorRail({
   events: RunEvent[];
   onUpload: (files: FileList | null) => void;
   onDeleteFile: (name: string) => void;
+  onStopSandbox: () => void;
   variant?: "rail" | "sheet" | "dock";
   onClose?: () => void;
 }) {
@@ -134,6 +136,7 @@ export function InspectorRail({
             sessionSandbox={sessionSandbox}
             run={run}
             events={events}
+            onStop={onStopSandbox}
           />
         ) : null}
       </div>

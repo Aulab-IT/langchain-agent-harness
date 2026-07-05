@@ -7,6 +7,7 @@ import {
   Plus,
   Search,
   Settings2,
+  Sparkles,
   Timer,
   TrendingUp,
   X,
@@ -113,6 +114,10 @@ export function Sidebar({
             <button type="button" className={navClass(view === "traces")} onClick={() => onView("traces")}>
               <Activity size={17} />
               Traces
+            </button>
+            <button type="button" className={navClass(view === "skills")} onClick={() => onView("skills")}>
+              <Sparkles size={17} />
+              Skills
             </button>
             <button type="button" className={navClass(view === "settings")} onClick={() => onView("settings")}>
               <Settings2 size={17} />

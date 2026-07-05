@@ -51,6 +51,7 @@ type DockProps = {
   events: RunEvent[];
   onUpload: (files: FileList | null) => void;
   onDeleteFile: (name: string) => void;
+  onStopSandbox: () => void;
 };
 
 const STATUS_DOT: Record<string, string> = {

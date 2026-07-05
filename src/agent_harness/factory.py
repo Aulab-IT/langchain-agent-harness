@@ -20,7 +20,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import SecretStr
 
 from agent_harness.audit import AuditMiddleware, EventCallback
-from agent_harness.config import Settings
+from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
 from agent_harness.improve import load_overrides
 from agent_harness.middleware import build_model_router
 from agent_harness.prompts import SYSTEM_PROMPT
@@ -41,17 +41,17 @@ def build_workspace_permissions() -> list[FilesystemPermission]:
     return [
         FilesystemPermission(
             operations=["read", "write"],
-            paths=["/workspace", "/workspace/**", "/memories", "/memories/**"],
+            paths=[SANDBOX_WORKSPACE_MOUNT, f"{SANDBOX_WORKSPACE_MOUNT}/**", "/memories", "/memories/**"],
             mode="allow",
         ),
         FilesystemPermission(
             operations=["read"],
-            paths=["/skills", "/skills/**"],
+            paths=[SANDBOX_SKILLS_MOUNT, f"{SANDBOX_SKILLS_MOUNT}/**"],
             mode="allow",
         ),
         FilesystemPermission(
             operations=["write"],
-            paths=["/skills", "/skills/**"],
+            paths=[SANDBOX_SKILLS_MOUNT, f"{SANDBOX_SKILLS_MOUNT}/**"],
             mode="deny",
         ),
         FilesystemPermission(operations=["read", "write"], paths=["/**"], mode="deny"),
@@ -193,7 +193,7 @@ async def build_harness(
             "permissions": [
                 FilesystemPermission(
                     operations=["read"],
-                    paths=["/workspace", "/workspace/**", "/memories", "/memories/**"],
+                    paths=[SANDBOX_WORKSPACE_MOUNT, f"{SANDBOX_WORKSPACE_MOUNT}/**", "/memories", "/memories/**"],
                     mode="allow",
                 ),
                 FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
@@ -224,7 +224,7 @@ async def build_harness(
             system_prompt=system_prompt,
             middleware=middleware,
             subagents=subagents,
-            skills=["/skills/"],
+            skills=[f"{SANDBOX_SKILLS_MOUNT}/"],
             memory=["/memories/AGENTS.md"],
             permissions=permissions,
             backend=backend,

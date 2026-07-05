@@ -10,6 +10,7 @@ import {
 import { Sidebar } from "./components/layout/Sidebar";
 import { Topbar } from "./components/layout/Topbar";
 import { SettingsView } from "./components/settings/SettingsView";
+import { SkillsView } from "./components/skills/SkillsView";
 import { Spinner } from "./components/shared/PanelEmpty";
 import { TraceView } from "./components/traces/TraceView";
 import { TriggersView } from "./components/triggers/TriggersView";
@@ -50,7 +51,9 @@ export default function App() {
     handleDeleteFile,
     handleDeleteSession,
     handleRename,
+    handleToggleAutoApprove,
     handleStop,
+    handleStopSandbox,
     resolveApproval,
     selectSession,
   } = harness;
@@ -90,6 +93,7 @@ export default function App() {
             events={events}
             onUpload={handleUpload}
             onDeleteFile={handleDeleteFile}
+            onStopSandbox={handleStopSandbox}
           />
         ) : null
       }
@@ -103,6 +107,7 @@ export default function App() {
         onRename={handleRename}
         onDelete={handleDeleteSession}
         onStop={handleStop}
+        onToggleAutoApprove={handleToggleAutoApprove}
       />
 
       <div className="flex min-h-0 flex-col overflow-hidden">
@@ -127,6 +132,10 @@ export default function App() {
         ) : view === "traces" ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <TraceView events={traceEvents} />
+          </div>
+        ) : view === "skills" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <SkillsView />
           </div>
         ) : view === "triggers" ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -181,6 +190,7 @@ export default function App() {
                 events={events}
                 onUpload={handleUpload}
                 onDeleteFile={handleDeleteFile}
+                onStopSandbox={handleStopSandbox}
                 onClose={inspectorSheet.closeSheet}
               />
             </>
