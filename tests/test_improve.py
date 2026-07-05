@@ -6,11 +6,10 @@ import pytest
 from agent_harness.improve import (
     OVERRIDE_WHITELIST,
     Proposal,
-    apply_override_values,
-    apply_overrides,
     build_report,
     load_overrides,
     propose,
+    replace_override_values,
     saved_overrides,
     write_proposal,
 )
@@ -103,7 +102,6 @@ async def test_propose_exposes_only_whitelisted_overrides() -> None:
         summary="s",
         findings=["f"],
         harness_max_tool_calls=60,
-        harness_rubric_threshold=None,
     )
     judge = FakeJudge(proposal)
 
@@ -136,28 +134,29 @@ def test_write_proposal_saves_applicable_sidecar(tmp_path: Path) -> None:
     assert saved_overrides(path) == {"harness_max_tool_calls": 44}
 
 
-def test_saved_overrides_applies_to_toml(tmp_path: Path) -> None:
-    path = write_proposal(Proposal(harness_rubric_threshold=0.9), "R", tmp_path / "improvements")
+def test_load_overrides_ignores_frozen_rubric_threshold(tmp_path: Path) -> None:
     overrides_path = tmp_path / "harness_overrides.toml"
-
-    applied = apply_override_values(saved_overrides(path), overrides_path)
-
-    assert applied == {"harness_rubric_threshold": 0.9}
-    assert load_overrides(overrides_path) == {"harness_rubric_threshold": 0.9}
-
-
-def test_apply_overrides_writes_readable_toml(tmp_path: Path) -> None:
-    proposal = Proposal(
-        harness_max_tool_calls=55,
-        harness_rubric_threshold=0.8,
-        system_prompt_addendum='Aggiungi "prove" concrete.',
+    overrides_path.write_text(
+        "harness_max_tool_calls = 44\nharness_rubric_threshold = 0.1\n",
+        encoding="utf-8",
     )
+
+    assert load_overrides(overrides_path) == {"harness_max_tool_calls": 44}
+
+
+def test_replace_overrides_writes_readable_toml(tmp_path: Path) -> None:
     overrides_path = tmp_path / "harness_overrides.toml"
 
-    apply_overrides(proposal, overrides_path)
+    replace_override_values(
+        {
+            "harness_max_tool_calls": 55,
+            "system_prompt_addendum": 'Aggiungi "prove" concrete.',
+            "harness_rubric_threshold": 0.1,
+        },
+        overrides_path,
+    )
 
     parsed = tomllib.loads(overrides_path.read_text(encoding="utf-8"))
     assert parsed["harness_max_tool_calls"] == 55
-    assert parsed["harness_rubric_threshold"] == 0.8
     assert parsed["system_prompt_addendum"] == 'Aggiungi "prove" concrete.'
     assert load_overrides(overrides_path) == parsed

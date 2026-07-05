@@ -21,7 +21,11 @@ from pydantic import SecretStr
 
 from agent_harness.audit import AuditMiddleware, EventCallback
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
-from agent_harness.improve import load_overrides
+from agent_harness.improve import (
+    OVERRIDE_WHITELIST,
+    load_overrides,
+    select_runtime_overrides,
+)
 from agent_harness.middleware import build_model_router
 from agent_harness.prompts import SYSTEM_PROMPT
 from agent_harness.tools import build_tools
@@ -109,6 +113,7 @@ async def build_harness(
     backend_root: Path | None = None,
     event_callback: EventCallback | None = None,
     run_id: str | None = None,
+    harness_overrides: dict[str, Any] | None = None,
 ) -> AsyncIterator[Harness]:
     """Costruisce graph e risorse persistenti, chiudendole in modo deterministico."""
     settings = settings or Settings()
@@ -121,17 +126,24 @@ async def build_harness(
     strong_model = _openai_model(settings.openai_strong_model, api_key, reasoning_effort="medium")
 
     # Override applicati dal loop hill-climbing (propose-only + review umana), fuori dal codice.
-    overrides = load_overrides(settings.state_dir / "harness_overrides.toml")
+    if harness_overrides is None:
+        active_overrides = load_overrides(settings.state_dir / "harness_overrides.toml")
+        overrides = select_runtime_overrides(
+            active_overrides,
+            settings.state_dir / "canary.json",
+            session_id=session_id,
+        )
+    else:
+        overrides = {
+            key: value for key, value in harness_overrides.items() if key in OVERRIDE_WHITELIST
+        }
     system_prompt = SYSTEM_PROMPT
     addendum = str(overrides.get("system_prompt_addendum", "")).strip()
     if addendum:
         system_prompt = f"{SYSTEM_PROMPT}\n\n{addendum}\n"
     max_tool_calls = int(overrides.get("harness_max_tool_calls", settings.harness_max_tool_calls))
     max_tool_calls = max(1, min(200, max_tool_calls))
-    rubric_threshold = float(
-        overrides.get("harness_rubric_threshold", settings.harness_rubric_threshold)
-    )
-    rubric_threshold = max(0.0, min(1.0, rubric_threshold))
+    rubric_threshold = settings.harness_rubric_threshold
 
     grader: RubricGrader | None = None
     if settings.harness_enable_rubric:

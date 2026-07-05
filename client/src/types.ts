@@ -109,6 +109,7 @@ export type RuntimeStatus = {
   verification: { enabled: boolean; threshold: number };
   triggers: { enabled: boolean; tick_seconds: number };
   overrides: Record<string, unknown>;
+  canary: CanaryConfig | null;
 };
 
 export type Skill = {
@@ -146,11 +147,76 @@ export type ImprovementSummary = {
   name: string;
   size: number;
   modified_at: string;
+  evaluation_status: "pending" | "passed" | "rejected" | "stale";
 };
 
 export type ImprovementDetail = {
   name: string;
   content: string;
+  overrides: Record<string, unknown>;
+  evaluation: EvaluationArtifact | null;
+};
+
+export type CaseResult = {
+  case_id: string;
+  passed: boolean;
+  score: number;
+  completed: boolean;
+  tokens: number;
+  elapsed_ms: number;
+  failures: string[];
+  error: string;
+};
+
+export type ArmSummary = {
+  pass_rate: number;
+  avg_score: number;
+  total_tokens: number;
+  elapsed_ms: number;
+};
+
+export type EvaluationArtifact = {
+  evaluation_id: string;
+  proposal_name: string;
+  created_at: string;
+  eval_set_hash: string;
+  baseline_fingerprint: string;
+  candidate_fingerprint: string;
+  baseline: CaseResult[];
+  candidate: CaseResult[];
+  baseline_summary: ArmSummary;
+  candidate_summary: ArmSummary;
+  gate: {
+    passed: boolean;
+    quality_delta: number;
+    token_ratio: number;
+    latency_ratio: number;
+    regressions: string[];
+    reasons: string[];
+  };
+};
+
+export type CanaryConfig = {
+  source: string;
+  created_at: string;
+  fraction: number;
+  baseline_fingerprint: string;
+  candidate_fingerprint: string;
+  overrides: Record<string, unknown>;
+};
+
+export type PromotionResult = {
+  mode: "canary" | "full";
+  active: Record<string, unknown>;
+  canary: CanaryConfig | null;
+  version: ConfigVersion | null;
+};
+
+export type ConfigVersion = {
+  id: string;
+  created_at: string;
+  source: string;
+  fingerprint: string;
   overrides: Record<string, unknown>;
 };
 
@@ -177,6 +243,5 @@ export type ImproveResult = {
   summary: string;
   findings: string[];
   overrides: Record<string, unknown>;
-  applied: Record<string, unknown>;
   report: string;
 };

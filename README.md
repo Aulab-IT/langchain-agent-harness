@@ -62,6 +62,20 @@ Funzioni principali:
 - metriche provider e breakdown stimato del contesto;
 - sandbox Docker effimera montata solo sul workspace della sessione corrente.
 
+### Self-improvement controllato
+
+Vista **Miglioramenti** implementa ciclo completo:
+
+1. aggrega ultimi run terminali e trace correlati;
+2. genera proposta entro whitelist;
+3. confronta baseline e candidato su `evals/cases.json`;
+4. blocca regressioni, aumento eccessivo di token/latenza e reward hacking;
+5. abilita canary oppure promotion versionata;
+6. consente rollback a config precedente.
+
+Rubric e soglia restano congelate. Evaluation usa chiamate modello reali solo dopo azione
+esplicita. Dettagli: [`docs/SELF_IMPROVEMENT.md`](docs/SELF_IMPROVEMENT.md).
+
 Esecuzione singola:
 
 ```bash

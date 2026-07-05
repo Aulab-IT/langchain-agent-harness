@@ -1,8 +1,8 @@
 # Architettura
 
 ```text
-CLI
- └─ GoalRunner
+CLI / Control Center API
+ ├─ GoalRunner
      ├─ approvazione interrupt
      ├─ budget di continuazione
      └─ LangGraph / Deep Agent
@@ -13,6 +13,11 @@ CLI
          ├─ subagenti isolati
          ├─ audit e limiti
          └─ checkpoint SQLite
+ └─ Improvement control plane
+         ├─ trace correlati per run
+         ├─ eval baseline/candidato
+         ├─ regression gate
+         └─ canary, versioni e rollback
 ```
 
 ## Ciclo di vita
@@ -32,4 +37,6 @@ nel filesystem, mentre messaggi e stato del graph vivono nei checkpoint.
 - `middleware.py`: scelta del modello.
 - `audit.py`: osservabilità senza contenuti sensibili.
 - `mcp_server.py`: esempio di integrazione fuori processo.
-
+- `improve.py`: weakness report, proposta e override whitelisted.
+- `evaluation.py`: eval set, runner paired e gate.
+- `promotion.py`: canary, promotion versionata e rollback.

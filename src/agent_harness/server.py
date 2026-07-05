@@ -22,18 +22,31 @@ from starlette.responses import Response
 
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
 from agent_harness.control_store import ControlStore
+from agent_harness.evaluation import (
+    evaluate_candidate,
+    execute_eval_case,
+    load_eval_cases,
+    load_proposal_evaluation,
+    save_proposal_evaluation,
+)
 from agent_harness.factory import build_harness, build_strong_model
 from agent_harness.improve import (
     IMPROVEMENT_EVENT_TYPES,
     Proposal,
-    apply_override_values,
-    apply_overrides,
     build_report,
     load_overrides,
+    overrides_fingerprint,
     propose,
     render_report,
     saved_overrides,
     write_proposal,
+)
+from agent_harness.promotion import (
+    list_config_versions,
+    promote_proposal,
+    read_canary,
+    record_config_version,
+    restore_config_version,
 )
 from agent_harness.prompts import SYSTEM_PROMPT
 from agent_harness.runner import GoalRunner
@@ -86,6 +99,7 @@ _ALLOWED_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}
 
 settings = Settings()
 store = ControlStore(settings)
+evaluation_lock = asyncio.Lock()
 
 
 class SessionCreate(BaseModel):
@@ -119,7 +133,11 @@ class TriggerToggle(BaseModel):
 
 class ImproveRequest(BaseModel):
     since: Annotated[int, Field(default=100, ge=1, le=1_000)]
-    apply: bool = False
+
+
+class PromotionRequest(BaseModel):
+    mode: Literal["canary", "full"] = "canary"
+    fraction: Annotated[float, Field(default=0.2, ge=0.05, le=0.5)]
 
 
 class SkillCreate(BaseModel):
@@ -815,6 +833,7 @@ async def runtime_status() -> dict[str, Any]:
             "tick_seconds": settings.harness_trigger_tick_seconds,
         },
         "overrides": load_overrides(settings.state_dir / "harness_overrides.toml"),
+        "canary": read_canary(settings.state_dir / "canary.json"),
     }
 
 
@@ -1054,14 +1073,27 @@ async def list_improvements() -> list[dict[str, Any]]:
     directory = _improvements_dir()
     if not directory.exists():
         return []
+    active = load_overrides(settings.state_dir / "harness_overrides.toml")
     items = []
     for path in sorted(directory.glob("*.md"), reverse=True):
         stat = path.stat()
+        evaluation = load_proposal_evaluation(path)
+        proposal = saved_overrides(path)
+        candidate = {**active, **proposal}
+        evaluation_status = "pending"
+        if evaluation:
+            evaluation_status = "passed" if evaluation.gate.passed else "rejected"
+            if (
+                evaluation.baseline_fingerprint != overrides_fingerprint(active)
+                or evaluation.candidate_fingerprint != overrides_fingerprint(candidate)
+            ):
+                evaluation_status = "stale"
         items.append(
             {
                 "name": path.name,
                 "size": stat.st_size,
                 "modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
+                "evaluation_status": evaluation_status,
             }
         )
     return items[:200]
@@ -1072,30 +1104,112 @@ async def get_improvement(name: str) -> dict[str, Any]:
     target = _safe_improvement(name)
     if not target.is_file():
         raise HTTPException(status_code=404, detail="Proposta non trovata.")
+    evaluation = load_proposal_evaluation(target)
     return {
         "name": target.name,
         "content": target.read_text(encoding="utf-8"),
         "overrides": saved_overrides(target),
+        "evaluation": evaluation.model_dump(mode="json") if evaluation else None,
     }
 
 
 @app.post("/api/improvements/{name}/apply", status_code=status.HTTP_202_ACCEPTED)
-async def apply_improvement(name: str) -> dict[str, Any]:
+async def apply_improvement(name: str, payload: PromotionRequest) -> dict[str, Any]:
     target = _safe_improvement(name)
     if not target.is_file():
         raise HTTPException(status_code=404, detail="Proposta non trovata.")
-    values = saved_overrides(target)
-    if not values:
-        raise HTTPException(status_code=400, detail="Nessun override applicabile nella proposta.")
-    applied = apply_override_values(values, settings.state_dir / "harness_overrides.toml")
-    return {"applied": applied}
+    try:
+        return promote_proposal(
+            target,
+            active_path=settings.state_dir / "harness_overrides.toml",
+            versions_dir=settings.state_dir / "config_versions",
+            canary_path=settings.state_dir / "canary.json",
+            mode=payload.mode,
+            fraction=payload.fraction,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/improvements/{name}/evaluate", status_code=status.HTTP_201_CREATED)
+async def evaluate_improvement(name: str) -> dict[str, Any]:
+    target = _safe_improvement(name)
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="Proposta non trovata.")
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY non configurata.")
+    if evaluation_lock.locked():
+        raise HTTPException(status_code=409, detail="Evaluation già in corso.")
+    proposal = saved_overrides(target)
+    if not proposal:
+        raise HTTPException(status_code=400, detail="Proposta senza override applicabili.")
+    try:
+        cases = load_eval_cases(settings.project_root / "evals" / "cases.json")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail="Eval set non valido.") from exc
+    baseline = load_overrides(settings.state_dir / "harness_overrides.toml")
+    candidate = {**baseline, **proposal}
+
+    async def executor(
+        case: Any,
+        overrides: dict[str, Any],
+        arm: str,
+        root: Path,
+    ) -> Any:
+        return await execute_eval_case(settings, case, overrides, arm, root)
+
+    async with evaluation_lock:
+        artifact = await evaluate_candidate(
+            proposal_name=target.name,
+            baseline_overrides=baseline,
+            candidate_overrides=candidate,
+            cases=cases,
+            evaluations_dir=settings.state_dir / "evaluations",
+            executor=executor,
+        )
+        save_proposal_evaluation(target, artifact)
+    return artifact.model_dump(mode="json")
 
 
 @app.delete("/api/overrides", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_overrides() -> None:
     """Rimuove gli override applicati: l'harness torna alla config del codice."""
     path = settings.state_dir / "harness_overrides.toml"
+    current = load_overrides(path)
+    if current:
+        record_config_version(
+            current,
+            settings.state_dir / "config_versions",
+            source="before-reset",
+        )
     path.unlink(missing_ok=True)
+    (settings.state_dir / "canary.json").unlink(missing_ok=True)
+
+
+@app.get("/api/config/versions")
+async def get_config_versions() -> list[dict[str, Any]]:
+    return list_config_versions(settings.state_dir / "config_versions")
+
+
+@app.post("/api/config/versions/{version_id}/restore")
+async def restore_version(version_id: str) -> dict[str, Any]:
+    try:
+        restored = restore_config_version(
+            version_id,
+            settings.state_dir / "config_versions",
+            settings.state_dir / "harness_overrides.toml",
+            settings.state_dir / "canary.json",
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Versione config non trovata.") from exc
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"overrides": restored}
+
+
+@app.delete("/api/canary", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_canary() -> None:
+    (settings.state_dir / "canary.json").unlink(missing_ok=True)
 
 
 @app.post("/api/improve", status_code=status.HTTP_201_CREATED)
@@ -1112,15 +1226,11 @@ async def run_improve(payload: ImproveRequest) -> dict[str, Any]:
     judge = build_strong_model(settings).with_structured_output(Proposal)
     proposal = await propose(report_text, judge)
     path = write_proposal(proposal, report_text, _improvements_dir())
-    applied: dict[str, Any] = {}
-    if payload.apply:
-        applied = apply_overrides(proposal, settings.state_dir / "harness_overrides.toml")
     return {
         "name": path.name,
         "summary": proposal.summary,
         "findings": proposal.findings,
         "overrides": proposal.overrides,
-        "applied": applied,
         "report": report_text,
     }
 

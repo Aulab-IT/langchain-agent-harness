@@ -1,10 +1,13 @@
 import type {
   ContextData,
+  ConfigVersion,
+  EvaluationArtifact,
   ImproveResult,
   ImprovementDetail,
   ImprovementSummary,
   Run,
   RunEvent,
+  PromotionResult,
   RuntimeStatus,
   SessionDetail,
   SessionFile,
@@ -228,8 +231,8 @@ export function getImprovement(name: string): Promise<ImprovementDetail> {
   return request(`/api/improvements/${encodeURIComponent(name)}`);
 }
 
-export function runImprove(since: number, apply: boolean): Promise<ImproveResult> {
-  return request("/api/improve", jsonOptions("POST", { since, apply }));
+export function runImprove(since: number): Promise<ImproveResult> {
+  return request("/api/improve", jsonOptions("POST", { since }));
 }
 
 // --- Agent Skills (standard agentskills.io) ---
@@ -258,10 +261,37 @@ export function deleteSkill(name: string): Promise<void> {
   return request(`/api/skills/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
 
-export function applyImprovement(name: string): Promise<{ applied: Record<string, unknown> }> {
-  return request(`/api/improvements/${encodeURIComponent(name)}/apply`, { method: "POST" });
+export function evaluateImprovement(name: string): Promise<EvaluationArtifact> {
+  return request(`/api/improvements/${encodeURIComponent(name)}/evaluate`, {
+    method: "POST",
+  });
+}
+
+export function applyImprovement(
+  name: string,
+  mode: "canary" | "full",
+  fraction = 0.2,
+): Promise<PromotionResult> {
+  return request(
+    `/api/improvements/${encodeURIComponent(name)}/apply`,
+    jsonOptions("POST", { mode, fraction }),
+  );
 }
 
 export function clearOverrides(): Promise<void> {
   return request("/api/overrides", { method: "DELETE" });
+}
+
+export function clearCanary(): Promise<void> {
+  return request("/api/canary", { method: "DELETE" });
+}
+
+export function listConfigVersions(): Promise<ConfigVersion[]> {
+  return request("/api/config/versions");
+}
+
+export function restoreConfigVersion(id: string): Promise<{ overrides: Record<string, unknown> }> {
+  return request(`/api/config/versions/${encodeURIComponent(id)}/restore`, {
+    method: "POST",
+  });
 }

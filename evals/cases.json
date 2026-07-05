@@ -1,0 +1,45 @@
+[
+  {
+    "id": "arithmetic-proof",
+    "goal": "Calcola 17 × 23. Rispondi con risultato numerico e una breve verifica.",
+    "checks": [
+      {
+        "type": "answer_contains",
+        "value": "391"
+      }
+    ]
+  },
+  {
+    "id": "verified-file",
+    "goal": "Crea /workspace/result.txt con la riga esatta HARNESS_EVAL_OK=42. Verifica il file con docker_exec prima di concludere.",
+    "checks": [
+      {
+        "type": "file_exists",
+        "path": "result.txt"
+      },
+      {
+        "type": "file_contains",
+        "path": "result.txt",
+        "value": "HARNESS_EVAL_OK=42"
+      }
+    ]
+  },
+  {
+    "id": "fixture-analysis",
+    "goal": "Leggi /workspace/numbers.json, calcola la somma dei valori e scrivi /workspace/summary.md nel formato `totale: N`. Verifica con docker_exec.",
+    "files": {
+      "numbers.json": "{\"values\":[1,2,3,4,5]}"
+    },
+    "checks": [
+      {
+        "type": "file_exists",
+        "path": "summary.md"
+      },
+      {
+        "type": "file_contains",
+        "path": "summary.md",
+        "value": "totale: 15"
+      }
+    ]
+  }
+]

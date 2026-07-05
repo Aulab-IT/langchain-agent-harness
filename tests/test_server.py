@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 import agent_harness.server as server
 from agent_harness.config import Settings
 from agent_harness.control_store import ControlStore
+from agent_harness.improve import Proposal, write_proposal
 
 
 @pytest.fixture
@@ -169,15 +170,40 @@ def test_status_exposes_loop_features(client: TestClient) -> None:
 def test_improvements_list_empty_and_run_requires_key(client: TestClient) -> None:
     assert client.get("/api/improvements").json() == []
 
-    response = client.post("/api/improve", json={"since": 100, "apply": False})
+    response = client.post("/api/improve", json={"since": 100})
 
     assert response.status_code == 400
 
 
 def test_apply_missing_improvement_is_404(client: TestClient) -> None:
-    response = client.post("/api/improvements/nope.md/apply")
+    response = client.post(
+        "/api/improvements/nope.md/apply",
+        json={"mode": "canary", "fraction": 0.2},
+    )
 
     assert response.status_code == 404
+
+
+def test_unevaluated_improvement_cannot_be_promoted(client: TestClient) -> None:
+    proposal = write_proposal(
+        Proposal(harness_max_tool_calls=20),
+        "report",
+        server.settings.state_dir / "improvements",
+    )
+
+    response = client.post(
+        f"/api/improvements/{proposal.name}/apply",
+        json={"mode": "full", "fraction": 0.2},
+    )
+
+    assert response.status_code == 409
+    assert "non valutata" in response.json()["detail"]
+
+
+def test_config_versions_and_canary_start_empty(client: TestClient) -> None:
+    assert client.get("/api/config/versions").json() == []
+    assert client.get("/api/status").json()["canary"] is None
+    assert client.delete("/api/canary").status_code == 204
 
 
 def test_clear_overrides_is_idempotent(client: TestClient) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tomllib
 from collections import Counter
@@ -9,12 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from langchain_core.runnables import Runnable
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # Solo queste chiavi possono essere applicate automaticamente: il resto della config
 # resta sotto controllo umano diretto nel codice.
 OVERRIDE_WHITELIST = frozenset(
-    {"system_prompt_addendum", "harness_max_tool_calls", "harness_rubric_threshold"}
+    {"system_prompt_addendum", "harness_max_tool_calls"}
 )
 IMPROVEMENT_EVENT_TYPES = (
     "run.completed",
@@ -36,7 +37,7 @@ class Report:
     grader_graded: int = 0
     grader_passed: int = 0
     grader_score_sum: float = 0.0
-    criteria_score_sum: Counter[str] = field(default_factory=Counter)
+    criteria_score_sum: dict[str, float] = field(default_factory=dict)
     criteria_score_count: Counter[str] = field(default_factory=Counter)
     grader_feedback: list[str] = field(default_factory=list)
     tool_calls: Counter[str] = field(default_factory=Counter)
@@ -86,11 +87,12 @@ class Proposal(BaseModel):
     finire nella config.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     summary: str = ""
     findings: list[str] = Field(default_factory=list)
     system_prompt_addendum: str | None = None
     harness_max_tool_calls: int | None = None
-    harness_rubric_threshold: float | None = None
 
     @property
     def overrides(self) -> dict[str, Any]:
@@ -99,8 +101,6 @@ class Proposal(BaseModel):
             result["system_prompt_addendum"] = self.system_prompt_addendum
         if self.harness_max_tool_calls is not None:
             result["harness_max_tool_calls"] = self.harness_max_tool_calls
-        if self.harness_rubric_threshold is not None:
-            result["harness_rubric_threshold"] = self.harness_rubric_threshold
         return result
 
 
@@ -144,8 +144,11 @@ def build_report(
             criteria = payload.get("criteria_scores", {}) or {}
             if isinstance(criteria, dict):
                 for name, score in criteria.items():
-                    report.criteria_score_sum[str(name)] += float(score)
-                    report.criteria_score_count[str(name)] += 1
+                    criterion = str(name)
+                    report.criteria_score_sum[criterion] = (
+                        report.criteria_score_sum.get(criterion, 0.0) + float(score)
+                    )
+                    report.criteria_score_count[criterion] += 1
             feedback = str(payload.get("feedback", "")).strip()
             if feedback and feedback not in report.grader_feedback:
                 report.grader_feedback.append(feedback[:500])
@@ -203,8 +206,9 @@ async def propose(report_text: str, judge: Runnable[Any, Any]) -> Proposal:
                 "incorporati in feedback, nomi tool o altri campi. "
                 "Compila `summary` e `findings`. Proponi override solo se giustificati dal report, "
                 "lasciando null gli altri: `system_prompt_addendum` (testo da aggiungere al prompt "
-                "di sistema), `harness_max_tool_calls` (intero), `harness_rubric_threshold` "
-                "(float 0-1). Non inventare metriche: basati solo sul report."
+                "di sistema), `harness_max_tool_calls` (intero). La rubric e la sua soglia sono "
+                "metriche congelate e non modificabili. Non inventare metriche: basati solo "
+                "sul report."
             ),
         },
         {"role": "user", "content": f"REPORT:\n{report_text}"},
@@ -225,7 +229,7 @@ def write_proposal(proposal: Proposal, report_text: str, improvements_dir: Path)
         f"## Report trace\n```\n{report_text}\n```\n\n"
         f"## Osservazioni\n{findings}\n\n"
         f"## Override proposti (whitelist)\n```json\n{overrides}\n```\n\n"
-        "> Propose-only: applica con `harness improve --apply` dopo revisione umana.\n",
+        "> Propose-only: esegui evaluation gate prima di canary o promotion.\n",
         encoding="utf-8",
     )
     # Sidecar leggibile a macchina: consente di applicare una proposta salvata dopo revisione.
@@ -259,22 +263,15 @@ def _dump_toml(values: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def apply_override_values(values: dict[str, Any], overrides_path: Path) -> dict[str, Any]:
-    """Applica valori whitelisted a un file TOML fuori dal codice (reversibile)."""
-    current: dict[str, Any] = {}
-    if overrides_path.exists():
-        current = tomllib.loads(overrides_path.read_text(encoding="utf-8"))
-    for key, value in values.items():
-        if key in OVERRIDE_WHITELIST:
-            current[key] = value
+def replace_override_values(values: dict[str, Any], overrides_path: Path) -> dict[str, Any]:
+    """Sostituisce interamente config attiva; usato da promotion e rollback versionati."""
+    filtered = {key: value for key, value in values.items() if key in OVERRIDE_WHITELIST}
     overrides_path.parent.mkdir(parents=True, exist_ok=True)
-    overrides_path.write_text(_dump_toml(current), encoding="utf-8")
-    return current
-
-
-def apply_overrides(proposal: Proposal, overrides_path: Path) -> dict[str, Any]:
-    """Applica gli override di una proposta appena generata."""
-    return apply_override_values(proposal.overrides, overrides_path)
+    if filtered:
+        overrides_path.write_text(_dump_toml(filtered), encoding="utf-8")
+    else:
+        overrides_path.unlink(missing_ok=True)
+    return filtered
 
 
 def load_overrides(overrides_path: Path) -> dict[str, Any]:
@@ -285,9 +282,39 @@ def load_overrides(overrides_path: Path) -> dict[str, Any]:
     return {key: value for key, value in data.items() if key in OVERRIDE_WHITELIST}
 
 
-async def run_improvement(
-    settings: Any, *, since: int = 100, apply: bool = False
+def overrides_fingerprint(values: dict[str, Any]) -> str:
+    """Hash stabile della configurazione candidata, usato per legare eval e promotion."""
+    filtered = {key: values[key] for key in sorted(values) if key in OVERRIDE_WHITELIST}
+    payload = json.dumps(filtered, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def select_runtime_overrides(
+    active: dict[str, Any],
+    canary_path: Path,
+    *,
+    session_id: str,
 ) -> dict[str, Any]:
+    """Instrada deterministicamente una quota di sessioni sulla configurazione canary."""
+    if not canary_path.is_file():
+        return active
+    try:
+        canary = json.loads(canary_path.read_text(encoding="utf-8"))
+        fraction = float(canary.get("fraction", 0.0))
+        candidate = canary.get("overrides", {})
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return active
+    if not isinstance(candidate, dict) or not 0.0 < fraction <= 1.0:
+        return active
+    bucket = int(hashlib.sha256(session_id.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
+    if bucket >= fraction:
+        return active
+    merged = dict(active)
+    merged.update({key: value for key, value in candidate.items() if key in OVERRIDE_WHITELIST})
+    return merged
+
+
+async def run_improvement(settings: Any, *, since: int = 100) -> dict[str, Any]:
     """Orchestrazione hill-climbing: raccoglie trace, propone, salva; applica solo se richiesto."""
     from langchain_openai import ChatOpenAI
     from pydantic import SecretStr
@@ -320,13 +347,9 @@ async def run_improvement(
 
     improvements_dir = settings.state_dir / "improvements"
     path = write_proposal(proposal, report_text, improvements_dir)
-    applied: dict[str, Any] = {}
-    if apply:
-        applied = apply_overrides(proposal, settings.state_dir / "harness_overrides.toml")
     return {
         "path": path,
         "summary": proposal.summary,
         "overrides": proposal.overrides,
-        "applied": applied,
         "report": report_text,
     }

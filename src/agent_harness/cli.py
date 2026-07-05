@@ -71,22 +71,14 @@ def chat(
 @app.command()
 def improve(
     since: int = typer.Option(100, help="Numero di run terminali recenti da analizzare."),
-    apply: bool = typer.Option(
-        False, help="Applica gli override whitelisted dopo revisione umana."
-    ),
 ) -> None:
     """Loop hill-climbing: analizza i trace e propone modifiche alla config dell'harness."""
-    result = asyncio.run(run_improvement(Settings(), since=since, apply=apply))
+    result = asyncio.run(run_improvement(Settings(), since=since))
     console.print(Panel(str(result["report"]), title="Report trace"))
     if result["summary"]:
         console.print(f"[bold]Sintesi:[/bold] {result['summary']}")
     console.print(f"Proposta salvata: [cyan]{result['path']}[/cyan]")
-    if apply and result["applied"]:
-        console.print(f"[green]Override applicati:[/green] {result['applied']}")
-    elif apply:
-        console.print("[yellow]Nessun override whitelisted da applicare.[/yellow]")
-    else:
-        console.print("[dim]Propose-only. Usa --apply dopo revisione per applicare.[/dim]")
+    console.print("[dim]Propose-only. Valuta e promuovi dal Control Center.[/dim]")
 
 
 @app.command()
