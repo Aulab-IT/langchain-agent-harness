@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 
 import pytest
 
 from agent_harness.config import Settings
 from agent_harness.factory import build_harness, build_workspace_permissions
+from agent_harness.improve import overrides_fingerprint
 
 
 def test_workspace_permissions_include_directory_roots() -> None:
@@ -35,3 +37,44 @@ async def test_factory_builds_graph_without_network_calls(tmp_path: Path) -> Non
         assert harness.graph is not None
         assert {"docker_exec", "current_utc_time"} <= {tool.name for tool in harness.tools}
         assert (tmp_path / "state" / "checkpoints.sqlite").exists()
+
+
+@pytest.mark.asyncio
+async def test_factory_exposes_canary_attribution(tmp_path: Path) -> None:
+    (tmp_path / "memories").mkdir()
+    (tmp_path / "memories" / "AGENTS.md").write_text("# Memoria\n", encoding="utf-8")
+    (tmp_path / "skills").mkdir()
+    (tmp_path / "state").mkdir()
+    candidate = {"harness_max_tool_calls": 12}
+    (tmp_path / "state" / "canary.json").write_text(
+        json.dumps(
+            {
+                "source": "proposal.md",
+                "fraction": 1.0,
+                "overrides": candidate,
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = Settings(
+        _env_file=None,
+        project_root=tmp_path,
+        openai_api_key="test-key",
+        harness_enable_mcp=False,
+        harness_enable_web_search=False,
+        harness_require_approval=False,
+    )
+    events: list[dict[str, object]] = []
+
+    async with build_harness(
+        settings,
+        session_id="canary-session",
+        event_callback=events.append,
+    ) as harness:
+        assert harness.config_arm == "canary"
+        assert harness.config_source == "proposal.md"
+        assert harness.config_fingerprint == overrides_fingerprint(candidate)
+        assert harness.baseline_fingerprint == overrides_fingerprint({})
+    selected = next(event for event in events if event["type"] == "config.selected")
+    assert selected["arm"] == "canary"
+    assert selected["source"] == "proposal.md"

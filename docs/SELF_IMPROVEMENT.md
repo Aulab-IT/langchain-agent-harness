@@ -65,5 +65,19 @@ Routing canary usa hash stabile del `session_id`: stessa sessione conserva stess
 Promotion piena salva versione precedente e nuova sotto `state/config_versions/`. Rollback
 registra a sua volta snapshot pre/post e disattiva eventuale canary.
 
-Control Center espone evaluation, confronto baseline/candidato, canary, promotion e ripristino.
-API resta vincolata a `127.0.0.1`; endpoint evaluation accetta una sola esecuzione concorrente.
+Ogni run emette `config.selected` con arm (`baseline`/`canary`), fingerprint e proposta sorgente.
+Control Center aggiorna ogni 15 secondi confronto live su:
+
+- success e failure rate;
+- score grader;
+- token medi;
+- latenza media.
+
+Gate live parte dopo almeno 5 run per arm. Canary passa se resta entro 5 punti di success/failure
+rate, 0.03 di score grader, `+20%` token e `+30%` latenza rispetto alla baseline. Se una canary è
+attiva, promotion al 100% viene bloccata finché gate live non passa. Run storici senza attribution
+o appartenenti a esperimenti precedenti vengono ignorati.
+
+Control Center espone evaluation, confronto baseline/candidato, canary live, promotion e
+ripristino. API resta vincolata a `127.0.0.1`; endpoint evaluation accetta una sola esecuzione
+concorrente.

@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -200,9 +201,39 @@ def test_unevaluated_improvement_cannot_be_promoted(client: TestClient) -> None:
     assert "non valutata" in response.json()["detail"]
 
 
+def test_full_promotion_waits_for_live_canary_gate(client: TestClient) -> None:
+    proposal = write_proposal(
+        Proposal(harness_max_tool_calls=20),
+        "report",
+        server.settings.state_dir / "improvements",
+    )
+    (server.settings.state_dir / "canary.json").write_text(
+        json.dumps(
+            {
+                "source": proposal.name,
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "fraction": 0.2,
+                "baseline_fingerprint": "base",
+                "candidate_fingerprint": "candidate",
+                "overrides": {"harness_max_tool_calls": 20},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    response = client.post(
+        f"/api/improvements/{proposal.name}/apply",
+        json={"mode": "full", "fraction": 0.2},
+    )
+
+    assert response.status_code == 409
+    assert "Canary live non pronta" in response.json()["detail"]
+
+
 def test_config_versions_and_canary_start_empty(client: TestClient) -> None:
     assert client.get("/api/config/versions").json() == []
     assert client.get("/api/status").json()["canary"] is None
+    assert client.get("/api/canary/status").json()["status"] == "inactive"
     assert client.delete("/api/canary").status_code == 204
 
 

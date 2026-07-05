@@ -17,7 +17,8 @@ CLI / Control Center API
          ├─ trace correlati per run
          ├─ eval baseline/candidato
          ├─ regression gate
-         └─ canary, versioni e rollback
+         ├─ attribution e gate canary live
+         └─ versioni e rollback
 ```
 
 ## Ciclo di vita
@@ -40,3 +41,4 @@ nel filesystem, mentre messaggi e stato del graph vivono nei checkpoint.
 - `improve.py`: weakness report, proposta e override whitelisted.
 - `evaluation.py`: eval set, runner paired e gate.
 - `promotion.py`: canary, promotion versionata e rollback.
+- `canary.py`: metriche live baseline/canary e gate di non inferiorità.

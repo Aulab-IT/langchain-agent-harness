@@ -366,6 +366,7 @@ async def execute_eval_case(
             backend_root=case_root,
             run_id=f"eval-{session_id}",
             harness_overrides=overrides,
+            config_arm=f"evaluation-{arm}",
         ) as harness:
             result = await GoalRunner(
                 harness,

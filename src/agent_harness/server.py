@@ -20,6 +20,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from pydantic import BaseModel, Field
 from starlette.responses import Response
 
+from agent_harness.canary import CANARY_EVENT_TYPES, CanaryAnalysis, analyze_canary
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
 from agent_harness.control_store import ControlStore
 from agent_harness.evaluation import (
@@ -1058,6 +1059,18 @@ def _improvements_dir() -> Path:
     return settings.state_dir / "improvements"
 
 
+def _current_canary_analysis() -> CanaryAnalysis:
+    canary = read_canary(settings.state_dir / "canary.json")
+    if canary is None:
+        return analyze_canary([], [], None)
+    runs = store.recent_terminal_runs(limit=5_000)
+    events = store.events_for_runs(
+        [str(run["id"]) for run in runs],
+        event_types=CANARY_EVENT_TYPES,
+    )
+    return analyze_canary(runs, events, canary)
+
+
 def _safe_improvement(name: str) -> Path:
     try:
         candidate = confine_to_directory(_improvements_dir(), Path(name).name)
@@ -1118,6 +1131,22 @@ async def apply_improvement(name: str, payload: PromotionRequest) -> dict[str, A
     target = _safe_improvement(name)
     if not target.is_file():
         raise HTTPException(status_code=404, detail="Proposta non trovata.")
+    active_canary = read_canary(settings.state_dir / "canary.json")
+    if active_canary:
+        source = str(active_canary.get("source", ""))
+        if source != target.name:
+            raise HTTPException(
+                status_code=409,
+                detail="Altra canary attiva: annullala prima di cambiare proposta.",
+            )
+        if payload.mode == "canary":
+            raise HTTPException(status_code=409, detail="Canary già attiva per questa proposta.")
+        live_gate = _current_canary_analysis()
+        if live_gate.status != "passed":
+            raise HTTPException(
+                status_code=409,
+                detail="Canary live non pronta: " + " ".join(live_gate.reasons),
+            )
     try:
         return promote_proposal(
             target,
@@ -1210,6 +1239,11 @@ async def restore_version(version_id: str) -> dict[str, Any]:
 @app.delete("/api/canary", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_canary() -> None:
     (settings.state_dir / "canary.json").unlink(missing_ok=True)
+
+
+@app.get("/api/canary/status")
+async def canary_status() -> dict[str, Any]:
+    return _current_canary_analysis().model_dump(mode="json")
 
 
 @app.post("/api/improve", status_code=status.HTTP_201_CREATED)

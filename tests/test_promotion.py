@@ -12,6 +12,7 @@ from agent_harness.improve import (
     Proposal,
     load_overrides,
     overrides_fingerprint,
+    resolve_runtime_overrides,
     select_runtime_overrides,
     write_proposal,
 )
@@ -99,6 +100,12 @@ def test_canary_routes_stable_session_fraction(tmp_path: Path) -> None:
     ]
     selected = sum(bool(value) for value in routed)
     assert 10 <= selected <= 30
+    attributed = [
+        resolve_runtime_overrides({}, tmp_path / "canary.json", session_id=f"session-{index}")
+        for index in range(100)
+    ]
+    assert {selection.arm for selection in attributed} == {"baseline", "canary"}
+    assert all(selection.canary_source == proposal.name for selection in attributed)
 
 
 def test_full_promotion_versions_and_rolls_back(tmp_path: Path) -> None:

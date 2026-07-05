@@ -1,4 +1,5 @@
 import type {
+  CanaryAnalysis,
   ContextData,
   ConfigVersion,
   EvaluationArtifact,
@@ -99,6 +100,7 @@ export function getRun(runId: string): Promise<Run> {
 const RUN_EVENT_TYPES = [
   "run.started",
   "agent.started",
+  "config.selected",
   "tool.started",
   "tool.completed",
   "tool.failed",
@@ -284,6 +286,10 @@ export function clearOverrides(): Promise<void> {
 
 export function clearCanary(): Promise<void> {
   return request("/api/canary", { method: "DELETE" });
+}
+
+export function getCanaryStatus(): Promise<CanaryAnalysis> {
+  return request("/api/canary/status");
 }
 
 export function listConfigVersions(): Promise<ConfigVersion[]> {

@@ -213,6 +213,35 @@ export type CanaryConfig = {
   overrides: Record<string, unknown>;
 };
 
+export type CanaryArmMetrics = {
+  total_runs: number;
+  successful_runs: number;
+  incomplete_runs: number;
+  failed_runs: number;
+  cancelled_runs: number;
+  success_rate: number;
+  failure_rate: number;
+  graded_runs: number;
+  grader_pass_rate: number;
+  grader_avg_score: number;
+  avg_tokens: number;
+  avg_latency_ms: number;
+};
+
+export type CanaryAnalysis = {
+  status: "inactive" | "collecting" | "passed" | "failed";
+  source: string;
+  started_at: string;
+  minimum_runs_per_arm: number;
+  baseline: CanaryArmMetrics;
+  canary: CanaryArmMetrics;
+  success_delta: number;
+  grader_delta: number;
+  token_ratio: number;
+  latency_ratio: number;
+  reasons: string[];
+};
+
 export type PromotionResult = {
   mode: "canary" | "full";
   active: Record<string, unknown>;

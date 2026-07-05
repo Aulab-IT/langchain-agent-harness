@@ -14,6 +14,7 @@ import {
   clearCanary,
   clearOverrides,
   evaluateImprovement,
+  getCanaryStatus,
   getImprovement,
   listConfigVersions,
   listImprovements,
@@ -22,6 +23,8 @@ import {
 } from "../../api";
 import { relativeLabel } from "../../lib/format";
 import type {
+  CanaryAnalysis,
+  CanaryConfig,
   CaseResult,
   ConfigVersion,
   EvaluationArtifact,
@@ -41,15 +44,18 @@ export function ImproveView({ runtime }: { runtime: RuntimeStatus }) {
   const [error, setError] = useState("");
   const [overrides, setOverrides] = useState<Record<string, unknown>>(runtime.overrides ?? {});
   const [canary, setCanary] = useState(runtime.canary);
+  const [canaryStatus, setCanaryStatus] = useState<CanaryAnalysis | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [proposals, configVersions] = await Promise.all([
+      const [proposals, configVersions, liveCanary] = await Promise.all([
         listImprovements(),
         listConfigVersions(),
+        getCanaryStatus(),
       ]);
       setItems(proposals);
       setVersions(configVersions);
+      setCanaryStatus(liveCanary.status === "inactive" ? null : liveCanary);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Caricamento miglioramenti fallito");
     }
@@ -58,6 +64,29 @@ export function ImproveView({ runtime }: { runtime: RuntimeStatus }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const canaryFingerprint = canary?.candidate_fingerprint ?? "";
+  useEffect(() => {
+    if (!canaryFingerprint) {
+      setCanaryStatus(null);
+      return;
+    }
+    let active = true;
+    const poll = async () => {
+      try {
+        const status = await getCanaryStatus();
+        if (active) setCanaryStatus(status.status === "inactive" ? null : status);
+      } catch {
+        // Poll best-effort: azioni esplicite continuano a mostrare eventuali errori.
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 15_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [canaryFingerprint]);
 
   const generate = async () => {
     if (busy) return;
@@ -140,6 +169,7 @@ export function ImproveView({ runtime }: { runtime: RuntimeStatus }) {
     try {
       await clearCanary();
       setCanary(null);
+      setCanaryStatus(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Rollback canary fallito");
     }
@@ -196,21 +226,13 @@ export function ImproveView({ runtime }: { runtime: RuntimeStatus }) {
         </div>
 
         {canary ? (
-          <div className="flex items-center gap-3 border-t border-warning/30 bg-warning/5 px-6 py-4">
-            <FlaskConical size={16} className="text-warning" />
-            <p className="flex-1 text-sm">
-              Canary attiva: <code>{canary.source}</code> · {Math.round(canary.fraction * 100)}%
-              sessioni
-            </p>
-            <button
-              type="button"
-              onClick={stopCanary}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs"
-            >
-              <X size={12} />
-              Annulla
-            </button>
-          </div>
+          <CanaryLiveCard
+            canary={canary}
+            analysis={canaryStatus}
+            onStop={stopCanary}
+            onPromote={() => promote(canary.source, "full")}
+            busy={Boolean(busy)}
+          />
         ) : null}
 
         {overrideKeys.length ? (
@@ -293,7 +315,10 @@ export function ImproveView({ runtime }: { runtime: RuntimeStatus }) {
                     <button
                       type="button"
                       onClick={() => promote(item.name, "full")}
-                      disabled={Boolean(busy)}
+                      disabled={
+                        Boolean(busy) ||
+                        (canary?.source === item.name && canaryStatus?.status !== "passed")
+                      }
                       className="flex items-center gap-1 rounded-lg border border-success/40 px-2.5 py-1 text-xs text-success"
                     >
                       <Rocket size={12} />
@@ -340,6 +365,103 @@ export function ImproveView({ runtime }: { runtime: RuntimeStatus }) {
         </div>
       ) : null}
     </section>
+  );
+}
+
+function CanaryLiveCard({
+  canary,
+  analysis,
+  onStop,
+  onPromote,
+  busy,
+}: {
+  canary: CanaryConfig;
+  analysis: CanaryAnalysis | null;
+  onStop: () => void;
+  onPromote: () => void;
+  busy: boolean;
+}) {
+  const status = analysis?.status ?? "collecting";
+  const statusStyle =
+    status === "passed"
+      ? "text-success"
+      : status === "failed"
+        ? "text-danger"
+        : "text-warning";
+  const statusLabel =
+    status === "passed" ? "gate live passato" : status === "failed" ? "gate live fallito" : "raccolta";
+  return (
+    <div className="space-y-3 border-t border-warning/30 bg-warning/5 px-6 py-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <FlaskConical size={16} className="text-warning" />
+        <p className="flex-1 text-sm">
+          Canary: <code>{canary.source}</code> · {Math.round(canary.fraction * 100)}% sessioni
+        </p>
+        <span className={`text-xs font-medium ${statusStyle}`}>{statusLabel}</span>
+        {status === "passed" ? (
+          <button
+            type="button"
+            onClick={onPromote}
+            disabled={busy}
+            className="flex items-center gap-1 rounded-lg border border-success/40 px-2.5 py-1 text-xs text-success disabled:opacity-50"
+          >
+            <Rocket size={12} />
+            Promuovi 100%
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onStop}
+          disabled={busy}
+          className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs disabled:opacity-50"
+        >
+          <X size={12} />
+          Annulla
+        </button>
+      </div>
+      {analysis ? (
+        <>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <CanaryMetric label="Baseline live" value={analysis.baseline} />
+            <CanaryMetric label="Canary live" value={analysis.canary} />
+          </div>
+          <p className="text-xs text-muted">
+            Δ success {analysis.success_delta.toFixed(3)} · Δ grader{" "}
+            {analysis.grader_delta.toFixed(3)} · token ratio {analysis.token_ratio.toFixed(2)} ·
+            latency ratio {analysis.latency_ratio.toFixed(2)}
+          </p>
+          {analysis.reasons.length ? (
+            <ul className="list-disc pl-5 text-xs text-muted">
+              {analysis.reasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function CanaryMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: CanaryAnalysis["baseline"];
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-surface/60 p-3 text-xs">
+      <p className="font-medium text-foreground">{label}</p>
+      <p className="mt-1 text-muted">
+        {value.total_runs} run · success {(value.success_rate * 100).toFixed(0)}% · failure{" "}
+        {(value.failure_rate * 100).toFixed(0)}%
+      </p>
+      <p className="text-muted">
+        grader {value.grader_avg_score.toFixed(3)} · {value.avg_tokens} token ·{" "}
+        {(value.avg_latency_ms / 1000).toFixed(1)}s
+      </p>
+    </div>
   );
 }
 

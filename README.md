@@ -71,8 +71,9 @@ Vista **Miglioramenti** implementa ciclo completo:
 3. confronta baseline e candidato su `evals/cases.json`;
 4. separa check output, completion protocollo e feedback grader;
 5. blocca regressioni, aumento eccessivo di token/latenza e reward hacking;
-6. abilita canary oppure promotion versionata;
-7. consente rollback a config precedente.
+6. attribuisce run baseline/canary e applica un gate live;
+7. abilita promotion versionata;
+8. consente rollback a config precedente.
 
 Rubric e soglia restano congelate. Evaluation usa chiamate modello reali solo dopo azione
 esplicita. Dettagli: [`docs/SELF_IMPROVEMENT.md`](docs/SELF_IMPROVEMENT.md).

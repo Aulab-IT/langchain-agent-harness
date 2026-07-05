@@ -23,8 +23,10 @@ from agent_harness.audit import AuditMiddleware, EventCallback
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
 from agent_harness.improve import (
     OVERRIDE_WHITELIST,
+    RuntimeOverrideSelection,
     load_overrides,
-    select_runtime_overrides,
+    overrides_fingerprint,
+    resolve_runtime_overrides,
 )
 from agent_harness.middleware import build_model_router
 from agent_harness.prompts import SYSTEM_PROMPT
@@ -38,6 +40,10 @@ class Harness:
     settings: Settings
     tools: list[BaseTool]
     grader: RubricGrader | None = None
+    config_arm: str = "baseline"
+    config_fingerprint: str = ""
+    baseline_fingerprint: str = ""
+    config_source: str | None = None
 
 
 def build_workspace_permissions() -> list[FilesystemPermission]:
@@ -114,6 +120,7 @@ async def build_harness(
     event_callback: EventCallback | None = None,
     run_id: str | None = None,
     harness_overrides: dict[str, Any] | None = None,
+    config_arm: str | None = None,
 ) -> AsyncIterator[Harness]:
     """Costruisce graph e risorse persistenti, chiudendole in modo deterministico."""
     settings = settings or Settings()
@@ -128,15 +135,33 @@ async def build_harness(
     # Override applicati dal loop hill-climbing (propose-only + review umana), fuori dal codice.
     if harness_overrides is None:
         active_overrides = load_overrides(settings.state_dir / "harness_overrides.toml")
-        overrides = select_runtime_overrides(
+        selection = resolve_runtime_overrides(
             active_overrides,
             settings.state_dir / "canary.json",
             session_id=session_id,
         )
     else:
-        overrides = {
+        explicit_overrides = {
             key: value for key, value in harness_overrides.items() if key in OVERRIDE_WHITELIST
         }
+        fingerprint = overrides_fingerprint(explicit_overrides)
+        selection = RuntimeOverrideSelection(
+            values=explicit_overrides,
+            arm=config_arm or "explicit",
+            fingerprint=fingerprint,
+            baseline_fingerprint=fingerprint,
+        )
+    overrides = selection.values
+    if event_callback is not None:
+        event_callback(
+            {
+                "type": "config.selected",
+                "arm": selection.arm,
+                "fingerprint": selection.fingerprint,
+                "baseline_fingerprint": selection.baseline_fingerprint,
+                "source": selection.canary_source,
+            }
+        )
     system_prompt = SYSTEM_PROMPT
     addendum = str(overrides.get("system_prompt_addendum", "")).strip()
     if addendum:
@@ -260,4 +285,13 @@ async def build_harness(
             checkpointer=checkpointer,
             name="educational-harness",
         )
-        yield Harness(graph=graph, settings=settings, tools=tools, grader=grader)
+        yield Harness(
+            graph=graph,
+            settings=settings,
+            tools=tools,
+            grader=grader,
+            config_arm=selection.arm,
+            config_fingerprint=selection.fingerprint,
+            baseline_fingerprint=selection.baseline_fingerprint,
+            config_source=selection.canary_source,
+        )

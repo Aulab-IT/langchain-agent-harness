@@ -79,6 +79,15 @@ class Report:
         }
 
 
+@dataclass(frozen=True)
+class RuntimeOverrideSelection:
+    values: dict[str, Any]
+    arm: str
+    fingerprint: str
+    baseline_fingerprint: str
+    canary_source: str | None = None
+
+
 class Proposal(BaseModel):
     """Proposta di miglioramento della config dell'harness.
 
@@ -296,22 +305,51 @@ def select_runtime_overrides(
     session_id: str,
 ) -> dict[str, Any]:
     """Instrada deterministicamente una quota di sessioni sulla configurazione canary."""
+    return resolve_runtime_overrides(active, canary_path, session_id=session_id).values
+
+
+def resolve_runtime_overrides(
+    active: dict[str, Any],
+    canary_path: Path,
+    *,
+    session_id: str,
+) -> RuntimeOverrideSelection:
+    """Restituisce config e attribution stabile per telemetria baseline/canary."""
+    baseline_fingerprint = overrides_fingerprint(active)
+    baseline = RuntimeOverrideSelection(
+        values=active,
+        arm="baseline",
+        fingerprint=baseline_fingerprint,
+        baseline_fingerprint=baseline_fingerprint,
+    )
     if not canary_path.is_file():
-        return active
+        return baseline
     try:
         canary = json.loads(canary_path.read_text(encoding="utf-8"))
         fraction = float(canary.get("fraction", 0.0))
         candidate = canary.get("overrides", {})
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return active
+        return baseline
     if not isinstance(candidate, dict) or not 0.0 < fraction <= 1.0:
-        return active
+        return baseline
     bucket = int(hashlib.sha256(session_id.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
     if bucket >= fraction:
-        return active
+        return RuntimeOverrideSelection(
+            values=active,
+            arm="baseline",
+            fingerprint=baseline_fingerprint,
+            baseline_fingerprint=baseline_fingerprint,
+            canary_source=str(canary.get("source", "")) or None,
+        )
     merged = dict(active)
     merged.update({key: value for key, value in candidate.items() if key in OVERRIDE_WHITELIST})
-    return merged
+    return RuntimeOverrideSelection(
+        values=merged,
+        arm="canary",
+        fingerprint=overrides_fingerprint(merged),
+        baseline_fingerprint=baseline_fingerprint,
+        canary_source=str(canary.get("source", "")) or None,
+    )
 
 
 async def run_improvement(settings: Any, *, since: int = 100) -> dict[str, Any]:

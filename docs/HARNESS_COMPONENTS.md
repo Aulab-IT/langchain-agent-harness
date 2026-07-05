@@ -51,7 +51,7 @@ Oltre all'anatomia dell'harness, il progetto implementa i quattro loop descritti
 | 1 · Agent loop | modello + tool in ciclo | `create_deep_agent` in `factory.py` |
 | 2 · Verification loop | grader a rubric che valuta l'output e reinietta feedback | `verification.py` (`RubricGrader`) + integrazione nel continuation di `runner.py`; eventi `grader.*` nella trace |
 | 3 · Event-driven loop | cron e webhook avviano run autonomi | `triggers.py` (`TriggerScheduler`, `cron_matches`), tabella `triggers`, endpoint `/api/triggers` in `server.py` |
-| 4 · Hill-climbing loop | gli ultimi run terminali e i trace correlati propongono modifiche, poi un eval gate confronta baseline e candidato | `improve.py`, `evaluation.py`, `promotion.py`; override letti dalla `factory.py` |
+| 4 · Hill-climbing loop | trace propongono modifiche, eval gate confronta baseline/candidato, canary live verifica non inferiorità | `improve.py`, `evaluation.py`, `canary.py`, `promotion.py`; override letti dalla `factory.py` |
 
 Il Loop 2 usa lo stesso budget di continuation Ralph-style invece di un nuovo grafo; l'articolo
 cita anche `RubricMiddleware`/hook `after_agent` come alternativa nativa LangChain. Il Loop 4
