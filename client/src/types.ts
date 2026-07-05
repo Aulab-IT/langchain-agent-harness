@@ -159,23 +159,29 @@ export type ImprovementDetail = {
 
 export type CaseResult = {
   case_id: string;
-  passed: boolean;
-  score: number;
-  completed: boolean;
+  checks_passed: boolean;
+  check_score: number;
+  protocol_completed: boolean;
+  iterations: number;
   tokens: number;
   elapsed_ms: number;
-  failures: string[];
+  check_failures: string[];
+  protocol_failures: string[];
+  grader_feedback: string[];
+  grader_scores: number[];
   error: string;
 };
 
 export type ArmSummary = {
-  pass_rate: number;
-  avg_score: number;
+  check_pass_rate: number;
+  avg_check_score: number;
+  completion_rate: number;
   total_tokens: number;
   elapsed_ms: number;
 };
 
 export type EvaluationArtifact = {
+  schema_version: 2;
   evaluation_id: string;
   proposal_name: string;
   created_at: string;
@@ -189,9 +195,11 @@ export type EvaluationArtifact = {
   gate: {
     passed: boolean;
     quality_delta: number;
+    completion_delta: number;
     token_ratio: number;
     latency_ratio: number;
-    regressions: string[];
+    check_regressions: string[];
+    completion_regressions: string[];
     reasons: string[];
   };
 };

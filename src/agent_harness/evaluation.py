@@ -15,6 +15,8 @@ from pydantic import BaseModel, Field
 
 from agent_harness.improve import overrides_fingerprint
 
+EVALUATION_SCHEMA_VERSION: Literal[2] = 2
+
 
 class EvalCheck(BaseModel):
     type: Literal["answer_contains", "answer_regex", "file_exists", "file_contains"]
@@ -31,18 +33,23 @@ class EvalCase(BaseModel):
 
 class CaseResult(BaseModel):
     case_id: str
-    passed: bool
-    score: float = Field(ge=0, le=1)
-    completed: bool
+    checks_passed: bool
+    check_score: float = Field(ge=0, le=1)
+    protocol_completed: bool
+    iterations: int = Field(ge=0)
     tokens: int = Field(ge=0)
     elapsed_ms: int = Field(ge=0)
-    failures: list[str] = Field(default_factory=list)
+    check_failures: list[str] = Field(default_factory=list)
+    protocol_failures: list[str] = Field(default_factory=list)
+    grader_feedback: list[str] = Field(default_factory=list)
+    grader_scores: list[float] = Field(default_factory=list)
     error: str = ""
 
 
 class ArmSummary(BaseModel):
-    pass_rate: float
-    avg_score: float
+    check_pass_rate: float
+    avg_check_score: float
+    completion_rate: float
     total_tokens: int
     elapsed_ms: int
 
@@ -50,13 +57,16 @@ class ArmSummary(BaseModel):
 class GateResult(BaseModel):
     passed: bool
     quality_delta: float
+    completion_delta: float
     token_ratio: float
     latency_ratio: float
-    regressions: list[str] = Field(default_factory=list)
+    check_regressions: list[str] = Field(default_factory=list)
+    completion_regressions: list[str] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
 
 
 class EvaluationArtifact(BaseModel):
+    schema_version: Literal[2]
     evaluation_id: str
     proposal_name: str
     created_at: str
@@ -147,8 +157,9 @@ def evaluate_checks(case: EvalCase, answer: str, workspace: Path) -> tuple[float
 def summarize(results: list[CaseResult]) -> ArmSummary:
     count = max(len(results), 1)
     return ArmSummary(
-        pass_rate=round(sum(result.passed for result in results) / count, 3),
-        avg_score=round(sum(result.score for result in results) / count, 3),
+        check_pass_rate=round(sum(result.checks_passed for result in results) / count, 3),
+        avg_check_score=round(sum(result.check_score for result in results) / count, 3),
+        completion_rate=round(sum(result.protocol_completed for result in results) / count, 3),
         total_tokens=sum(result.tokens for result in results),
         elapsed_ms=sum(result.elapsed_ms for result in results),
     )
@@ -158,21 +169,34 @@ def evaluate_gate(
     baseline: list[CaseResult],
     candidate: list[CaseResult],
 ) -> tuple[ArmSummary, ArmSummary, GateResult]:
-    """Gate conservativo: nessuna regressione, qualità minima, budget e miglioramento misurato."""
+    """Separa qualità verificata e affidabilità del protocollo di completion."""
     baseline_summary = summarize(baseline)
     candidate_summary = summarize(candidate)
     candidate_by_id = {result.case_id: result for result in candidate}
-    regressions = [
+    check_regressions = [
         result.case_id
         for result in baseline
-        if result.passed
+        if result.checks_passed
         and (
             result.case_id not in candidate_by_id
-            or not candidate_by_id[result.case_id].passed
+            or not candidate_by_id[result.case_id].checks_passed
+        )
+    ]
+    completion_regressions = [
+        result.case_id
+        for result in baseline
+        if result.protocol_completed
+        and (
+            result.case_id not in candidate_by_id
+            or not candidate_by_id[result.case_id].protocol_completed
         )
     ]
     quality_delta = round(
-        candidate_summary.avg_score - baseline_summary.avg_score,
+        candidate_summary.avg_check_score - baseline_summary.avg_check_score,
+        3,
+    )
+    completion_delta = round(
+        candidate_summary.completion_rate - baseline_summary.completion_rate,
         3,
     )
     token_ratio = round(
@@ -185,17 +209,26 @@ def evaluate_gate(
     )
     efficiency_improved = token_ratio <= 0.95 or latency_ratio <= 0.95
     quality_improved = quality_delta >= 0.01
+    completion_improved = completion_delta >= 0.01
     reasons: list[str] = []
-    if regressions:
-        reasons.append(f"Regressioni su: {', '.join(regressions)}")
-    if candidate_summary.pass_rate < 0.8:
-        reasons.append("Pass rate candidato sotto 0.8.")
+    if check_regressions:
+        reasons.append(f"Regressioni check su: {', '.join(check_regressions)}")
+    if completion_regressions:
+        reasons.append(
+            f"Regressioni completion su: {', '.join(completion_regressions)}"
+        )
+    if candidate_summary.check_pass_rate < 0.8:
+        reasons.append("Check pass rate candidato sotto 0.8.")
+    if candidate_summary.completion_rate < 0.8:
+        reasons.append("Completion protocollo candidato sotto 0.8.")
     if token_ratio > 1.2:
         reasons.append("Token candidato oltre budget +20%.")
     if latency_ratio > 1.3:
         reasons.append("Latenza candidata oltre budget +30%.")
-    if not quality_improved and not efficiency_improved:
-        reasons.append("Nessun miglioramento misurabile di qualità o efficienza.")
+    if not quality_improved and not completion_improved and not efficiency_improved:
+        reasons.append(
+            "Nessun miglioramento misurabile di qualità, completion o efficienza."
+        )
     passed = not reasons
     return (
         baseline_summary,
@@ -203,9 +236,11 @@ def evaluate_gate(
         GateResult(
             passed=passed,
             quality_delta=quality_delta,
+            completion_delta=completion_delta,
             token_ratio=token_ratio,
             latency_ratio=latency_ratio,
-            regressions=regressions,
+            check_regressions=check_regressions,
+            completion_regressions=completion_regressions,
             reasons=reasons,
         ),
     )
@@ -239,12 +274,14 @@ async def evaluate_candidate(
             except Exception as exc:
                 results[arm] = CaseResult(
                     case_id=case.id,
-                    passed=False,
-                    score=0.0,
-                    completed=False,
+                    checks_passed=False,
+                    check_score=0.0,
+                    protocol_completed=False,
+                    iterations=0,
                     tokens=0,
                     elapsed_ms=0,
-                    failures=["Esecuzione eval fallita."],
+                    check_failures=["Esecuzione eval fallita."],
+                    protocol_failures=["Protocollo non eseguito."],
                     error=type(exc).__name__,
                 )
         baseline.append(results["baseline"])
@@ -252,6 +289,7 @@ async def evaluate_candidate(
 
     baseline_summary, candidate_summary, gate = evaluate_gate(baseline, candidate)
     artifact = EvaluationArtifact(
+        schema_version=EVALUATION_SCHEMA_VERSION,
         evaluation_id=evaluation_id,
         proposal_name=proposal_name,
         created_at=datetime.now(UTC).isoformat(),
@@ -281,7 +319,11 @@ async def execute_eval_case(
 ) -> CaseResult:
     """Esegue un caso col vero harness in workspace isolato e applica check deterministici."""
     from agent_harness.factory import build_harness
-    from agent_harness.runner import GoalRunner
+    from agent_harness.runner import (
+        GoalRunner,
+        has_successful_verification,
+        requires_environment_verification,
+    )
     from agent_harness.sandbox import session_sandbox_manager
 
     case_root = evaluation_root / arm / case.id
@@ -302,20 +344,34 @@ async def execute_eval_case(
 
     session_id = str(uuid.uuid4())
     started = time.monotonic()
+    grader_events: list[dict[str, Any]] = []
 
     async def approve(_: dict[str, Any]) -> bool:
         return True
 
+    def capture_event(event: dict[str, Any]) -> None:
+        if event.get("type") == "grader.completed":
+            grader_events.append(event)
+
     try:
+        eval_settings = settings.model_copy(
+            update={
+                "harness_max_continuations": settings.harness_eval_max_continuations,
+            }
+        )
         async with build_harness(
-            settings,
+            eval_settings,
             session_id=session_id,
             workspace_dir=workspace,
             backend_root=case_root,
             run_id=f"eval-{session_id}",
             harness_overrides=overrides,
         ) as harness:
-            result = await GoalRunner(harness, approval_callback=approve).run(
+            result = await GoalRunner(
+                harness,
+                approval_callback=approve,
+                event_callback=capture_event,
+            ).run(
                 case.goal,
                 thread_id=session_id,
             )
@@ -325,17 +381,43 @@ async def execute_eval_case(
             if metadata:
                 tokens += int(metadata.get("input_tokens", 0))
                 tokens += int(metadata.get("output_tokens", 0))
-        score, failures = evaluate_checks(case, result.text, workspace)
+        score, check_failures = evaluate_checks(case, result.text, workspace)
+        protocol_failures: list[str] = []
         if not result.completed:
-            failures.append("Harness non ha completato obiettivo entro budget.")
+            if (
+                requires_environment_verification(case.goal)
+                and not has_successful_verification(result.messages)
+            ):
+                protocol_failures.append(
+                    "Manca verifica ambiente riuscita tramite docker_exec."
+                )
+            elif grader_events:
+                protocol_failures.append("Grader non superato entro budget evaluation.")
+            else:
+                protocol_failures.append(
+                    "Harness non ha completato obiettivo entro budget evaluation."
+                )
+        grader_feedback = [
+            str(event.get("feedback", "")).strip()
+            for event in grader_events
+            if str(event.get("feedback", "")).strip()
+        ]
+        grader_scores = [
+            float(event.get("score", 0.0) or 0.0)
+            for event in grader_events
+        ]
         return CaseResult(
             case_id=case.id,
-            passed=result.completed and not failures,
-            score=score,
-            completed=result.completed,
+            checks_passed=not check_failures,
+            check_score=score,
+            protocol_completed=result.completed,
+            iterations=result.iterations,
             tokens=tokens,
             elapsed_ms=round((time.monotonic() - started) * 1_000),
-            failures=failures,
+            check_failures=check_failures,
+            protocol_failures=protocol_failures,
+            grader_feedback=grader_feedback,
+            grader_scores=grader_scores,
         )
     finally:
         with suppress(Exception):

@@ -22,6 +22,7 @@ import {
 } from "../../api";
 import { relativeLabel } from "../../lib/format";
 import type {
+  CaseResult,
   ConfigVersion,
   EvaluationArtifact,
   ImprovementSummary,
@@ -364,6 +365,7 @@ function StatusLabel({ status }: { status: ImprovementSummary["evaluation_status
 
 function EvaluationCard({ evaluation }: { evaluation: EvaluationArtifact }) {
   const { baseline_summary: baseline, candidate_summary: candidate, gate } = evaluation;
+  const candidateById = new Map(evaluation.candidate.map((item) => [item.case_id, item]));
   return (
     <div className="rounded-xl border border-border bg-surface p-6">
       <div className="flex items-center gap-2">
@@ -375,8 +377,9 @@ function EvaluationCard({ evaluation }: { evaluation: EvaluationArtifact }) {
         <MetricColumn label="Candidato" value={candidate} />
       </div>
       <p className="mt-3 text-xs text-muted">
-        Δ qualità {gate.quality_delta.toFixed(3)} · token ratio {gate.token_ratio.toFixed(2)} ·
-        latency ratio {gate.latency_ratio.toFixed(2)}
+        Δ qualità {gate.quality_delta.toFixed(3)} · Δ completion{" "}
+        {gate.completion_delta.toFixed(3)} · token ratio {gate.token_ratio.toFixed(2)} · latency
+        ratio {gate.latency_ratio.toFixed(2)}
       </p>
       {gate.reasons.length ? (
         <ul className="mt-3 list-disc pl-5 text-sm text-danger">
@@ -385,6 +388,23 @@ function EvaluationCard({ evaluation }: { evaluation: EvaluationArtifact }) {
           ))}
         </ul>
       ) : null}
+      <div className="mt-5 space-y-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-2">
+          Dettaglio casi
+        </p>
+        {evaluation.baseline.map((baselineCase) => {
+          const candidateCase = candidateById.get(baselineCase.case_id);
+          return (
+            <div key={baselineCase.case_id} className="rounded-lg border border-border p-3">
+              <p className="mb-2 font-mono text-sm">{baselineCase.case_id}</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <CaseColumn label="Baseline" value={baselineCase} />
+                {candidateCase ? <CaseColumn label="Candidato" value={candidateCase} /> : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -400,11 +420,43 @@ function MetricColumn({
     <div className="rounded-lg border border-border p-3 text-sm">
       <p className="font-medium">{label}</p>
       <p className="mt-1 text-muted">
-        pass {(value.pass_rate * 100).toFixed(0)}% · score {value.avg_score.toFixed(3)}
+        check {(value.check_pass_rate * 100).toFixed(0)}% · completion{" "}
+        {(value.completion_rate * 100).toFixed(0)}%
+      </p>
+      <p className="text-xs text-muted">
+        score check {value.avg_check_score.toFixed(3)}
       </p>
       <p className="text-xs text-muted">
         {value.total_tokens} token · {(value.elapsed_ms / 1000).toFixed(1)}s
       </p>
+    </div>
+  );
+}
+
+function CaseColumn({ label, value }: { label: string; value: CaseResult }) {
+  const feedback = value.grader_feedback[value.grader_feedback.length - 1];
+  return (
+    <div className="rounded-md bg-surface-raised/40 p-3 text-xs">
+      <p className="font-medium text-foreground">{label}</p>
+      <p className="mt-1 text-muted">
+        check {value.checks_passed ? "pass" : "fail"} ({value.check_score.toFixed(3)}) ·
+        completion {value.protocol_completed ? "sì" : "no"} · iterazioni {value.iterations}
+      </p>
+      <p className="text-muted">
+        {value.tokens} token · {(value.elapsed_ms / 1000).toFixed(1)}s
+      </p>
+      {value.check_failures.map((failure) => (
+        <p key={failure} className="mt-1 text-danger">
+          Check: {failure}
+        </p>
+      ))}
+      {value.protocol_failures.map((failure) => (
+        <p key={failure} className="mt-1 text-warning">
+          Protocollo: {failure}
+        </p>
+      ))}
+      {feedback ? <p className="mt-2 text-muted">Grader: {feedback}</p> : null}
+      {value.error ? <p className="mt-1 text-danger">Errore: {value.error}</p> : null}
     </div>
   );
 }

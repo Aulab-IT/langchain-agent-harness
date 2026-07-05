@@ -35,15 +35,24 @@ ottimizza il pass rate consentirebbe reward hacking.
 Baseline e candidato usano workspace e thread separati. L'ordine viene alternato tra casi per
 ridurre order bias. Il gate richiede:
 
-- zero regressioni su casi prima passati;
-- pass rate candidato almeno `0.8`;
+- zero regressioni nei check deterministici;
+- zero regressioni nel protocollo di completion;
+- check pass rate candidato almeno `0.8`;
+- completion rate candidato almeno `0.8`;
 - token non oltre `+20%`;
 - latenza non oltre `+30%`;
-- miglioramento misurabile di qualità, token o latenza.
+- miglioramento misurabile di qualità, completion, token o latenza.
+
+Qualità output e completion sono metriche separate. Un artefatto può superare tutti i check
+ma non chiudere correttamente il loop entro budget: UI mostra entrambi gli esiti e il feedback
+del grader per ogni caso. Le evaluation usano una sola continuation esterna per caso
+(`HARNESS_EVAL_MAX_CONTINUATIONS=1`) così un errore di protocollo non moltiplica inutilmente
+token e latenza.
 
 L'evaluation è esplicita perché esegue due run per caso e consuma API. Risultati completi vivono
 in `state/evaluations/`; il sidecar della proposta lega evaluation e override tramite hash.
 Se baseline o proposta cambiano, la promotion viene rifiutata e serve una nuova evaluation.
+Artefatti con schema precedente vengono ignorati e devono essere rigenerati.
 
 ## Canary, versioni e rollback
 

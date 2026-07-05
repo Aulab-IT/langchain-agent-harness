@@ -31,6 +31,7 @@ def evaluated_proposal(tmp_path: Path, *, passed: bool = True) -> Path:
     )
     candidate = {"harness_max_tool_calls": 20}
     artifact = EvaluationArtifact(
+        schema_version=2,
         evaluation_id="eval-1",
         proposal_name=path.name,
         created_at="2026-01-01T00:00:00+00:00",
@@ -40,20 +41,23 @@ def evaluated_proposal(tmp_path: Path, *, passed: bool = True) -> Path:
         baseline=[],
         candidate=[],
         baseline_summary=ArmSummary(
-            pass_rate=0.5,
-            avg_score=0.5,
+            check_pass_rate=0.5,
+            avg_check_score=0.5,
+            completion_rate=0.5,
             total_tokens=100,
             elapsed_ms=100,
         ),
         candidate_summary=ArmSummary(
-            pass_rate=1.0,
-            avg_score=1.0,
+            check_pass_rate=1.0,
+            avg_check_score=1.0,
+            completion_rate=1.0,
             total_tokens=90,
             elapsed_ms=90,
         ),
         gate=GateResult(
             passed=passed,
             quality_delta=0.5,
+            completion_delta=0.5,
             token_ratio=0.9,
             latency_ratio=0.9,
         ),

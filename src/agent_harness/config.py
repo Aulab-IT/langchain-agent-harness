@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     harness_context_window: int = Field(default=128_000, ge=1_000)
 
     harness_max_continuations: int = Field(default=3, ge=1, le=10)
+    harness_eval_max_continuations: int = Field(default=1, ge=1, le=3)
     harness_max_tool_calls: int = Field(default=40, ge=1, le=200)
     harness_enable_rubric: bool = True
     harness_rubric_threshold: float = Field(default=0.7, ge=0, le=1)
