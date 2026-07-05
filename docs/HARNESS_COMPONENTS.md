@@ -51,10 +51,12 @@ Oltre all'anatomia dell'harness, il progetto implementa i quattro loop descritti
 | 1 · Agent loop | modello + tool in ciclo | `create_deep_agent` in `factory.py` |
 | 2 · Verification loop | grader a rubric che valuta l'output e reinietta feedback | `verification.py` (`RubricGrader`) + integrazione nel continuation di `runner.py`; eventi `grader.*` nella trace |
 | 3 · Event-driven loop | cron e webhook avviano run autonomi | `triggers.py` (`TriggerScheduler`, `cron_matches`), tabella `triggers`, endpoint `/api/triggers` in `server.py` |
-| 4 · Hill-climbing loop | i trace propongono modifiche alla config (propose-only + review) | `improve.py` (`build_report`, `propose`, `apply_overrides`), comando `harness improve`, override letti dalla `factory.py` |
+| 4 · Hill-climbing loop | gli ultimi run terminali e i trace correlati propongono modifiche alla config (propose-only + review) | `improve.py` (`build_report`, `propose`, `apply_overrides`), comando `harness improve`, override letti dalla `factory.py` |
 
 Il Loop 2 usa lo stesso budget di continuation Ralph-style invece di un nuovo grafo; l'articolo
 cita anche `RubricMiddleware`/hook `after_agent` come alternativa nativa LangChain. Il Loop 4
 non modifica mai il codice: scrive proposte in `state/improvements/` e, solo con `--apply` dopo
 revisione, un file whitelisted `state/harness_overrides.toml` che la factory rilegge al run
 successivo (`system_prompt_addendum`, `harness_max_tool_calls`, `harness_rubric_threshold`).
+La finestra usa un numero di run, non un numero di eventi: delta streaming e audit storici
+non falsano più statistiche, error rate o feedback analizzati.

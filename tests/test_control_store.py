@@ -83,3 +83,27 @@ def test_session_root_copies_runtime_context(tmp_path: Path) -> None:
     assert (root / "skills" / "research" / "SKILL.md").is_file()
     assert (root / "memories" / "AGENTS.md").is_file()
     store.close()
+
+
+def test_improvement_window_is_bounded_by_terminal_runs(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    session = store.create_session()
+    run_ids = []
+    for index in range(3):
+        run = store.create_run(session["id"])
+        run_ids.append(run["id"])
+        store.add_event(run["id"], session["id"], "assistant.delta", {"text": "x"})
+        store.add_event(run["id"], session["id"], "grader.completed", {"score": index})
+        store.update_run(run["id"], status="completed", usage={"total_tokens": index + 1})
+
+    runs = store.recent_terminal_runs(limit=2)
+    events = store.events_for_runs(
+        [run["id"] for run in runs],
+        event_types=("grader.completed",),
+    )
+
+    assert [run["id"] for run in runs] == run_ids[-2:]
+    assert [event["run_id"] for event in events] == run_ids[-2:]
+    assert {event["type"] for event in events} == {"grader.completed"}
+    assert [run["usage"]["total_tokens"] for run in runs] == [2, 3]
+    store.close()

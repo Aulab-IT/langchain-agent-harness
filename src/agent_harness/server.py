@@ -24,6 +24,7 @@ from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, 
 from agent_harness.control_store import ControlStore
 from agent_harness.factory import build_harness, build_strong_model
 from agent_harness.improve import (
+    IMPROVEMENT_EVENT_TYPES,
     Proposal,
     apply_override_values,
     apply_overrides,
@@ -117,7 +118,7 @@ class TriggerToggle(BaseModel):
 
 
 class ImproveRequest(BaseModel):
-    since: Annotated[int, Field(default=1_000, ge=1, le=10_000)]
+    since: Annotated[int, Field(default=100, ge=1, le=1_000)]
     apply: bool = False
 
 
@@ -588,6 +589,7 @@ class RunManager:
                 workspace_dir=store.workspace_dir(session_id),
                 backend_root=root,
                 event_callback=tool_event,
+                run_id=run_id,
             ) as harness:
                 manifest = _attachment_manifest(session_id)
                 goal = content + manifest if len(content) + len(manifest) <= 20_000 else content
@@ -1100,12 +1102,12 @@ async def clear_overrides() -> None:
 async def run_improve(payload: ImproveRequest) -> dict[str, Any]:
     if not settings.openai_api_key:
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY non configurata.")
-    events = store.recent_events(limit=payload.since)
-    audit_path = settings.state_dir / "audit.jsonl"
-    audit_lines = (
-        audit_path.read_text(encoding="utf-8").splitlines() if audit_path.exists() else []
+    runs = store.recent_terminal_runs(limit=payload.since)
+    events = store.events_for_runs(
+        [str(run["id"]) for run in runs],
+        event_types=IMPROVEMENT_EVENT_TYPES,
     )
-    report = build_report(events, audit_lines)
+    report = build_report(runs, events)
     report_text = render_report(report)
     judge = build_strong_model(settings).with_structured_output(Proposal)
     proposal = await propose(report_text, judge)

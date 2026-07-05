@@ -298,6 +298,10 @@ class ControlStore:
             row = self._connection.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
         if row is None:
             raise KeyError(run_id)
+        return self._run(row)
+
+    @staticmethod
+    def _run(row: sqlite3.Row) -> dict[str, Any]:
         result = dict(row)
         result["usage"] = {
             "input_tokens": 0,
@@ -309,6 +313,20 @@ class ControlStore:
             **json.loads(result.pop("usage_json") or "{}"),
         }
         return result
+
+    def recent_terminal_runs(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        """Ultimi run conclusi, usati come finestra stabile dal loop di miglioramento."""
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT * FROM runs
+                WHERE status IN ('completed', 'failed', 'cancelled')
+                ORDER BY started_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._run(row) for row in reversed(rows)]
 
     def latest_run(self, session_id: str) -> dict[str, Any] | None:
         with self._lock:
@@ -423,6 +441,32 @@ class ControlStore:
             ).fetchall()
         result = []
         for row in reversed(rows):
+            item = dict(row)
+            item["payload"] = json.loads(item.pop("payload_json"))
+            result.append(item)
+        return result
+
+    def events_for_runs(
+        self,
+        run_ids: list[str],
+        *,
+        event_types: tuple[str, ...] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Eventi correlati a run espliciti; evita finestre distorte dagli eventi streaming."""
+        if not run_ids:
+            return []
+        run_placeholders = ",".join("?" for _ in run_ids)
+        parameters: list[Any] = list(run_ids)
+        query = f"SELECT * FROM events WHERE run_id IN ({run_placeholders})"
+        if event_types:
+            type_placeholders = ",".join("?" for _ in event_types)
+            query += f" AND type IN ({type_placeholders})"
+            parameters.extend(event_types)
+        query += " ORDER BY id"
+        with self._lock:
+            rows = self._connection.execute(query, parameters).fetchall()
+        result = []
+        for row in rows:
             item = dict(row)
             item["payload"] = json.loads(item.pop("payload_json"))
             result.append(item)

@@ -188,6 +188,8 @@ class GoalRunner:
                 "type": "grader.completed",
                 "passed": grade.passed,
                 "score": grade.score,
+                "feedback": grade.feedback,
+                "criteria_scores": grade.criteria_scores,
             }
         )
         return grade

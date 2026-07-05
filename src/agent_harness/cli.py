@@ -70,7 +70,7 @@ def chat(
 
 @app.command()
 def improve(
-    since: int = typer.Option(1_000, help="Numero di eventi recenti da analizzare."),
+    since: int = typer.Option(100, help="Numero di run terminali recenti da analizzare."),
     apply: bool = typer.Option(
         False, help="Applica gli override whitelisted dopo revisione umana."
     ),

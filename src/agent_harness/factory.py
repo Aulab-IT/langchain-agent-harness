@@ -41,7 +41,12 @@ def build_workspace_permissions() -> list[FilesystemPermission]:
     return [
         FilesystemPermission(
             operations=["read", "write"],
-            paths=[SANDBOX_WORKSPACE_MOUNT, f"{SANDBOX_WORKSPACE_MOUNT}/**", "/memories", "/memories/**"],
+            paths=[
+                SANDBOX_WORKSPACE_MOUNT,
+                f"{SANDBOX_WORKSPACE_MOUNT}/**",
+                "/memories",
+                "/memories/**",
+            ],
             mode="allow",
         ),
         FilesystemPermission(
@@ -103,6 +108,7 @@ async def build_harness(
     workspace_dir: Path | None = None,
     backend_root: Path | None = None,
     event_callback: EventCallback | None = None,
+    run_id: str | None = None,
 ) -> AsyncIterator[Harness]:
     """Costruisce graph e risorse persistenti, chiudendole in modo deterministico."""
     settings = settings or Settings()
@@ -193,7 +199,12 @@ async def build_harness(
             "permissions": [
                 FilesystemPermission(
                     operations=["read"],
-                    paths=[SANDBOX_WORKSPACE_MOUNT, f"{SANDBOX_WORKSPACE_MOUNT}/**", "/memories", "/memories/**"],
+                    paths=[
+                        SANDBOX_WORKSPACE_MOUNT,
+                        f"{SANDBOX_WORKSPACE_MOUNT}/**",
+                        "/memories",
+                        "/memories/**",
+                    ],
                     mode="allow",
                 ),
                 FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
@@ -212,7 +223,12 @@ async def build_harness(
             )
         middleware: list[AgentMiddleware[Any, Any, Any]] = [
             build_model_router(default_model, strong_model),
-            AuditMiddleware(settings.state_dir / "audit.jsonl", event_callback),
+            AuditMiddleware(
+                settings.state_dir / "audit.jsonl",
+                event_callback,
+                run_id=run_id,
+                session_id=session_id,
+            ),
             ToolCallLimitMiddleware(
                 run_limit=max_tool_calls,
                 exit_behavior="end",

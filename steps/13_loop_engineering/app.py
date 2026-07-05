@@ -28,8 +28,30 @@ async def main() -> None:
 
     # Loop 4 — dai trace a una proposta di miglioramento (propose-only).
     report = build_report(
-        events=[{"type": "run.completed", "payload": {}}],
-        audit_lines=['{"tool": "browser_read", "status": "error", "elapsed_ms": 50}'],
+        runs=[
+            {
+                "id": "demo-run",
+                "status": "completed",
+                "usage": {"total_tokens": 500},
+            }
+        ],
+        events=[
+            {
+                "run_id": "demo-run",
+                "type": "run.completed",
+                "payload": {"completed": True},
+            },
+            {
+                "run_id": "demo-run",
+                "type": "tool.started",
+                "payload": {"tool": "browser_read", "args": '{"url":"https://example.com"}'},
+            },
+            {
+                "run_id": "demo-run",
+                "type": "tool.failed",
+                "payload": {"tool": "browser_read", "elapsed_ms": 50},
+            },
+        ],
     )
     proposal = await propose(
         render_report(report),

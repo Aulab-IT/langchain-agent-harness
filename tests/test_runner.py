@@ -130,6 +130,9 @@ async def test_runner_accepts_when_grader_passes() -> None:
     assert result.iterations == 1
     assert len(grader.calls) == 1
     assert {event["type"] for event in events} == {"grader.started", "grader.completed"}
+    completed = next(event for event in events if event["type"] == "grader.completed")
+    assert completed["feedback"] == ""
+    assert completed["criteria_scores"] == {}
 
 
 @pytest.mark.asyncio

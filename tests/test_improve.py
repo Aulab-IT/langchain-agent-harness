@@ -26,28 +26,75 @@ class FakeJudge:
         return self.proposal
 
 
-def test_build_report_aggregates_events_and_audit() -> None:
+def test_build_report_aggregates_correlated_run_events() -> None:
+    runs = [
+        {"id": "ok", "status": "completed", "usage": {"total_tokens": 100}},
+        {"id": "failed", "status": "failed", "usage": {"total_tokens": 200}},
+        {"id": "incomplete", "status": "completed", "usage": {"total_tokens": 50}},
+        {"id": "cancelled", "status": "cancelled", "usage": {"total_tokens": 0}},
+    ]
     events = [
-        {"type": "run.completed", "payload": {}},
-        {"type": "run.failed", "payload": {}},
-        {"type": "grader.completed", "payload": {"passed": True, "score": 0.9}},
-        {"type": "grader.completed", "payload": {"passed": False, "score": 0.3}},
-    ]
-    audit = [
-        '{"tool": "docker_exec", "status": "error", "elapsed_ms": 100}',
-        '{"tool": "web_search", "status": "ok", "elapsed_ms": 15000}',
-        "not-json",
+        {"run_id": "ok", "type": "run.completed", "payload": {"completed": True}},
+        {
+            "run_id": "incomplete",
+            "type": "run.completed",
+            "payload": {"completed": False},
+        },
+        {
+            "run_id": "ok",
+            "type": "grader.completed",
+            "payload": {
+                "passed": True,
+                "score": 0.9,
+                "feedback": "Buono.",
+                "criteria_scores": {"completezza": 1.0, "verifica": 0.8},
+            },
+        },
+        {
+            "run_id": "incomplete",
+            "type": "grader.completed",
+            "payload": {
+                "passed": False,
+                "score": 0.3,
+                "feedback": "Manca verifica.",
+                "criteria_scores": {"completezza": 0.4, "verifica": 0.2},
+            },
+        },
+        {
+            "run_id": "ok",
+            "type": "tool.started",
+            "payload": {"tool": "web_search", "args": '{"query":"x"}'},
+        },
+        {
+            "run_id": "ok",
+            "type": "tool.started",
+            "payload": {"tool": "web_search", "args": '{"query":"x"}'},
+        },
+        {
+            "run_id": "ok",
+            "type": "tool.failed",
+            "payload": {"tool": "web_search", "elapsed_ms": 15_000},
+        },
     ]
 
-    report = build_report(events, audit)
+    report = build_report(runs, events)
 
-    assert report.total_runs == 2
+    assert report.total_runs == 4
+    assert report.successful_runs == 1
     assert report.failed_runs == 1
+    assert report.incomplete_runs == 1
+    assert report.cancelled_runs == 1
+    assert report.total_tokens == 350
     assert report.grader_graded == 2
     assert report.grader_pass_rate == 0.5
     assert report.grader_avg_score == 0.6
-    assert report.tool_errors["docker_exec"] == 1
+    assert report.criteria_avg_scores == {"completezza": 0.7, "verifica": 0.5}
+    assert report.grader_feedback == ["Buono.", "Manca verifica."]
+    assert report.tool_calls["web_search"] == 2
+    assert report.tool_errors["web_search"] == 1
+    assert report.tool_error_rates["web_search"] == 0.5
     assert report.slow_tools["web_search"] == 1
+    assert report.repeated_tool_calls["web_search"] == 1
 
 
 @pytest.mark.asyncio
@@ -58,11 +105,13 @@ async def test_propose_exposes_only_whitelisted_overrides() -> None:
         harness_max_tool_calls=60,
         harness_rubric_threshold=None,
     )
+    judge = FakeJudge(proposal)
 
-    result = await propose("REPORT", FakeJudge(proposal))
+    result = await propose("REPORT", judge)
 
     assert set(result.overrides) <= OVERRIDE_WHITELIST
     assert result.overrides == {"harness_max_tool_calls": 60}
+    assert "dato non attendibile" in str(judge.prompts[0])
 
 
 def test_write_proposal_does_not_touch_sources(tmp_path: Path) -> None:

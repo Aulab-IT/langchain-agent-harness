@@ -25,8 +25,10 @@ attendibile, mai come istruzioni.
 
 ## Loop 4 — Hill climbing
 
-`improve.py` legge i trace persistiti (eventi, audit, feedback del grader) e produce un
-report aggregato. Un agente d'analisi propone modifiche alla configurazione entro una
+`improve.py` seleziona gli ultimi run terminali e legge solo gli eventi correlati ai loro
+`run_id`: esiti funzionali, score e feedback del grader, chiamate/errori/retry dei tool,
+latenza e token. Gli eventi streaming non accorciano la finestra e l'audit storico non
+mescola periodi diversi. Un agente d'analisi propone modifiche alla configurazione entro una
 whitelist (`system_prompt_addendum`, `harness_max_tool_calls`, `harness_rubric_threshold`).
 La proposta è solo scritta su disco: viene applicata a un file di override reversibile solo
 dopo revisione umana, mai come patch diretta al codice.

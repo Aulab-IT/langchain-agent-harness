@@ -61,7 +61,7 @@ export function ImproveView({ runtime }: { runtime: RuntimeStatus }) {
     setError("");
     setContent("");
     try {
-      const value = await runImprove(1000, apply);
+      const value = await runImprove(100, apply);
       setResult(value);
       if (apply) setOverrides((current) => ({ ...current, ...value.applied }));
       await refresh();
@@ -100,8 +100,9 @@ export function ImproveView({ runtime }: { runtime: RuntimeStatus }) {
 
         <div className="space-y-3 p-6">
           <p className="text-sm text-muted">
-            L'agente d'analisi legge gli ultimi eventi e l'audit, poi propone override sicuri
-            (<code className="text-foreground">system_prompt_addendum</code>,{" "}
+            L'agente d'analisi legge gli ultimi 100 run conclusi con grader e tool trace correlati,
+            poi propone override sicuri (
+            <code className="text-foreground">system_prompt_addendum</code>,{" "}
             <code className="text-foreground">harness_max_tool_calls</code>,{" "}
             <code className="text-foreground">harness_rubric_threshold</code>). La generazione usa il
             modello forte.

@@ -33,9 +33,18 @@ class AuditMiddleware(AgentMiddleware):
     """Traccia i tool. Il file JSONL resta minimale; gli eventi per la trace UI
     includono argomenti e output (troncati) per un'ispezione tipo LangSmith."""
 
-    def __init__(self, path: Path, event_callback: EventCallback | None = None) -> None:
+    def __init__(
+        self,
+        path: Path,
+        event_callback: EventCallback | None = None,
+        *,
+        run_id: str | None = None,
+        session_id: str | None = None,
+    ) -> None:
         self.path = path
         self.event_callback = event_callback
+        self.run_id = run_id
+        self.session_id = session_id
 
     def _emit(
         self,
@@ -73,6 +82,10 @@ class AuditMiddleware(AgentMiddleware):
             "status": status,
             "elapsed_ms": elapsed_ms,
         }
+        if self.run_id:
+            event["run_id"] = self.run_id
+        if self.session_id:
+            event["session_id"] = self.session_id
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with _LOCK, self.path.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(event, ensure_ascii=False) + "\n")
