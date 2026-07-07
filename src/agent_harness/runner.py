@@ -113,8 +113,16 @@ class GoalRunner:
                 "type": "reject",
                 "message": "Operazione rifiutata dall'utente.",
             }
+            # HumanInTheLoopMiddleware sospende con UN interrupt per turno, ma i tool
+            # sensibili chiamati in parallelo nello stesso turno finiscono tutti in
+            # `action_requests`: serve una decisione per ciascuno, altrimenti
+            # after_model solleva "Number of human decisions does not match number
+            # of hanging tool calls". La UI espone una sola conferma per il turno,
+            # quindi applichiamo la stessa decisione a ogni tool call in sospeso.
+            pending = payload.get("action_requests") if isinstance(payload, dict) else None
+            decisions_count = len(pending) if isinstance(pending, list) and pending else 1
             result = await self._invoke_graph(
-                Command(resume={"decisions": [decision]}),
+                Command(resume={"decisions": [decision] * decisions_count}),
                 config,
             )
         return result

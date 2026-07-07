@@ -1,7 +1,8 @@
-.PHONY: install test lint format notebooks notebooks-live sandbox-image run smoke
+.PHONY: install test lint format notebooks notebooks-live sandbox-image run chat smoke
 
 install:
 	uv sync --extra dev
+	cd client && npm install
 
 test:
 	uv run pytest
@@ -23,6 +24,12 @@ sandbox-image:
 	docker build -t langchain-harness-sandbox:latest -f docker/sandbox.Dockerfile .
 
 run:
+	@trap 'kill 0' INT TERM EXIT; \
+	uv run harness-api & \
+	cd client && npm run dev & \
+	wait
+
+chat:
 	uv run harness chat
 
 smoke:

@@ -41,6 +41,12 @@ scrivere il marcatore `[GOAL_COMPLETE]` solo dopo una verifica; altrimenti ricev
 l'obiettivo e lo stato del lavoro. Questo conserva l'idea del Ralph loop senza creare un
 processo incontrollabile.
 
+L'interrupt di approvazione è unico per turno ma può contenere più tool call sensibili
+chiamati in parallelo (`action_requests`): il runner deve rispondere con altrettante
+decisioni, non con una sola, altrimenti `HumanInTheLoopMiddleware` va in errore e il run
+fallisce. `GoalRunner._invoke_with_approval` replica la decisione dell'utente su tutte le
+`action_requests` in sospeso, così la UI resta a singola conferma per turno.
+
 ## Loop engineering (quattro loop impilati)
 
 Oltre all'anatomia dell'harness, il progetto implementa i quattro loop descritti in

@@ -13,6 +13,14 @@ decisione `approve` o `reject`.
 
 La scelta predefinita deve essere il rifiuto. Non approvare comandi senza leggerli.
 
+**Tool sensibili in parallelo**: se il modello chiama più tool sensibili nello stesso
+turno (es. due `docker_exec` insieme), LangGraph crea un solo interrupt ma con un
+`action_requests` per ciascuno. `Command(resume={"decisions": [...]})` deve contenere
+tante decisioni quante sono le `action_requests`, altrimenti `HumanInTheLoopMiddleware`
+solleva `ValueError` e il run va in crash. Con una sola conferma in UI per turno, la
+soluzione è ripetere la stessa decisione una volta per ogni tool call in sospeso
+(vedi `GoalRunner._invoke_with_approval` in `runner.py`).
+
 ## Limite delle azioni
 
 `ToolCallLimitMiddleware` impedisce loop incontrollati e costi illimitati. Anche il

@@ -166,6 +166,42 @@ async def test_runner_requires_approval_callback() -> None:
 
 
 @pytest.mark.asyncio
+async def test_runner_matches_decisions_to_parallel_hanging_tool_calls() -> None:
+    """Regressione: due tool sensibili chiamati nello stesso turno devono ricevere
+    una decisione ciascuno, altrimenti HumanInTheLoopMiddleware.after_model solleva
+    ValueError ("Number of human decisions does not match...") e il run va in crash."""
+    graph = FakeGraph(
+        [
+            {
+                "__interrupt__": [
+                    Interrupt(
+                        value={
+                            "action_requests": [
+                                {"name": "docker_exec", "args": {"command": "npm install"}},
+                                {"name": "docker_exec", "args": {"command": "apt-get install -y chromium"}},
+                            ]
+                        },
+                        id="1",
+                    )
+                ]
+            },
+            {"messages": [AIMessage(content="Fatto. [GOAL_COMPLETE]")]},
+        ]
+    )
+
+    async def approve(_: dict[str, Any]) -> bool:
+        return True
+
+    result = await GoalRunner(fake_harness(graph), approval_callback=approve).run(
+        "Esegui due comandi sensibili", thread_id="t-multi"
+    )
+
+    assert result.completed is True
+    resumed_command = graph.inputs[1]
+    assert resumed_command.resume["decisions"] == [{"type": "approve"}, {"type": "approve"}]
+
+
+@pytest.mark.asyncio
 async def test_empty_goal_is_rejected() -> None:
     graph = FakeGraph([])
     with pytest.raises(ValueError):
