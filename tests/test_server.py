@@ -10,6 +10,7 @@ import agent_harness.server as server
 from agent_harness.config import Settings
 from agent_harness.control_store import ControlStore
 from agent_harness.improve import Proposal, write_proposal
+from agent_harness.usage import context_categories
 
 
 @pytest.fixture
@@ -125,7 +126,7 @@ def test_context_breakdown_identifies_workspace_file_output() -> None:
         ToolMessage(content="contenuto file", tool_call_id="call-1", name="read_file"),
     ]
 
-    categories = {item["name"]: item for item in server._context_categories(messages)}
+    categories = {item["name"]: item for item in context_categories(messages)}
 
     assert categories["File letti"]["tokens"] > 0
 

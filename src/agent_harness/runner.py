@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, cast
@@ -10,6 +11,7 @@ from langgraph.types import Command
 
 from agent_harness.factory import Harness
 from agent_harness.prompts import CONTINUATION_PROMPT, VERIFICATION_FEEDBACK_PROMPT
+from agent_harness.usage import compute_usage
 from agent_harness.verification import GradeResult
 
 ApprovalCallback = Callable[[dict[str, Any]], Awaitable[bool]]
@@ -68,7 +70,9 @@ class GoalRunner:
         self.harness = harness
         self.approval_callback = approval_callback
         self.event_callback = event_callback
+        self.last_messages: list[Any] = []
         self._last_snapshot: tuple[int, int] | None = None
+        self._started = time.monotonic()
 
     async def _invoke_graph(
         self,
@@ -86,7 +90,8 @@ class GoalRunner:
         ):
             if mode == "values" and isinstance(chunk, dict):
                 latest = chunk
-                self._emit_usage_snapshot(chunk.get("messages", []))
+                self.last_messages = chunk.get("messages", [])
+                self._emit_usage_snapshot(self.last_messages)
             elif mode == "messages" and isinstance(chunk, tuple) and chunk:
                 message = chunk[0]
                 if isinstance(message, AIMessageChunk):
@@ -207,26 +212,14 @@ class GoalRunner:
             self.event_callback(event)
 
     def _emit_usage_snapshot(self, messages: list[Any]) -> None:
-        """Emette il conteggio token cumulato (esatto dal provider) a ogni turno del modello."""
+        """Emette lo stato del contesto (esatto dal provider) a ogni turno del modello."""
         if self.event_callback is None:
             return
-        input_tokens = 0
-        output_tokens = 0
-        for message in messages:
-            if isinstance(message, AIMessage) and message.usage_metadata:
-                input_tokens += int(message.usage_metadata.get("input_tokens", 0))
-                output_tokens += int(message.usage_metadata.get("output_tokens", 0))
-        if input_tokens == 0 and output_tokens == 0:
+        usage = compute_usage(messages, time.monotonic() - self._started)
+        if usage["input_tokens"] == 0 and usage["output_tokens"] == 0:
             return
-        snapshot = (input_tokens, output_tokens)
+        snapshot = (usage["input_tokens"], usage["output_tokens"])
         if snapshot == self._last_snapshot:
             return  # niente da segnalare: evita eventi duplicati identici
         self._last_snapshot = snapshot
-        self._emit_event(
-            {
-                "type": "usage.snapshot",
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-            }
-        )
+        self._emit_event({"type": "usage.snapshot", **usage})

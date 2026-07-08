@@ -259,6 +259,8 @@ export function useHarnessSession() {
             latestSnapshot?.total_tokens ?? latestLiveUsage?.output_tokens ?? 0,
           ),
           output_tokens_per_second: Number(latestLiveUsage?.output_tokens_per_second ?? 0),
+          context_categories:
+            (latestSnapshot?.context_categories as Usage["context_categories"] | undefined) ?? [],
           estimated_context: true,
         }
       : (run?.usage ?? EMPTY_USAGE);

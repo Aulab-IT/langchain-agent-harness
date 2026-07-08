@@ -65,6 +65,7 @@ from agent_harness.skills import (
     write_skill,
 )
 from agent_harness.triggers import TriggerScheduler, cron_matches
+from agent_harness.usage import CATEGORY_COLORS, compute_usage, token_estimate
 
 _LOGGER = logging.getLogger(__name__)
 _TERMINAL_RUN_STATES = {"completed", "failed", "cancelled"}
@@ -160,80 +161,6 @@ class Usage(BaseModel):
     estimated_context: bool = True
 
 
-def _token_estimate(value: Any) -> int:
-    if isinstance(value, str):
-        return max(0, round(len(value) / 4))
-    return max(0, round(len(json.dumps(value, ensure_ascii=False)) / 4))
-
-
-_CATEGORY_COLORS = {
-    "System & memoria": "#60a5fa",
-    "Conversazione": "#8b5cf6",
-    "File letti": "#34d399",
-    "Skills": "#f472b6",
-    "Tool output": "#f59e0b",
-}
-
-
-def _context_categories(messages: list[Any]) -> list[dict[str, Any]]:
-    totals = {
-        "System & memoria": _token_estimate(SYSTEM_PROMPT),
-        "Conversazione": 0,
-        "File letti": 0,
-        "Skills": 0,
-        "Tool output": 0,
-    }
-    tool_paths: dict[str, str] = {}
-    for message in messages:
-        if isinstance(message, AIMessage):
-            totals["Conversazione"] += _token_estimate(message.text)
-            for call in message.tool_calls:
-                arguments = call.get("args", {})
-                path = arguments.get("file_path") or arguments.get("path")
-                if isinstance(path, str):
-                    tool_paths[str(call.get("id", ""))] = path
-        elif isinstance(message, HumanMessage):
-            totals["Conversazione"] += _token_estimate(message.content)
-        elif isinstance(message, SystemMessage):
-            totals["System & memoria"] += _token_estimate(message.content)
-        elif isinstance(message, ToolMessage):
-            estimated = _token_estimate(message.content)
-            path = tool_paths.get(message.tool_call_id, "")
-            if path.startswith(f"{SANDBOX_SKILLS_MOUNT}/"):
-                totals["Skills"] += estimated
-            elif path.startswith(f"{SANDBOX_WORKSPACE_MOUNT}/"):
-                totals["File letti"] += estimated
-            else:
-                totals["Tool output"] += estimated
-    denominator = max(sum(totals.values()), 1)
-    return [
-        {
-            "name": name,
-            "tokens": tokens,
-            "percent": round(tokens / denominator * 100),
-            "color": _CATEGORY_COLORS[name],
-        }
-        for name, tokens in totals.items()
-    ]
-
-
-def _usage(messages: list[Any], elapsed_seconds: float) -> dict[str, Any]:
-    input_tokens = 0
-    output_tokens = 0
-    for message in messages:
-        if not isinstance(message, AIMessage) or not message.usage_metadata:
-            continue
-        input_tokens += int(message.usage_metadata.get("input_tokens", 0))
-        output_tokens += int(message.usage_metadata.get("output_tokens", 0))
-    return Usage(
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        total_tokens=input_tokens + output_tokens,
-        output_tokens_per_second=round(output_tokens / max(elapsed_seconds, 0.001), 1),
-        context_categories=_context_categories(messages),
-    ).model_dump()
-
-
 def _serialize_context_message(
     index: int, message: Any, tool_paths: dict[str, str]
 ) -> dict[str, Any]:
@@ -247,7 +174,7 @@ def _serialize_context_message(
             "name": None,
             "text": text,
             "tool_calls": [],
-            "tokens": _token_estimate(text),
+            "tokens": token_estimate(text),
             "category": "System & memoria",
         }
     if isinstance(message, HumanMessage):
@@ -259,7 +186,7 @@ def _serialize_context_message(
             "name": None,
             "text": text,
             "tool_calls": [],
-            "tokens": _token_estimate(text),
+            "tokens": token_estimate(text),
             "category": "Conversazione",
         }
     if isinstance(message, AIMessage):
@@ -276,7 +203,7 @@ def _serialize_context_message(
             if isinstance(path, str):
                 tool_paths[str(call.get("id", ""))] = path
         text = message.text
-        tokens = _token_estimate(text) + sum(_token_estimate(item["args"]) for item in calls)
+        tokens = token_estimate(text) + sum(token_estimate(item["args"]) for item in calls)
         return {
             "index": index,
             "kind": "assistant",
@@ -303,7 +230,7 @@ def _serialize_context_message(
             "name": message.name,
             "text": content[:8_000],
             "tool_calls": [],
-            "tokens": _token_estimate(content),
+            "tokens": token_estimate(content),
             "category": category,
         }
     text = str(getattr(message, "content", message))
@@ -314,7 +241,7 @@ def _serialize_context_message(
         "name": None,
         "text": text[:4_000],
         "tool_calls": [],
-        "tokens": _token_estimate(text),
+        "tokens": token_estimate(text),
         "category": "Tool output",
     }
 
@@ -335,7 +262,7 @@ def _build_context(session_id: str, messages: list[Any]) -> dict[str, Any]:
             "name": "system_prompt",
             "text": system_text,
             "tool_calls": [],
-            "tokens": _token_estimate(system_text),
+            "tokens": token_estimate(system_text),
             "category": "System & memoria",
         }
     )
@@ -350,7 +277,7 @@ def _build_context(session_id: str, messages: list[Any]) -> dict[str, Any]:
                 "name": "memories/AGENTS.md",
                 "text": memory_text,
                 "tool_calls": [],
-                "tokens": _token_estimate(memory_text),
+                "tokens": token_estimate(memory_text),
                 "category": "System & memoria",
             }
         )
@@ -367,7 +294,7 @@ def _build_context(session_id: str, messages: list[Any]) -> dict[str, Any]:
             "name": name,
             "tokens": tokens,
             "percent": round(tokens / max(total_tokens, 1) * 100),
-            "color": _CATEGORY_COLORS.get(name, "#596273"),
+            "color": CATEGORY_COLORS.get(name, "#596273"),
         }
         for name, tokens in sorted(totals.items(), key=lambda item: -item[1])
     ]
@@ -598,6 +525,7 @@ class RunManager:
             )
             return approved
 
+        goal_runner: GoalRunner | None = None
         try:
             if not settings.openai_api_key:
                 raise RuntimeError("OPENAI_API_KEY non configurata")
@@ -612,13 +540,11 @@ class RunManager:
             ) as harness:
                 manifest = _attachment_manifest(session_id)
                 goal = content + manifest if len(content) + len(manifest) <= 20_000 else content
-                result = await GoalRunner(harness, approval, agent_event).run(
-                    goal,
-                    thread_id=session_id,
-                )
+                goal_runner = GoalRunner(harness, approval, agent_event)
+                result = await goal_runner.run(goal, thread_id=session_id)
 
             elapsed = time.monotonic() - started
-            usage = _usage(result.messages, elapsed)
+            usage = compute_usage(result.messages, elapsed)
             _persist_context(session_id, result.messages)
             clean_text = result.text.replace("[GOAL_COMPLETE]", "").strip()
             files_after = {item["name"]: item for item in store.list_files(session_id)}
@@ -655,7 +581,13 @@ class RunManager:
                 },
             )
         except asyncio.CancelledError:
-            store.update_run(run_id, status="cancelled")
+            # Stop richiesto: conserva l'ultimo usage noto invece di azzerarlo, altrimenti
+            # il pannello Contesto torna vuoto anche se il run aveva già consumato token.
+            cancelled_usage = None
+            if goal_runner is not None and goal_runner.last_messages:
+                elapsed = time.monotonic() - started
+                cancelled_usage = compute_usage(goal_runner.last_messages, elapsed)
+            store.update_run(run_id, status="cancelled", usage=cancelled_usage)
             self._emit(run_id, session_id, "run.cancelled", {"status": "cancelled"})
             raise
         except Exception:
