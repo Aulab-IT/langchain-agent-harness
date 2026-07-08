@@ -1,4 +1,4 @@
-import { ArrowUp, Paperclip, ShieldCheck, X, Zap } from "lucide-react";
+import { ArrowUp, Paperclip, ShieldCheck, Square, X, Zap } from "lucide-react";
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ACCEPTED_FILES } from "../../lib/constants";
 import type { SessionFile } from "../../types";
@@ -11,6 +11,8 @@ export function ChatComposer({
   onSend,
   onUpload,
   onDeleteFile,
+  onStop,
+  onToggleAutoApprove,
 }: {
   disabled: boolean;
   files: SessionFile[];
@@ -18,6 +20,8 @@ export function ChatComposer({
   onSend: (content: string) => void;
   onUpload: (files: FileList | null) => void;
   onDeleteFile: (name: string) => void;
+  onStop: () => void;
+  onToggleAutoApprove: (enabled: boolean) => void;
 }) {
   const [value, setValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -97,30 +101,44 @@ export function ChatComposer({
               accept={ACCEPTED_FILES}
               onChange={(event) => onUpload(event.target.files)}
             />
-            <span
-              className={`hidden items-center gap-1.5 text-xs sm:inline-flex ${
-                autoApprove ? "text-warning" : "text-muted"
+            <button
+              type="button"
+              className={`hidden items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs transition-colors sm:inline-flex ${
+                autoApprove ? "text-warning hover:bg-warning/10" : "text-muted hover:bg-surface-raised hover:text-foreground"
               }`}
+              onClick={() => onToggleAutoApprove(!autoApprove)}
               title={
                 autoApprove
-                  ? "L'agente esegue comandi sandbox senza chiedere conferma per questa sessione."
-                  : "L'agente chiede conferma prima di eseguire comandi nella sandbox Docker isolata."
+                  ? "L'agente esegue comandi sandbox senza chiedere conferma per questa sessione. Clicca per richiedere di nuovo l'approvazione."
+                  : "L'agente chiede conferma prima di eseguire comandi nella sandbox Docker isolata. Clicca per farlo lavorare in autonomia."
               }
             >
               {autoApprove ? <Zap size={14} /> : <ShieldCheck size={14} />}
               {autoApprove ? "Sandbox autonoma" : "Sandbox con approvazione"}
-            </span>
+            </button>
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden text-xs text-muted md:inline">Invio ↵ · A capo ⇧↵</span>
-            <button
-              type="submit"
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-soft disabled:opacity-40"
-              disabled={disabled || !value.trim()}
-              aria-label="Invia messaggio"
-            >
-              <ArrowUp size={18} />
-            </button>
+            {disabled ? (
+              <button
+                type="button"
+                onClick={onStop}
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-danger/10 text-danger hover:bg-danger/20"
+                aria-label="Ferma esecuzione"
+                title="Ferma esecuzione"
+              >
+                <Square size={16} fill="currentColor" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-soft disabled:opacity-40"
+                disabled={!value.trim()}
+                aria-label="Invia messaggio"
+              >
+                <ArrowUp size={18} />
+              </button>
+            )}
           </div>
         </div>
       </div>

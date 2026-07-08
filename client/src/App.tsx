@@ -107,7 +107,6 @@ export default function App() {
         onRename={handleRename}
         onDelete={handleDeleteSession}
         onStop={handleStop}
-        onToggleAutoApprove={handleToggleAutoApprove}
       />
 
       <div className="flex min-h-0 flex-col overflow-hidden">
@@ -164,6 +163,7 @@ export default function App() {
             onRemovePending={handleRemovePending}
             onTimeline={() => setView("traces")}
             onStop={handleStop}
+            onToggleAutoApprove={handleToggleAutoApprove}
           />
           <InspectorMobileTrigger onClick={inspectorSheet.openSheet} />
           {inspectorSheet.open ? (

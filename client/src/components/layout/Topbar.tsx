@@ -1,4 +1,4 @@
-import { Menu, Pencil, ShieldCheck, Square, Trash2, Zap } from "lucide-react";
+import { Menu, Pencil, Square, Trash2 } from "lucide-react";
 import { runElapsedSeconds, runToAgentStatus } from "../../lib/format";
 import type { AgentStatus, Run, RuntimeStatus, SessionDetail, Usage } from "../../types";
 import { StatusDot } from "../shared/StatusDot";
@@ -20,7 +20,6 @@ export function Topbar({
   onRename,
   onDelete,
   onStop,
-  onToggleAutoApprove,
 }: {
   session: SessionDetail | null;
   runtime: RuntimeStatus | null;
@@ -30,7 +29,6 @@ export function Topbar({
   onRename: () => void;
   onDelete: () => void;
   onStop: () => void;
-  onToggleAutoApprove: (enabled: boolean) => void;
 }) {
   const status = runToAgentStatus(run);
   const elapsed = runElapsedSeconds(run);
@@ -83,27 +81,6 @@ export function Topbar({
             <span className="h-1.5 w-1.5 rounded-full bg-success" />
             local
           </span>
-          {session ? (
-            <button
-              type="button"
-              className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs transition-colors ${
-                session.auto_approve
-                  ? "border-warning/40 bg-warning/10 text-warning hover:bg-warning/20"
-                  : "border-border text-muted hover:bg-surface-raised hover:text-foreground"
-              }`}
-              onClick={() => onToggleAutoApprove(!session.auto_approve)}
-              title={
-                session.auto_approve
-                  ? "L'agente esegue azioni sensibili (es. comandi sandbox) senza chiedere conferma. Clicca per richiedere di nuovo l'approvazione."
-                  : "L'agente si ferma e chiede conferma prima di azioni sensibili. Clicca per farlo lavorare in autonomia."
-              }
-            >
-              {session.auto_approve ? <Zap size={13} /> : <ShieldCheck size={13} />}
-              <span className="hidden sm:inline">
-                {session.auto_approve ? "Autonomo" : "Con approvazione"}
-              </span>
-            </button>
-          ) : null}
           <button
             type="button"
             className="inline-flex h-8 items-center gap-1 rounded-lg border border-danger/30 px-2.5 text-xs text-danger hover:bg-danger/10 disabled:opacity-40"
