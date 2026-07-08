@@ -1025,6 +1025,12 @@ async def list_improvements() -> list[dict[str, Any]]:
         evaluation = load_proposal_evaluation(path)
         proposal = saved_overrides(path)
         candidate = {**active, **proposal}
+        # Se questa proposta e' gia' quella live, dirlo esplicitamente invece di "da
+        # rivalutare": la valutazione salvata e' superata (confrontava una baseline
+        # precedente), ma la config stessa non ha nulla in sospeso.
+        is_active = bool(proposal) and all(
+            active.get(key) == value for key, value in proposal.items()
+        )
         evaluation_status = "pending"
         if evaluation:
             evaluation_status = "passed" if evaluation.gate.passed else "rejected"
@@ -1032,7 +1038,9 @@ async def list_improvements() -> list[dict[str, Any]]:
                 evaluation.baseline_fingerprint != overrides_fingerprint(active)
                 or evaluation.candidate_fingerprint != overrides_fingerprint(candidate)
             ):
-                evaluation_status = "stale"
+                evaluation_status = "active" if is_active else "stale"
+        elif is_active:
+            evaluation_status = "active"
         items.append(
             {
                 "name": path.name,

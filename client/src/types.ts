@@ -147,7 +147,7 @@ export type ImprovementSummary = {
   name: string;
   size: number;
   modified_at: string;
-  evaluation_status: "pending" | "passed" | "rejected" | "stale";
+  evaluation_status: "pending" | "passed" | "rejected" | "stale" | "active";
 };
 
 export type ImprovementDetail = {
