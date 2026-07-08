@@ -3,15 +3,16 @@
 
 @theme {
   --color-background: #080a0e;
-  --color-surface: #0f1218;
-  --color-surface-raised: #13171f;
-  --color-border: #202631;
-  --color-border-soft: #1a2029;
+  --color-surface: #131820;
+  --color-surface-raised: #1e2532;
+  --color-border: #2b3340;
+  --color-border-soft: #1f2632;
   --color-muted: #81899a;
   --color-muted-2: #5f6879;
   --color-foreground: #edf0f7;
-  --color-accent: #8b5cf6;
-  --color-accent-soft: #a78bfa;
+  --color-accent: #facc15;
+  --color-accent-soft: #fde047;
+  --color-on-accent: #0a0d12;
   --color-success: #34d399;
   --color-warning: #f59e0b;
   --color-danger: #e26472;
@@ -52,7 +53,7 @@ body {
   font-family: var(--font-sans);
   color: var(--color-foreground);
   background:
-    radial-gradient(circle at 72% -10%, rgba(91, 51, 154, 0.1), transparent 30%),
+    radial-gradient(circle at 72% -10%, rgba(250, 204, 21, 0.06), transparent 30%),
     var(--color-background);
   -webkit-font-smoothing: antialiased;
 }
@@ -61,17 +62,19 @@ body {
   overflow: hidden;
 }
 
-button,
-textarea {
-  font: inherit;
-}
+@layer base {
+  button,
+  textarea {
+    font: inherit;
+  }
 
-button {
-  color: inherit;
+  button {
+    color: inherit;
+  }
 }
 
 button:focus-visible {
-  outline: 2px solid rgba(139, 92, 246, 0.45);
+  outline: 2px solid rgba(250, 204, 21, 0.5);
   outline-offset: 2px;
 }
 
@@ -164,6 +167,13 @@ textarea:focus-visible {
 
 .markdown-body a:hover {
   color: var(--color-accent);
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
 }
 
 .markdown-body code {

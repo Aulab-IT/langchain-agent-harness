@@ -30,7 +30,7 @@ export const ChatMessage = memo(function ChatMessage({
         <div
           className={`mb-1.5 flex flex-wrap items-center gap-2 ${isAgent ? "" : "justify-end"}`}
         >
-          <strong className="text-sm">{isAgent ? "Harness Agent" : "Tu"}</strong>
+          <strong className="text-sm">{isAgent ? "Agente" : "Tu"}</strong>
           {isAgent ? (
             <span className="rounded-full border border-border px-2 py-0.5 font-mono text-xs text-muted">
               {model}
@@ -45,7 +45,7 @@ export const ChatMessage = memo(function ChatMessage({
               : "border-accent/20 bg-accent/5 text-foreground"
           }`}
         >
-          <MarkdownContent content={message.content} />
+          <MarkdownContent content={message.content} sessionId={sessionId} />
         </div>
         {message.attachments?.length ? (
           <div className={`mt-2 flex flex-wrap gap-2 ${isAgent ? "" : "justify-end"}`}>

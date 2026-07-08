@@ -11,7 +11,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { timeLabel } from "../../lib/format";
+import { relativeLabel, runElapsedSeconds, timeLabel } from "../../lib/format";
 import {
   describeCurrentAction,
   describeTraceEvent,
@@ -56,7 +56,7 @@ function TraceRow({ event }: { event: RunEvent }) {
   const payload = rawPayload(event.payload ?? {});
 
   return (
-    <div className="rounded-lg border border-border bg-surface-raised/30 px-3 py-2">
+    <div className="rounded-lg border border-border bg-surface px-3 py-2">
       <div className="flex items-start gap-2">
         <Icon size={15} className={`mt-0.5 shrink-0 ${toneClass(description.tone)}`} />
         <div className="min-w-0 flex-1">
@@ -91,22 +91,24 @@ function TraceRow({ event }: { event: RunEvent }) {
 }
 
 export function RunTracePanel({ run, events }: { run: Run | null; events: RunEvent[] }) {
+  const active = Boolean(run && ["queued", "running", "waiting_approval"].includes(run.status));
   const [now, setNow] = useState(() => Date.now());
 
+  // A run fermo non serve un tick al secondo: aggiornare ogni minuto basta a tenere
+  // "N min fa" corretto senza far vedere il numero muoversi in tempo reale.
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    const timer = window.setInterval(() => setNow(Date.now()), active ? 1000 : 60_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [active]);
 
   const actionEvents = useMemo(() => events.filter(isTraceActionEvent), [events]);
   const current = useMemo(() => describeCurrentAction(events, run), [events, run]);
-  const elapsed = run?.started_at ? (now - new Date(run.started_at).getTime()) / 1000 : 0;
+  const elapsed = runElapsedSeconds(run) ?? 0;
   const toolCount = actionEvents.filter((event) => event.type === "tool.started").length;
   const failureCount = actionEvents.filter((event) => event.type.endsWith("failed")).length;
   const sinceCurrent = current.startedAt
     ? (now - new Date(current.startedAt).getTime()) / 1000
     : elapsed;
-  const active = Boolean(run && ["queued", "running", "waiting_approval"].includes(run.status));
   const CurrentIcon =
     current.tone === "danger" ? CircleX : current.tone === "warning" ? CircleAlert : CircleCheck;
 
@@ -117,7 +119,7 @@ export function RunTracePanel({ run, events }: { run: Run | null; events: RunEve
           <div className="min-w-0">
             <h3 className="text-sm font-semibold">Trace live</h3>
             <p className="truncate text-xs text-muted">
-              Chat pulita: qui resta timeline completa delle azioni operative.
+              Timeline completa delle azioni del run.
             </p>
           </div>
           <span className="rounded-full border border-border px-2.5 py-1 font-mono text-xs text-muted">
@@ -151,8 +153,12 @@ export function RunTracePanel({ run, events }: { run: Run | null; events: RunEve
             <div className="text-xs text-muted">{active ? "Azione corrente" : "Ultimo stato"}</div>
             <div className="truncate text-sm font-medium">{current.title}</div>
             <div className="truncate text-xs text-muted">
-              {current.detail ? `${current.detail} · ` : ""}da{" "}
-              {formatTraceDuration(sinceCurrent)}
+              {current.detail ? `${current.detail} · ` : ""}
+              {active
+                ? `da ${formatTraceDuration(sinceCurrent)}`
+                : current.startedAt
+                  ? relativeLabel(current.startedAt)
+                  : `${formatTraceDuration(sinceCurrent)} fa`}
             </div>
           </div>
         </div>

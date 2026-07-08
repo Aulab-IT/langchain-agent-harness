@@ -57,7 +57,7 @@ export function ApprovalDialog({
           </button>
           <button
             type="button"
-            className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white hover:bg-accent-soft"
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-semibold text-on-accent hover:bg-accent-soft"
             onClick={onApprove}
           >
             <Check size={15} /> Approva

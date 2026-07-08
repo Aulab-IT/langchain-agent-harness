@@ -203,7 +203,7 @@ export function useHarnessSession() {
         return {
           id: name,
           name,
-          detail: "Tool harness",
+          detail: "Tool",
           status:
             activeToolNames.has(name) ? "active" : latest?.type === "tool.failed" ? "error" : "ready",
           meta:

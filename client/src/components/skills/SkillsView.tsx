@@ -99,7 +99,7 @@ export function SkillsView() {
           <button
             type="button"
             onClick={() => setCreating((value) => !value)}
-            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-soft"
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-on-accent hover:bg-accent-soft"
           >
             <Plus size={16} />
             Nuova
@@ -139,7 +139,7 @@ export function SkillsView() {
               type="button"
               onClick={create}
               disabled={!name.trim() || !description.trim()}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-soft disabled:opacity-50"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-soft disabled:opacity-50"
             >
               Crea skill
             </button>
@@ -165,7 +165,7 @@ export function SkillsView() {
                         <button
                           type="button"
                           onClick={save}
-                          className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-soft"
+                          className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-on-accent hover:bg-accent-soft"
                         >
                           <Check size={13} />
                           Salva

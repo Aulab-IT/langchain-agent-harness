@@ -218,7 +218,7 @@ export function ImproveView({ runtime }: { runtime: RuntimeStatus }) {
             type="button"
             onClick={generate}
             disabled={Boolean(busy) || !runtime.configured}
-            className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-soft disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-soft disabled:opacity-50"
           >
             <Sparkles size={16} />
             {busy === "generate" ? "Analisi in corso…" : "Genera proposta"}
@@ -467,21 +467,25 @@ function CanaryMetric({
 
 function StatusLabel({ status }: { status: ImprovementSummary["evaluation_status"] }) {
   const style =
-    status === "passed"
-      ? "text-success"
-      : status === "rejected"
-        ? "text-danger"
-        : status === "stale"
-          ? "text-warning"
-          : "text-muted";
+    status === "active"
+      ? "text-accent"
+      : status === "passed"
+        ? "text-success"
+        : status === "rejected"
+          ? "text-danger"
+          : status === "stale"
+            ? "text-warning"
+            : "text-muted";
   const label =
-    status === "passed"
-      ? "gate passato"
-      : status === "rejected"
-        ? "respinta"
-        : status === "stale"
-          ? "da rivalutare"
-          : "pending";
+    status === "active"
+      ? "attiva"
+      : status === "passed"
+        ? "gate passato"
+        : status === "rejected"
+          ? "respinta"
+          : status === "stale"
+            ? "da rivalutare"
+            : "pending";
   return <span className={`shrink-0 text-xs ${style}`}>{label}</span>;
 }
 

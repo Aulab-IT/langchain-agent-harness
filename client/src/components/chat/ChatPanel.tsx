@@ -35,8 +35,26 @@ export function ChatPanel({
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const stickToBottom = useRef(true);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
+
+  // Se l'utente ha scrollato in alto per rileggere, un nuovo evento/delta non deve
+  // riportarlo giu': l'auto-scroll resta attivo solo finche' e' gia' vicino al fondo.
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      stickToBottom.current = distance < 96;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    stickToBottom.current = true;
+  }, [session.id]);
 
   const onDragEnter = (event: DragEvent<HTMLElement>) => {
     if (!Array.from(event.dataTransfer.types).includes("Files")) return;
@@ -70,6 +88,7 @@ export function ChatPanel({
   );
 
   useEffect(() => {
+    if (!stickToBottom.current) return;
     endRef.current?.scrollIntoView({ block: "end", behavior: active ? "auto" : "smooth" });
   }, [session.messages, events.length, active, liveText]);
 
@@ -152,7 +171,7 @@ export function ChatPanel({
             </div>
             <div className="min-w-0 max-w-[85%] flex-1">
               <div className="mb-1.5 flex items-center gap-2">
-                <strong className="text-sm">Harness Agent</strong>
+                <strong className="text-sm">Agente</strong>
                 <span className="rounded-full border border-border px-2 py-0.5 font-mono text-xs text-muted">
                   {showStreaming ? "streaming" : "thinking"}
                 </span>
@@ -160,7 +179,7 @@ export function ChatPanel({
               <div className="overflow-hidden rounded-xl border border-border bg-surface-raised">
                 {showStreaming ? (
                   <div className="px-4 py-3 text-base leading-relaxed">
-                    <MarkdownContent content={liveText} />
+                    <MarkdownContent content={liveText} sessionId={session.id} />
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted">

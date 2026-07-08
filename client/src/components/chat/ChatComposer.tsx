@@ -69,7 +69,7 @@ export function ChatComposer({
           ))}
         </div>
       ) : null}
-      <div className="rounded-xl border border-border bg-background shadow-sm transition-[border-color,box-shadow] focus-within:border-muted focus-within:shadow-[0_0_0_1px_rgba(139,92,246,0.12)]">
+      <div className="rounded-xl border border-border bg-background shadow-sm transition-[border-color,box-shadow] focus-within:border-muted focus-within:shadow-[0_0_0_1px_rgba(250,204,21,0.14)]">
         <textarea
           ref={inputRef}
           className="block w-full resize-none bg-transparent px-4 pt-4 text-base leading-relaxed outline-none focus:outline-none focus-visible:outline-none placeholder:text-muted"
@@ -132,7 +132,7 @@ export function ChatComposer({
             ) : (
               <button
                 type="submit"
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-soft disabled:opacity-40"
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-on-accent hover:bg-accent-soft disabled:opacity-40"
                 disabled={!value.trim()}
                 aria-label="Invia messaggio"
               >

@@ -127,7 +127,7 @@ export function InspectorDock(props: DockProps) {
         aria-label={active ? "Apri trace live" : "Apri inspector"}
       >
         <span className="flex items-center gap-1.5 font-medium text-foreground">
-          <PanelBottom size={14} /> {active ? "Trace live" : "Harness"}
+          <PanelBottom size={14} /> {active ? "Trace live" : "Inspector"}
         </span>
         <span className="max-w-[220px] truncate text-foreground/80">{sessionTitle}</span>
         {active ? (

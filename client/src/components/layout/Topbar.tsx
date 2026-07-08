@@ -1,4 +1,4 @@
-import { Menu, Pencil, Square, Trash2 } from "lucide-react";
+import { Menu, Pencil, Trash2 } from "lucide-react";
 import { runElapsedSeconds, runToAgentStatus } from "../../lib/format";
 import type { AgentStatus, Run, RuntimeStatus, SessionDetail, Usage } from "../../types";
 import { StatusDot } from "../shared/StatusDot";
@@ -19,7 +19,6 @@ export function Topbar({
   onMenu,
   onRename,
   onDelete,
-  onStop,
 }: {
   session: SessionDetail | null;
   runtime: RuntimeStatus | null;
@@ -28,12 +27,10 @@ export function Topbar({
   onMenu: () => void;
   onRename: () => void;
   onDelete: () => void;
-  onStop: () => void;
 }) {
   const status = runToAgentStatus(run);
   const elapsed = runElapsedSeconds(run);
   const active = Boolean(run && ["queued", "running", "waiting_approval"].includes(run.status));
-  const canStop = Boolean(run && ["queued", "running", "waiting_approval"].includes(run.status));
 
   return (
     <header className="shrink-0 border-b border-border bg-surface/80 px-3 py-2.5 backdrop-blur-sm lg:px-4">
@@ -50,7 +47,7 @@ export function Topbar({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
             <h1 className="truncate text-base font-semibold lg:text-lg">
-              {session?.title ?? "Control Center"}
+              {session?.title ?? "Agent Studio"}
             </h1>
             {session ? (
               <button
@@ -81,16 +78,6 @@ export function Topbar({
             <span className="h-1.5 w-1.5 rounded-full bg-success" />
             local
           </span>
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1 rounded-lg border border-danger/30 px-2.5 text-xs text-danger hover:bg-danger/10 disabled:opacity-40"
-            disabled={!canStop}
-            onClick={onStop}
-            title="Stop run"
-          >
-            <Square size={9} fill="currentColor" />
-            <span className="hidden sm:inline">Stop</span>
-          </button>
           {session ? (
             <button
               type="button"

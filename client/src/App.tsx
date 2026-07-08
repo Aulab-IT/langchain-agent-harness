@@ -66,6 +66,7 @@ export default function App() {
           view={view}
           sessions={sessions}
           activeSessionId={session?.id ?? null}
+          activeTitle={session?.title ?? null}
           search={search}
           onSearch={setSearch}
           onClose={() => setSidebarOpen(false)}
@@ -106,7 +107,6 @@ export default function App() {
         onMenu={() => setSidebarOpen(true)}
         onRename={handleRename}
         onDelete={handleDeleteSession}
-        onStop={handleStop}
       />
 
       <div className="flex min-h-0 flex-col overflow-hidden">

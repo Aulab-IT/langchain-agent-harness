@@ -18,7 +18,7 @@ import { SandboxPanel } from "../inspector/SandboxPanel";
 const TABS: Array<{ id: InspectorTab; label: string }> = [
   { id: "trace", label: "Trace" },
   { id: "files", label: "File" },
-  { id: "capabilities", label: "Capabilities" },
+  { id: "capabilities", label: "Capacità" },
   { id: "context", label: "Contesto" },
   { id: "sandbox", label: "Sandbox" },
 ];
@@ -74,7 +74,7 @@ export function InspectorRail({
           <div className="h-1 w-10 rounded-full bg-border" />
         </div>
       ) : null}
-      <div className="flex shrink-0 items-center border-b border-border">
+      <div className="flex shrink-0 items-center border-b border-border bg-surface">
         {variant === "sheet" && onClose ? (
           <button
             type="button"
@@ -97,8 +97,8 @@ export function InspectorRail({
               type="button"
               className={`shrink-0 border-b-2 px-4 py-3 text-sm transition-colors ${
                 tab === item.id
-                  ? "border-accent text-foreground"
-                  : "border-transparent text-muted hover:text-foreground"
+                  ? "border-accent bg-surface-raised font-medium text-foreground"
+                  : "border-transparent text-muted hover:bg-surface-raised/50 hover:text-foreground"
               }`}
               onClick={() => onTabChange(item.id)}
             >
@@ -117,7 +117,7 @@ export function InspectorRail({
           </button>
         ) : null}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         {tab === "trace" ? <RunTracePanel run={run} events={events} /> : null}
         {tab === "files" ? (
           <FilesPanel

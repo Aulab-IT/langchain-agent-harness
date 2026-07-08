@@ -7,7 +7,7 @@ import type { SessionFile } from "../../types";
 import { FileIcon } from "../shared/FileIcon";
 import { PanelEmpty } from "../shared/PanelEmpty";
 
-const FILE_COLORS = ["#8b5cf6", "#34d399", "#60a5fa", "#f59e0b"];
+const FILE_COLORS = ["#facc15", "#34d399", "#60a5fa", "#f472b6"];
 
 export function FilesPanel({
   sessionId,
@@ -31,7 +31,7 @@ export function FilesPanel({
         </div>
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-soft"
+          className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-on-accent hover:bg-accent-soft"
           onClick={() => fileRef.current?.click()}
         >
           <Upload size={15} />

@@ -103,7 +103,7 @@ export function TriggersView({ runtime }: { runtime: RuntimeStatus }) {
           </div>
           <div className="flex-1">
             <h2 className="text-lg font-semibold">Trigger a eventi</h2>
-            <p className="text-sm text-muted">Loop 3 · cron e webhook avviano run autonomi</p>
+            <p className="text-sm text-muted">Cron e webhook avviano run autonomi</p>
           </div>
           <span
             className={`rounded-full px-3 py-1 text-xs ${
@@ -182,7 +182,7 @@ export function TriggersView({ runtime }: { runtime: RuntimeStatus }) {
             type="button"
             onClick={submit}
             disabled={busy || !name.trim() || !goal.trim()}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-soft disabled:opacity-50"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-soft disabled:opacity-50"
           >
             Crea trigger
           </button>
