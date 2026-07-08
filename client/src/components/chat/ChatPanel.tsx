@@ -17,6 +17,7 @@ export function ChatPanel({
   onRemovePending,
   onTimeline,
   onStop,
+  onToggleAutoApprove,
   className = "",
 }: {
   session: SessionDetail;
@@ -29,6 +30,7 @@ export function ChatPanel({
   onRemovePending: (name: string) => void;
   onTimeline: () => void;
   onStop: () => void;
+  onToggleAutoApprove: (enabled: boolean) => void;
   className?: string;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -143,38 +145,30 @@ export function ChatPanel({
             <span className="text-sm text-muted">Carica file o assegna un obiettivo.</span>
           </div>
         )}
-        {showStreaming ? (
+        {showStreaming || active ? (
           <article className="flex gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
               <Sparkles size={16} />
             </div>
-            <div className="min-w-0 max-w-[85%]">
+            <div className="min-w-0 max-w-[85%] flex-1">
               <div className="mb-1.5 flex items-center gap-2">
                 <strong className="text-sm">Harness Agent</strong>
                 <span className="rounded-full border border-border px-2 py-0.5 font-mono text-xs text-muted">
-                  streaming
+                  {showStreaming ? "streaming" : "thinking"}
                 </span>
               </div>
-              <div className="rounded-xl border border-border bg-surface-raised px-4 py-3 text-base leading-relaxed">
-                <MarkdownContent content={liveText} />
-              </div>
-            </div>
-          </article>
-        ) : active ? (
-          <article className="flex gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
-              <Sparkles size={16} />
-            </div>
-            <div className="min-w-0 max-w-[85%]">
-              <div className="mb-1.5 flex items-center gap-2">
-                <strong className="text-sm">Harness Agent</strong>
-                <span className="rounded-full border border-border px-2 py-0.5 font-mono text-xs text-muted">
-                  thinking
-                </span>
-              </div>
-              <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-raised px-4 py-3 text-sm text-muted">
-                <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-border border-t-accent animate-spin-slow" />
-                Elaborazione in corso…
+              <div className="overflow-hidden rounded-xl border border-border bg-surface-raised">
+                {showStreaming ? (
+                  <div className="px-4 py-3 text-base leading-relaxed">
+                    <MarkdownContent content={liveText} />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted">
+                    <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-border border-t-accent animate-spin-slow" />
+                    Elaborazione in corso…
+                  </div>
+                )}
+                {active ? <ThinkingTrace events={events} run={run} /> : null}
               </div>
             </div>
           </article>
@@ -184,7 +178,6 @@ export function ChatPanel({
             Run fallito: {run.error}
           </div>
         ) : null}
-        {active ? <ThinkingTrace events={events} run={run} onStop={onStop} /> : null}
         <div ref={endRef} />
         </div>
       </div>
@@ -196,6 +189,8 @@ export function ChatPanel({
         onSend={onSend}
         onUpload={onUpload}
         onDeleteFile={onRemovePending}
+        onStop={onStop}
+        onToggleAutoApprove={onToggleAutoApprove}
       />
     </section>
   );
