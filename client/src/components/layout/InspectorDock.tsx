@@ -14,6 +14,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { InspectorTab } from "../../lib/constants";
+import { describeCurrentAction } from "../../lib/runTrace";
 import type {
   ActivityItem,
   Run,
@@ -62,8 +63,18 @@ const STATUS_DOT: Record<string, string> = {
 };
 
 export function InspectorDock(props: DockProps) {
-  const { usage, contextWindow, runtime, sessionSandbox, run, files, sessionTitle, messageCount } =
-    props;
+  const {
+    usage,
+    contextWindow,
+    runtime,
+    sessionSandbox,
+    run,
+    files,
+    sessionTitle,
+    messageCount,
+    events,
+    onTabChange,
+  } = props;
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) !== "false");
   const [height, setHeight] = useState(() => {
     const stored = Number(localStorage.getItem(HEIGHT_KEY));
@@ -100,20 +111,31 @@ export function InspectorDock(props: DockProps) {
 
   const percent = Math.min(100, Math.round((usage.input_tokens / contextWindow) * 100));
   const status = run?.status ?? "idle";
+  const active = Boolean(run && ["queued", "running", "waiting_approval"].includes(run.status));
+  const current = describeCurrentAction(events, run);
 
   // Barra di stato compatta (chiuso), full-width, edge-to-edge — solo desktop.
   if (!open) {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          if (active) onTabChange("trace");
+          setOpen(true);
+        }}
         className="hidden shrink-0 items-center gap-4 border-t border-border bg-surface px-4 py-2 text-xs text-muted hover:bg-surface-raised xl:flex"
-        aria-label="Apri inspector"
+        aria-label={active ? "Apri trace live" : "Apri inspector"}
       >
         <span className="flex items-center gap-1.5 font-medium text-foreground">
-          <PanelBottom size={14} /> Harness
+          <PanelBottom size={14} /> {active ? "Trace live" : "Harness"}
         </span>
         <span className="max-w-[220px] truncate text-foreground/80">{sessionTitle}</span>
+        {active ? (
+          <span className="min-w-0 flex-1 truncate text-foreground">
+            In corso: {current.title}
+            {current.detail ? <span className="text-muted"> · {current.detail}</span> : null}
+          </span>
+        ) : null}
         <span className="flex items-center gap-1.5">
           <MessageSquare size={13} /> {messageCount}
         </span>
@@ -132,7 +154,7 @@ export function InspectorDock(props: DockProps) {
         </span>
         <span className="hidden md:inline">{files.length} file</span>
         <span className="ml-auto flex items-center gap-1 text-accent">
-          <ChevronUp size={14} /> Espandi
+          <ChevronUp size={14} /> {active ? "Espandi trace" : "Espandi"}
         </span>
       </button>
     );

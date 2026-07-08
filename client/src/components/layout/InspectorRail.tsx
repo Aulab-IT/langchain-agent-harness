@@ -12,9 +12,11 @@ import type {
 import { CapabilitiesPanel } from "../inspector/CapabilitiesPanel";
 import { ContextPanel } from "../inspector/ContextPanel";
 import { FilesPanel } from "../inspector/FilesPanel";
+import { RunTracePanel } from "../inspector/RunTracePanel";
 import { SandboxPanel } from "../inspector/SandboxPanel";
 
 const TABS: Array<{ id: InspectorTab; label: string }> = [
+  { id: "trace", label: "Trace" },
   { id: "files", label: "File" },
   { id: "capabilities", label: "Capabilities" },
   { id: "context", label: "Contesto" },
@@ -116,6 +118,7 @@ export function InspectorRail({
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {tab === "trace" ? <RunTracePanel run={run} events={events} /> : null}
         {tab === "files" ? (
           <FilesPanel
             sessionId={sessionId}

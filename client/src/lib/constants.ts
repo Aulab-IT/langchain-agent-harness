@@ -14,4 +14,4 @@ export const EMPTY_USAGE: Usage = {
 
 export type View = "control" | "traces" | "skills" | "triggers" | "improve" | "settings";
 
-export type InspectorTab = "files" | "capabilities" | "context" | "sandbox";
+export type InspectorTab = "trace" | "files" | "capabilities" | "context" | "sandbox";

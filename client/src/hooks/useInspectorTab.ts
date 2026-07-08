@@ -7,6 +7,7 @@ export function useInspectorTab(defaultTab: InspectorTab = "files") {
   const [tab, setTab] = useState<InspectorTab>(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (
+      stored === "trace" ||
       stored === "files" ||
       stored === "capabilities" ||
       stored === "context" ||
