@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -73,15 +74,23 @@ def build_workspace_permissions() -> list[FilesystemPermission]:
     ]
 
 
-async def _load_mcp_tools(settings: Settings) -> list[BaseTool]:
+async def _load_mcp_tools(settings: Settings, backend_root: Path) -> list[BaseTool]:
     if not settings.harness_enable_mcp:
         return []
+    # I tool skill_* del server MCP scrivono su host e sincronizzano nella session_root del run
+    # attivo, così una skill creata/installata dall'agente è leggibile subito nello stesso run.
+    env = {
+        **os.environ,
+        "HARNESS_SESSION_ROOT": str(backend_root),
+        "HARNESS_SKILLS_DIR": str(settings.skills_dir),
+    }
     client = MultiServerMCPClient(
         {
             "local_harness": {
                 "transport": "stdio",
                 "command": sys.executable,
                 "args": ["-m", "agent_harness.mcp_server"],
+                "env": env,
             }
         }
     )
@@ -189,7 +198,7 @@ async def build_harness(
         sandbox_image=settings.harness_sandbox_image,
         project_root=settings.project_root,
     )
-    tools.extend(await _load_mcp_tools(settings))
+    tools.extend(await _load_mcp_tools(settings, active_backend_root))
 
     backend = FilesystemBackend(root_dir=active_backend_root, virtual_mode=True)
     permissions = build_workspace_permissions()

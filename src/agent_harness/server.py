@@ -60,9 +60,16 @@ from agent_harness.skills import (
     build_skill_md,
     confine_to_directory,
     delete_skill,
+    delete_skill_file,
+    install_skill,
+    list_skill_files,
+    list_skill_installs,
     list_skills,
     read_skill,
+    read_skill_file,
+    record_skill_event,
     write_skill,
+    write_skill_file,
 )
 from agent_harness.triggers import TriggerScheduler, cron_matches
 from agent_harness.usage import CATEGORY_COLORS, compute_usage, token_estimate
@@ -150,6 +157,18 @@ class SkillCreate(BaseModel):
 
 class SkillUpdate(BaseModel):
     content: Annotated[str, Field(min_length=1, max_length=100_000)]
+
+
+class SkillFileWrite(BaseModel):
+    content: Annotated[str, Field(default="", max_length=200_000)]
+
+
+class SkillInstall(BaseModel):
+    source: Literal["archive_url", "git", "registry"]
+    value: Annotated[str, Field(min_length=1, max_length=2_048)]
+    ref: Annotated[str | None, Field(default=None, max_length=256)] = None
+    subdir: Annotated[str | None, Field(default=None, max_length=512)] = None
+    force: bool = False
 
 
 class Usage(BaseModel):
@@ -1214,6 +1233,31 @@ async def get_skills() -> list[dict[str, Any]]:
     return list_skills(settings.skills_dir)
 
 
+# Rotte statiche prima di `/api/skills/{name}` così "installs"/"install" non finiscono in {name}.
+@app.get("/api/skills/installs")
+async def get_skill_installs() -> list[dict[str, Any]]:
+    return list_skill_installs(settings.skills_dir)
+
+
+@app.post("/api/skills/install", status_code=status.HTTP_201_CREATED)
+async def install_skill_endpoint(payload: SkillInstall) -> dict[str, Any]:
+    try:
+        return install_skill(
+            settings.skills_dir,
+            payload.source,
+            payload.value,
+            ref=payload.ref,
+            subdir=payload.subdir,
+            registry_url=settings.skills_registry_url,
+            by="human",
+            force=payload.force,
+        )
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=f"Skill già esistente: {exc}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.get("/api/skills/{name}")
 async def get_skill(name: str) -> dict[str, Any]:
     try:
@@ -1251,6 +1295,65 @@ async def remove_skill(name: str) -> None:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Skill non trovata.") from exc
+    record_skill_event(
+        settings.skills_dir, name=name, source="panel", value="", by="human", action="revoke"
+    )
+
+
+@app.get("/api/skills/{name}/files")
+async def get_skill_files(name: str) -> list[dict[str, Any]]:
+    try:
+        return list_skill_files(settings.skills_dir, name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Skill non trovata.") from exc
+
+
+@app.get("/api/skills/{name}/files/{path:path}")
+async def get_skill_file(name: str, path: str) -> dict[str, Any]:
+    try:
+        return read_skill_file(settings.skills_dir, name, path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="File non trovato.") from exc
+
+
+@app.put("/api/skills/{name}/files/{path:path}")
+async def put_skill_file(name: str, path: str, payload: SkillFileWrite) -> dict[str, Any]:
+    try:
+        return write_skill_file(settings.skills_dir, name, path, payload.content)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.delete("/api/skills/{name}/files/{path:path}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_skill_file(name: str, path: str) -> None:
+    try:
+        delete_skill_file(settings.skills_dir, name, path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="File non trovato.") from exc
+
+
+@app.post("/api/skills/{name}/files", status_code=status.HTTP_201_CREATED)
+async def upload_skill_file(name: str, file: UploadFile) -> dict[str, Any]:
+    safe_name = Path(file.filename or "").name
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Nome file mancante.")
+    data = await file.read(_MAX_UPLOAD_SIZE + 1)
+    await file.close()
+    if len(data) > _MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="File troppo grande.")
+    # Destinazione per convenzione: assets/<file> se non è testo/markdown noto.
+    subdir = "references" if Path(safe_name).suffix.lower() in {".md", ".txt"} else "assets"
+    relpath = f"{subdir}/{safe_name}"
+    try:
+        return write_skill_file(settings.skills_dir, name, relpath, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/api/sessions/{session_id}/files", status_code=status.HTTP_201_CREATED)

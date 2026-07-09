@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     harness_sandbox_image: str = "langchain-harness-sandbox:latest"
     harness_sandbox_idle_minutes: int = Field(default=30, ge=1, le=1_440)
     harness_sandbox_sweep_seconds: int = Field(default=60, ge=10, le=3_600)
+    # Base del registry Agent Skills usato per l'install per nome (adattatore in skills.py).
+    skills_registry_url: str = "https://agentskills.io/registry"
 
     project_root: Path = PROJECT_ROOT
 

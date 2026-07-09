@@ -123,12 +123,37 @@ export type Skill = {
   has_scripts: boolean;
   has_references: boolean;
   has_assets: boolean;
+  resource_count: number;
   body_lines: number;
   valid: boolean;
   errors: string[];
 };
 
 export type SkillDetail = Skill & { content: string };
+
+export type SkillFile = {
+  path: string;
+  is_dir: boolean;
+  size: number;
+};
+
+export type SkillFileContent = {
+  path: string;
+  content: string;
+  binary: boolean;
+  size?: number;
+};
+
+export type SkillInstallSource = "archive_url" | "git" | "registry";
+
+export type SkillInstall = {
+  ts: string;
+  name: string;
+  source: string;
+  value: string;
+  by: "agent" | "human";
+  action: "install" | "revoke";
+};
 
 export type Trigger = {
   id: string;

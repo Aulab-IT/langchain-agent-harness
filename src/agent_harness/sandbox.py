@@ -157,19 +157,22 @@ class SessionSandboxManager:
             "running": running,
         }
 
-    def run_flags(self, workspace: Path, image: str) -> list[str]:
+    def run_flags(self, workspace: Path, image: str, skills_dir: Path | None = None) -> list[str]:
         """Flag di sicurezza per `docker run`, SENZA l'immagine.
 
         In `docker run [OPTIONS] IMAGE [COMMAND]` tutto ciò che segue l'immagine è il
         comando eseguito nel container, non un'opzione docker. L'immagine va quindi
         aggiunta dal chiamante subito prima del comando (es. `--name` deve stare tra
         queste opzioni e l'immagine, mai dopo).
+
+        Se `skills_dir` esiste, viene montata read-only su /skills così l'agente può
+        eseguirne gli script (senza poterli modificare dal container).
         """
         if "\x00" in image:
             raise ValueError("Nome immagine non valido.")
         workspace = workspace.resolve()
         user_id, group_id = _docker_ids()
-        return [
+        flags = [
             "docker",
             "run",
             "--network",
@@ -193,9 +196,17 @@ class SessionSandboxManager:
             "/tmp:rw,noexec,nosuid,size=64m",
             "--mount",
             f"type=bind,src={workspace},dst=/workspace",
+        ]
+        if skills_dir is not None and skills_dir.exists():
+            flags += [
+                "--mount",
+                f"type=bind,src={skills_dir.resolve()},dst=/skills,readonly",
+            ]
+        flags += [
             "--workdir",
             "/workspace",
         ]
+        return flags
 
     def ensure_running(
         self,
@@ -218,7 +229,7 @@ class SessionSandboxManager:
                 timeout=15,
             )
             command = [
-                *self.run_flags(workspace, image),
+                *self.run_flags(workspace, image, project_root / "skills"),
                 "--name",
                 name,
                 "-d",

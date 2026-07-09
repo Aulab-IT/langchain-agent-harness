@@ -16,6 +16,10 @@ import type {
   SessionSummary,
   Skill,
   SkillDetail,
+  SkillFile,
+  SkillFileContent,
+  SkillInstall,
+  SkillInstallSource,
   Trigger,
 } from "./types";
 
@@ -261,6 +265,52 @@ export function updateSkill(name: string, content: string): Promise<SkillDetail>
 
 export function deleteSkill(name: string): Promise<void> {
   return request(`/api/skills/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+export function installSkill(body: {
+  source: SkillInstallSource;
+  value: string;
+  ref?: string | null;
+  subdir?: string | null;
+  force?: boolean;
+}): Promise<SkillDetail> {
+  return request("/api/skills/install", jsonOptions("POST", body));
+}
+
+export function listSkillInstalls(): Promise<SkillInstall[]> {
+  return request("/api/skills/installs");
+}
+
+export function listSkillFiles(name: string): Promise<SkillFile[]> {
+  return request(`/api/skills/${encodeURIComponent(name)}/files`);
+}
+
+export function getSkillFile(name: string, path: string): Promise<SkillFileContent> {
+  return request(`/api/skills/${encodeURIComponent(name)}/files/${path}`);
+}
+
+export function putSkillFile(
+  name: string,
+  path: string,
+  content: string,
+): Promise<SkillFileContent> {
+  return request(
+    `/api/skills/${encodeURIComponent(name)}/files/${path}`,
+    jsonOptions("PUT", { content }),
+  );
+}
+
+export function deleteSkillFile(name: string, path: string): Promise<void> {
+  return request(`/api/skills/${encodeURIComponent(name)}/files/${path}`, { method: "DELETE" });
+}
+
+export async function uploadSkillFile(name: string, file: File): Promise<SkillFileContent> {
+  const form = new FormData();
+  form.append("file", file);
+  return request(`/api/skills/${encodeURIComponent(name)}/files`, {
+    method: "POST",
+    body: form,
+  });
 }
 
 export function evaluateImprovement(name: string): Promise<EvaluationArtifact> {

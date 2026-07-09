@@ -13,6 +13,8 @@ Regole di lavoro:
 
 Il filesystem è memoria operativa: sposta nei file risultati lunghi, note e output intermedi.
 Le memorie descrivono preferenze durevoli; le skills contengono procedure caricate su richiesta.
+Puoi creare o installare skill con i tool skill_create/skill_write_file/skill_install (standard
+agentskills.io): usali quando una procedura riutilizzabile va resa disponibile a run futuri.
 """
 
 CONTINUATION_PROMPT = """
