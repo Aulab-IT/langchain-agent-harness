@@ -31,7 +31,7 @@ from agent_harness.improve import (
     overrides_fingerprint,
     resolve_runtime_overrides,
 )
-from agent_harness.middleware import build_model_router
+from agent_harness.middleware import DEFAULT_STRONG_KEYWORDS, Override, build_model_router
 from agent_harness.prompts import SYSTEM_PROMPT
 from agent_harness.tools import build_tools
 from agent_harness.verification import RubricGrader
@@ -217,6 +217,7 @@ async def build_harness(
     run_id: str | None = None,
     harness_overrides: dict[str, Any] | None = None,
     config_arm: str | None = None,
+    model_override: Override = "auto",
 ) -> AsyncIterator[Harness]:
     """Costruisce graph e risorse persistenti, chiudendole in modo deterministico."""
     settings = settings or Settings()
@@ -363,8 +364,22 @@ async def build_harness(
                 f"openai:{model_name}",
                 HarnessProfile(excluded_tools=frozenset({"execute"})),
             )
+        configured = tuple(
+            word.strip().casefold()
+            for word in settings.harness_router_strong_keywords.split(",")
+            if word.strip()
+        )
         middleware: list[AgentMiddleware[Any, Any, Any]] = [
-            build_model_router(default_model, strong_model),
+            build_model_router(
+                default_model,
+                strong_model,
+                default_name=settings.openai_model,
+                strong_name=settings.openai_strong_model,
+                session_override=model_override,
+                strong_keywords=configured or DEFAULT_STRONG_KEYWORDS,
+                context_threshold=settings.harness_router_context_threshold,
+                event_callback=event_callback,
+            ),
             AuditMiddleware(
                 settings.state_dir / "audit.jsonl",
                 event_callback,

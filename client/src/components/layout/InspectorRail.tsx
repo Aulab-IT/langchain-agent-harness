@@ -11,6 +11,7 @@ import type {
 } from "../../types";
 import { ContextPanel } from "../inspector/ContextPanel";
 import { FilesPanel } from "../inspector/FilesPanel";
+import { MemoryPanel } from "../inspector/MemoryPanel";
 import { RunTracePanel } from "../inspector/RunTracePanel";
 import { SandboxPanel } from "../inspector/SandboxPanel";
 import { SessionActivityPanel } from "../inspector/SessionActivityPanel";
@@ -19,6 +20,7 @@ const TABS: Array<{ id: InspectorTab; label: string }> = [
   { id: "trace", label: "Trace" },
   { id: "files", label: "File" },
   { id: "capabilities", label: "Attività" },
+  { id: "memory", label: "Memoria" },
   { id: "context", label: "Contesto" },
   { id: "sandbox", label: "Sandbox" },
 ];
@@ -130,6 +132,7 @@ export function InspectorRail({
         {tab === "capabilities" ? (
           <SessionActivityPanel skills={skills} tools={tools} />
         ) : null}
+        {tab === "memory" ? <MemoryPanel sessionId={sessionId} /> : null}
         {tab === "context" ? (
           <ContextPanel usage={usage} contextWindow={contextWindow} sessionId={sessionId} />
         ) : null}

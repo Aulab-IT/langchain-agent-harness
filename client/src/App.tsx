@@ -55,6 +55,7 @@ export default function App() {
     handleDeleteSession,
     handleRename,
     handleToggleAutoApprove,
+    handleSessionModel,
     handleStop,
     handleStopSandbox,
     resolveApproval,
@@ -172,6 +173,7 @@ export default function App() {
             onTimeline={() => setView("traces")}
             onStop={handleStop}
             onToggleAutoApprove={handleToggleAutoApprove}
+            onSessionModel={handleSessionModel}
           />
           <InspectorMobileTrigger onClick={inspectorSheet.openSheet} />
           {inspectorSheet.open ? (

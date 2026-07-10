@@ -78,6 +78,43 @@ def test_skill_creator_route_installs_from_the_configured_source(
     assert seen["by"] == "human"
 
 
+def test_session_memory_is_seeded_from_the_template_then_diverges(client: TestClient) -> None:
+    client.put("/api/memory", json={"content": "# Template\n"})
+    session = client.post("/api/sessions", json={"title": "Memoria"}).json()
+
+    # La sessione nasce con una copia del template.
+    seeded = client.get(f"/api/sessions/{session['id']}/memory").json()["content"]
+    assert "# Template" in seeded
+
+    # Ciò che l'agente impara resta nella sessione e non tocca il template.
+    client.put(
+        f"/api/sessions/{session['id']}/memory",
+        json={"content": "# Template\n\n## Apprendimenti\n- usare uv\n"},
+    )
+    assert client.get("/api/memory").json()["content"] == "# Template\n"
+    assert "usare uv" in client.get(f"/api/sessions/{session['id']}/memory").json()["content"]
+
+
+def test_promotion_is_explicit_and_copies_session_memory_into_the_template(
+    client: TestClient,
+) -> None:
+    client.put("/api/memory", json={"content": "# Template\n"})
+    session = client.post("/api/sessions", json={"title": "Memoria"}).json()
+    client.put(f"/api/sessions/{session['id']}/memory", json={"content": "- usare uv\n"})
+
+    response = client.post(f"/api/sessions/{session['id']}/memory/promote")
+
+    assert response.status_code == 200
+    assert client.get("/api/memory").json()["content"] == "- usare uv\n"
+
+
+def test_promoting_an_empty_memory_is_refused(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={"title": "Vuota"}).json()
+    client.put(f"/api/sessions/{session['id']}/memory", json={"content": "   \n"})
+
+    assert client.post(f"/api/sessions/{session['id']}/memory/promote").status_code == 422
+
+
 def test_sessions_and_files_are_isolated(client: TestClient) -> None:
     first = client.post("/api/sessions", json={"title": "Prima"}).json()
     second = client.post("/api/sessions", json={"title": "Seconda"}).json()

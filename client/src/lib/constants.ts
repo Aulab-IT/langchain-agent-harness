@@ -21,4 +21,10 @@ export type View =
   | "improve"
   | "settings";
 
-export type InspectorTab = "trace" | "files" | "capabilities" | "context" | "sandbox";
+export type InspectorTab =
+  | "trace"
+  | "files"
+  | "capabilities"
+  | "memory"
+  | "context"
+  | "sandbox";

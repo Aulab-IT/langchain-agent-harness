@@ -22,7 +22,11 @@ export type Message = {
   content: string;
   created_at: string;
   attachments: string[];
+  /** Il modello che ha prodotto la risposta. Assente per i messaggi anteriori al tracciamento. */
+  model?: string | null;
 };
+
+export type ModelOverride = "auto" | "default" | "strong";
 
 export type SessionFile = {
   name: string;
@@ -56,6 +60,7 @@ export type SessionSummary = {
   preview?: string | null;
   last_status?: string | null;
   auto_approve: boolean;
+  model_override: ModelOverride;
 };
 
 export type SessionSandbox = {

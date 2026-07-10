@@ -147,6 +147,13 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         subject,
         tone: "running",
       };
+    case "model.selected":
+      return {
+        title: `Modello: ${asTraceText(payload.model) ?? "?"}`,
+        detail: asTraceText(payload.reason) ?? "",
+        subject: asTraceText(payload.model),
+        tone: "info",
+      };
     case "assistant.iteration":
       return {
         title: `Iterazione ${asTraceText(payload.iteration) ?? "?"}`,

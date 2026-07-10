@@ -10,6 +10,7 @@ export function useInspectorTab(defaultTab: InspectorTab = "files") {
       stored === "trace" ||
       stored === "files" ||
       stored === "capabilities" ||
+      stored === "memory" ||
       stored === "context" ||
       stored === "sandbox"
     ) {

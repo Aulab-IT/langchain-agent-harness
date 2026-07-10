@@ -43,6 +43,7 @@ from agent_harness.improve import (
     saved_overrides,
     write_proposal,
 )
+from agent_harness.middleware import Override
 from agent_harness.promotion import (
     list_config_versions,
     promote_proposal,
@@ -122,6 +123,14 @@ class SessionUpdate(BaseModel):
 
 class AutoApproveUpdate(BaseModel):
     enabled: bool
+
+
+class ModelOverrideUpdate(BaseModel):
+    override: Literal["auto", "default", "strong"]
+
+
+class MemoryUpdate(BaseModel):
+    content: Annotated[str, Field(max_length=100_000)]
 
 
 class ActionResponse(BaseModel):
@@ -361,6 +370,12 @@ def _skills() -> list[dict[str, Any]]:
     ]
 
 
+def _model_override(session_id: str) -> Override:
+    """Un valore inatteso in colonna non deve forzare un modello: si torna al router."""
+    value = store.get_session(session_id).get("model_override", "auto")
+    return value if value in ("auto", "default", "strong") else "auto"
+
+
 async def _tools() -> list[dict[str, Any]]:
     return await tool_catalog(settings)
 
@@ -508,12 +523,20 @@ class RunManager:
         streamed_tokens = 0
         stream_started = time.monotonic()
         files_before = {item["name"]: item for item in store.list_files(session_id)}
+        # Il modello che ha davvero risposto. Resta None finché il router non lo dichiara:
+        # meglio nessun badge che un badge sbagliato.
+        selected_model: str | None = None
         store.update_run(run_id, status="running")
         self._emit(run_id, session_id, "run.started", {"status": "running"})
-        self._emit(run_id, session_id, "agent.started", {"model": settings.openai_model})
+        self._emit(run_id, session_id, "agent.started", {"status": "running"})
 
         def tool_event(event: dict[str, Any]) -> None:
+            nonlocal selected_model
             event_type = str(event.pop("type", "tool.updated"))
+            if event_type == "model.selected":
+                model_name = event.get("model")
+                if isinstance(model_name, str):
+                    selected_model = model_name
             loop.call_soon_threadsafe(self._emit, run_id, session_id, event_type, event)
             skill = event.get("skill")
             if isinstance(skill, str):
@@ -636,6 +659,7 @@ class RunManager:
                 backend_root=root,
                 event_callback=tool_event,
                 run_id=run_id,
+                model_override=_model_override(session_id),
             ) as harness:
                 manifest = _attachment_manifest(session_id)
                 goal = content + manifest if len(content) + len(manifest) <= 20_000 else content
@@ -660,7 +684,12 @@ class RunManager:
             # l'agente ha usato la cartella `output/` per i deliverable, allega solo quelli.
             attachments = _select_attachments(changed_files)
             store.add_message(
-                session_id, "assistant", clean_text, run_id=run_id, attachments=attachments
+                session_id,
+                "assistant",
+                clean_text,
+                run_id=run_id,
+                attachments=attachments,
+                model=selected_model,
             )
             store.update_run(run_id, status="completed", usage=usage)
             self._emit(run_id, session_id, "usage.updated", usage)
@@ -950,6 +979,76 @@ async def update_session_auto_approve(
 ) -> dict[str, Any]:
     _require_session(session_id)
     return store.set_session_auto_approve(session_id, payload.enabled)
+
+
+def _session_memory_path(session_id: str) -> Path:
+    return store.session_root(session_id) / "memories" / "AGENTS.md"
+
+
+def _template_memory_path() -> Path:
+    return settings.project_root / "memories" / "AGENTS.md"
+
+
+def _read_memory(path: Path) -> str:
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+@app.get("/api/memory")
+async def get_template_memory() -> dict[str, Any]:
+    """Il template globale: seme di ogni nuova sessione, mai riscritto dall'agente."""
+    return {"content": _read_memory(_template_memory_path())}
+
+
+@app.put("/api/memory")
+async def put_template_memory(payload: MemoryUpdate) -> dict[str, Any]:
+    path = _template_memory_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload.content, encoding="utf-8")
+    return {"content": payload.content}
+
+
+@app.get("/api/sessions/{session_id}/memory")
+async def get_session_memory(session_id: str) -> dict[str, Any]:
+    _require_session(session_id)
+    return {"content": _read_memory(_session_memory_path(session_id))}
+
+
+@app.put("/api/sessions/{session_id}/memory")
+async def put_session_memory(session_id: str, payload: MemoryUpdate) -> dict[str, Any]:
+    _require_session(session_id)
+    path = _session_memory_path(session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload.content, encoding="utf-8")
+    return {"content": payload.content}
+
+
+@app.post("/api/sessions/{session_id}/memory/promote")
+async def promote_session_memory(session_id: str) -> dict[str, Any]:
+    """Copia la memoria di sessione nel template globale, su richiesta esplicita dell'utente.
+
+    Non esiste una promozione automatica, e non deve esistere. Il template viene iniettato nel
+    prompt di ogni sessione futura: promuovere senza leggere significherebbe permettere a una
+    sessione che ha letto una pagina web ostile di dettare istruzioni a tutte le altre.
+    """
+    _require_session(session_id)
+    content = _read_memory(_session_memory_path(session_id))
+    if not content.strip():
+        raise HTTPException(status_code=422, detail="La memoria di sessione è vuota.")
+    template = _template_memory_path()
+    template.parent.mkdir(parents=True, exist_ok=True)
+    template.write_text(content, encoding="utf-8")
+    return {"content": content}
+
+
+@app.patch("/api/sessions/{session_id}/model")
+async def update_session_model_override(
+    session_id: str, payload: ModelOverrideUpdate
+) -> dict[str, Any]:
+    _require_session(session_id)
+    try:
+        return store.set_session_model_override(session_id, payload.override)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.delete("/api/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

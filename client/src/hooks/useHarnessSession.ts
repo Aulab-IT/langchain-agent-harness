@@ -13,6 +13,7 @@ import {
   renameSession,
   sendMessage,
   setSessionAutoApprove,
+  setSessionModelOverride,
   stopSandbox,
   submitAction,
   subscribeRun,
@@ -25,6 +26,7 @@ import {
   deriveToolSteps,
 } from "../lib/sessionActivity";
 import type {
+  ModelOverride,
   Run,
   RunEvent,
   RuntimeStatus,
@@ -373,6 +375,19 @@ export function useHarnessSession() {
     }
   };
 
+  const handleSessionModel = async (override: ModelOverride) => {
+    if (!session) return;
+    const previous = session.model_override;
+    // Aggiornamento ottimistico: il selettore risponde subito, come il toggle di autonomia.
+    setSession((current) => (current ? { ...current, model_override: override } : current));
+    try {
+      await setSessionModelOverride(session.id, override);
+    } catch (reason) {
+      setSession((current) => (current ? { ...current, model_override: previous } : current));
+      setError(reason instanceof Error ? reason.message : "Cambio modello fallito");
+    }
+  };
+
   const handleStop = async () => {
     if (!run) return;
     try {
@@ -441,6 +456,7 @@ export function useHarnessSession() {
     handleDeleteSession,
     handleRename,
     handleToggleAutoApprove,
+    handleSessionModel,
     handleStop,
     handleStopSandbox,
     resolveApproval,

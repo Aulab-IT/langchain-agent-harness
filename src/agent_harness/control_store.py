@@ -150,6 +150,9 @@ class ControlStore:
                 self._connection.execute(
                     "ALTER TABLE messages ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'"
                 )
+            # Il modello che ha davvero risposto, così il badge in chat non deve indovinarlo.
+            if "model" not in columns:
+                self._connection.execute("ALTER TABLE messages ADD COLUMN model TEXT")
             session_columns = {
                 row["name"]
                 for row in self._connection.execute("PRAGMA table_info(sessions)")
@@ -157,6 +160,10 @@ class ControlStore:
             if "auto_approve" not in session_columns:
                 self._connection.execute(
                     "ALTER TABLE sessions ADD COLUMN auto_approve INTEGER NOT NULL DEFAULT 0"
+                )
+            if "model_override" not in session_columns:
+                self._connection.execute(
+                    "ALTER TABLE sessions ADD COLUMN model_override TEXT NOT NULL DEFAULT 'auto'"
                 )
 
     def create_session(self, title: str = "Nuova sessione") -> dict[str, Any]:
@@ -252,6 +259,19 @@ class ControlStore:
             raise KeyError(session_id)
         return self.get_session(session_id)
 
+    def set_session_model_override(self, session_id: str, override: str) -> dict[str, Any]:
+        """Forza il modello per l'intera sessione, o restituisce la scelta al router (`auto`)."""
+        if override not in {"auto", "default", "strong"}:
+            raise ValueError(f"Override modello non valido: {override}")
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                "UPDATE sessions SET model_override = ? WHERE id = ?",
+                (override, session_id),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(session_id)
+        return self.get_session(session_id)
+
     def delete_session(self, session_id: str) -> None:
         with self._lock, self._connection:
             cursor = self._connection.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
@@ -267,6 +287,7 @@ class ControlStore:
         *,
         run_id: str | None = None,
         attachments: list[str] | None = None,
+        model: str | None = None,
     ) -> dict[str, Any]:
         message_id = str(uuid.uuid4())
         now = utc_now()
@@ -275,9 +296,9 @@ class ControlStore:
             self._connection.execute(
                 """
                 INSERT INTO messages(
-                    id, session_id, run_id, role, content, created_at, attachments_json
+                    id, session_id, run_id, role, content, created_at, attachments_json, model
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     message_id,
@@ -287,6 +308,7 @@ class ControlStore:
                     content,
                     now,
                     json.dumps(attachment_names, ensure_ascii=False),
+                    model,
                 ),
             )
             self._connection.execute(
@@ -311,6 +333,7 @@ class ControlStore:
             "content": content,
             "created_at": now,
             "attachments": attachment_names,
+            "model": model,
         }
 
     def list_messages(self, session_id: str) -> list[dict[str, Any]]:

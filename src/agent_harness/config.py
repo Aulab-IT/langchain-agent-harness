@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     harness_sandbox_network: str = "bridge"
     harness_sandbox_idle_minutes: int = Field(default=30, ge=1, le=1_440)
     harness_sandbox_sweep_seconds: int = Field(default=60, ge=10, le=3_600)
+    # Router fra modello di default e modello forte. Le parole chiave sono configurabili perché
+    # dipendono dalla lingua e dal dominio: la lista di default è in middleware.py.
+    harness_router_strong_keywords: str = ""
+    harness_router_context_threshold: int = Field(default=40, ge=4, le=500)
     # Sorgente di skill-creator, la skill che insegna a scrivere skill conformi allo standard.
     # Configurabile perché l'harness non deve avere un URL di rete incastonato nel codice.
     harness_skill_creator_repo: str = "https://github.com/anthropics/skills"

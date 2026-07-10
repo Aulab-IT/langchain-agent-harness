@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from agent_harness.config import Settings
 from agent_harness.control_store import ControlStore
 
@@ -23,6 +25,42 @@ def test_session_persists_messages_runs_and_events(tmp_path: Path) -> None:
     assert store.list_messages(session["id"])[0]["content"] == "Analizza"
     assert store.list_events(run["id"])[0]["id"] == event["id"]
     assert store.list_events(run["id"])[0]["payload"] == {"ok": True}
+    store.close()
+
+
+def test_session_model_override_defaults_to_auto_and_rejects_junk(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    session = store.create_session()
+
+    assert session["model_override"] == "auto"
+
+    store.set_session_model_override(session["id"], "strong")
+    assert store.get_session(session["id"])["model_override"] == "strong"
+
+    with pytest.raises(ValueError):
+        store.set_session_model_override(session["id"], "gpt-inesistente")
+    store.close()
+
+
+def test_assistant_message_records_the_model_that_answered(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    session = store.create_session()
+
+    created = store.add_message(session["id"], "assistant", "ciao", model="gpt-5.5")
+
+    assert created["model"] == "gpt-5.5"
+    assert store.list_messages(session["id"])[0]["model"] == "gpt-5.5"
+    store.close()
+
+
+def test_messages_without_a_model_stay_none(tmp_path: Path) -> None:
+    """I messaggi anteriori al tracciamento non devono acquisire un modello inventato."""
+    store = make_store(tmp_path)
+    session = store.create_session()
+
+    store.add_message(session["id"], "user", "domanda")
+
+    assert store.list_messages(session["id"])[0]["model"] is None
     store.close()
 
 

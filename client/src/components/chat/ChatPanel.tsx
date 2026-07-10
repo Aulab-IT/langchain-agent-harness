@@ -1,6 +1,13 @@
 import { BrainCircuit, Clock3, MessageSquareText, Sparkles, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import type { Run, RunEvent, RuntimeSkill, SessionDetail, SessionFile } from "../../types";
+import type {
+  ModelOverride,
+  Run,
+  RunEvent,
+  RuntimeSkill,
+  SessionDetail,
+  SessionFile,
+} from "../../types";
 import { deriveToolSteps } from "../../lib/sessionActivity";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessage } from "./ChatMessage";
@@ -20,6 +27,7 @@ export function ChatPanel({
   onTimeline,
   onStop,
   onToggleAutoApprove,
+  onSessionModel,
   className = "",
 }: {
   session: SessionDetail;
@@ -33,6 +41,7 @@ export function ChatPanel({
   onTimeline: () => void;
   onStop: () => void;
   onToggleAutoApprove: (enabled: boolean) => void;
+  onSessionModel: (override: ModelOverride) => void;
   className?: string;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -103,6 +112,14 @@ export function ChatPanel({
   }, [session.messages, events.length, active, liveText]);
 
   const steps = useMemo(() => deriveToolSteps(events), [events]);
+  // Il router dichiara la scelta con `model.selected`; finché non lo fa, non inventiamo nulla.
+  const liveModel = useMemo(() => {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event?.type === "model.selected") return String(event.payload.model ?? "");
+    }
+    return "";
+  }, [events]);
   const visibleMessages = session.messages.filter((message) => message.role !== "system");
   const lastUserIndex = (() => {
     for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
@@ -179,6 +196,11 @@ export function ChatPanel({
             <div className="min-w-0 max-w-[85%] flex-1">
               <div className="mb-1.5 flex items-center gap-2">
                 <strong className="text-sm">Agente</strong>
+                {liveModel ? (
+                  <span className="rounded-full border border-border px-2 py-0.5 font-mono text-xs text-muted">
+                    {liveModel}
+                  </span>
+                ) : null}
                 <span className="rounded-full border border-border px-2 py-0.5 font-mono text-xs text-muted">
                   {showStreaming ? "streaming" : "thinking"}
                 </span>
@@ -213,11 +235,13 @@ export function ChatPanel({
         files={pending}
         skills={skills}
         autoApprove={session.auto_approve}
+        sessionModel={session.model_override}
         onSend={onSend}
         onUpload={onUpload}
         onDeleteFile={onRemovePending}
         onStop={onStop}
         onToggleAutoApprove={onToggleAutoApprove}
+        onSessionModel={onSessionModel}
       />
     </section>
   );

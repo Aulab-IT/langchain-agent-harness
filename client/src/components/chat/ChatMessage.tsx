@@ -5,8 +5,9 @@ import type { Message } from "../../types";
 import { FileIcon } from "../shared/FileIcon";
 import { MarkdownContent } from "./MarkdownContent";
 
-// Nessun badge modello finché il backend non emette `model.selected`: il router può
-// scegliere il modello forte a metà run, e mostrare qui il modello di default mentirebbe.
+// Il badge mostra il modello che ha davvero risposto, registrato dall'evento `model.selected`.
+// I messaggi anteriori a quel tracciamento non hanno `model` e non ricevono badge: meglio
+// nessuna informazione che un'informazione inventata.
 export const ChatMessage = memo(function ChatMessage({
   message,
   sessionId,
@@ -31,6 +32,14 @@ export const ChatMessage = memo(function ChatMessage({
           className={`mb-1.5 flex flex-wrap items-center gap-2 ${isAgent ? "" : "justify-end"}`}
         >
           <strong className="text-sm">{isAgent ? "Agente" : "Tu"}</strong>
+          {isAgent && message.model ? (
+            <span
+              className="rounded-full border border-border px-2 py-0.5 font-mono text-xs text-muted"
+              title="Modello che ha prodotto questa risposta"
+            >
+              {message.model}
+            </span>
+          ) : null}
           <time className="text-xs text-muted">{timeLabel(message.created_at)}</time>
         </div>
         <div

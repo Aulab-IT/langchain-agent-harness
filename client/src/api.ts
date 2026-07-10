@@ -6,6 +6,7 @@ import type {
   ImproveResult,
   ImprovementDetail,
   ImprovementSummary,
+  ModelOverride,
   Run,
   RunEvent,
   PromotionResult,
@@ -120,6 +121,7 @@ const RUN_EVENT_TYPES = [
   "action.resolved",
   "assistant.delta",
   "assistant.iteration",
+  "model.selected",
   "usage.live",
   "usage.snapshot",
   "usage.updated",
@@ -256,6 +258,42 @@ export function runImprove(since: number): Promise<ImproveResult> {
 
 export function listSkills(): Promise<Skill[]> {
   return request("/api/skills");
+}
+
+export function setSessionModelOverride(
+  sessionId: string,
+  override: ModelOverride,
+): Promise<SessionSummary> {
+  return request(`/api/sessions/${sessionId}/model`, {
+    method: "PATCH",
+    body: JSON.stringify({ override }),
+  });
+}
+
+export function getTemplateMemory(): Promise<{ content: string }> {
+  return request("/api/memory");
+}
+
+export function putTemplateMemory(content: string): Promise<{ content: string }> {
+  return request("/api/memory", { method: "PUT", body: JSON.stringify({ content }) });
+}
+
+export function getSessionMemory(sessionId: string): Promise<{ content: string }> {
+  return request(`/api/sessions/${sessionId}/memory`);
+}
+
+export function putSessionMemory(
+  sessionId: string,
+  content: string,
+): Promise<{ content: string }> {
+  return request(`/api/sessions/${sessionId}/memory`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function promoteSessionMemory(sessionId: string): Promise<{ content: string }> {
+  return request(`/api/sessions/${sessionId}/memory/promote`, { method: "POST" });
 }
 
 export function listTools(): Promise<ToolDescriptor[]> {
