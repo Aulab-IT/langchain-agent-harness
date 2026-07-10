@@ -153,6 +153,9 @@ class GoalRunner:
             "configurable": {"thread_id": thread_id},
             "recursion_limit": 200,
         }
+        # Ogni obiettivo riparte dal gradino più economico: l'escalation vale per un obiettivo,
+        # non per la sessione. Un compito difficile non rende caro quello che viene dopo.
+        self.harness.ladder.reset()
         result = await self._invoke_with_approval(
             {"messages": [{"role": "user", "content": clean_goal}]},
             config,
@@ -166,6 +169,10 @@ class GoalRunner:
                 or has_successful_verification(messages)
             )
             feedback = ""
+            # Un punteggio sotto la soglia di uscita fa riprovare; solo un punteggio sotto la
+            # soglia di escalation dice che il gradino non ce la fa. Fra le due, l'agente
+            # riprova con lo stesso modello: costa una iterazione economica invece che una cara.
+            fallimento_netto = not heuristic_ok
             if text and heuristic_ok:
                 grade = await self._grade(clean_goal, text)
                 if grade is None or grade.passed:
@@ -176,6 +183,9 @@ class GoalRunner:
                         messages=messages,
                     )
                 feedback = grade.feedback
+                fallimento_netto = (
+                    grade.score < self.harness.settings.harness_escalation_threshold
+                )
             if iteration == maximum:
                 return RunResult(
                     text=text,
@@ -196,9 +206,20 @@ class GoalRunner:
                     iteration=iteration + 1,
                     maximum=maximum,
                 )
-            # Confine tra iterazioni: la UI accumula i delta di streaming e senza questo
-            # marcatore concatenerebbe la risposta di ogni continuazione a quella precedente.
+            # Il gradino ha fallito nettamente: la continuazione la fa il gradino sopra. È il
+            # cuore dell'escalation: non si prevede la difficoltà, la si misura.
+            salito = self.harness.ladder.escalate() if fallimento_netto else False
             if self.event_callback is not None:
+                if salito:
+                    self.event_callback(
+                        {
+                            "type": "model.escalated",
+                            "tier": self.harness.ladder.current,
+                            "iteration": iteration + 1,
+                        }
+                    )
+                # Confine tra iterazioni: la UI accumula i delta di streaming e senza questo
+                # marcatore concatenerebbe la risposta di ogni continuazione alla precedente.
                 self.event_callback(
                     {"type": "assistant.iteration", "iteration": iteration + 1}
                 )

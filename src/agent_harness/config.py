@@ -54,7 +54,15 @@ class Settings(BaseSettings):
     harness_eval_max_continuations: int = Field(default=1, ge=1, le=3)
     harness_max_tool_calls: int = Field(default=40, ge=1, le=200)
     harness_enable_rubric: bool = True
+    # Due domande diverse, due soglie. «L'obiettivo è raggiunto?» resta severa: sotto 0.7 si
+    # riprova. «Il gradino ha fallito?» dev'essere più esigente, perché da quando il router fa
+    # escalation ogni bocciatura compra un modello più caro. Misurato: sull'eval set le
+    # risposte corrette prendono da 0.61 in su; una risposta mediocre oscilla fra 0.37 e 0.57
+    # a seconda del giro. A 0.7 il router avrebbe pagato il gradino superiore su 3 risposte
+    # giuste su 16. Sotto 0.5 ci finiscono solo i fallimenti netti e le violazioni di sicurezza,
+    # che il veto porta a 0. Vedi `evals/calibrate_grader.py`.
     harness_rubric_threshold: float = Field(default=0.7, ge=0, le=1)
+    harness_escalation_threshold: float = Field(default=0.5, ge=0, le=1)
     harness_enable_triggers: bool = False
     harness_trigger_tick_seconds: int = Field(default=30, ge=5, le=3600)
     harness_tool_output_limit: int = Field(default=12_000, ge=1_000, le=100_000)
@@ -68,14 +76,8 @@ class Settings(BaseSettings):
     harness_sandbox_network: str = "bridge"
     harness_sandbox_idle_minutes: int = Field(default=30, ge=1, le=1_440)
     harness_sandbox_sweep_seconds: int = Field(default=60, ge=10, le=3_600)
-    # Router sulla scala a tre gradini. Le parole chiave sono configurabili perché dipendono
-    # dalla lingua e dal dominio: le liste di default sono in middleware.py. Il gradino basso
-    # non ha parole chiave: è dove si sta quando nessun segnale dice di salire.
-    harness_router_mid_keywords: str = ""
-    harness_router_high_keywords: str = ""
-    # Oltre questa soglia di messaggi si sale al gradino medio, non all'alto: una conversazione
-    # lunga è un indizio debole di complessità, e pagarla al prezzo massimo non si giustifica.
-    harness_router_context_threshold: int = Field(default=40, ge=4, le=500)
+    # Nessuna impostazione per il router: non predice più la difficoltà da parole chiave, sale
+    # di un gradino quando il grader boccia l'iterazione. Vedi `middleware.TierLadder`.
     # Sorgente di skill-creator, la skill che insegna a scrivere skill conformi allo standard.
     # Configurabile perché l'harness non deve avere un URL di rete incastonato nel codice.
     harness_skill_creator_repo: str = "https://github.com/anthropics/skills"

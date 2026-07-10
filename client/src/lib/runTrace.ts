@@ -154,6 +154,13 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         subject: asTraceText(payload.model),
         tone: "info",
       };
+    case "model.escalated":
+      return {
+        title: `Gradino superiore: ${asTraceText(payload.tier) ?? "?"}`,
+        detail: "L'iterazione precedente non ha superato il criterio di uscita.",
+        subject: asTraceText(payload.tier),
+        tone: "warning",
+      };
     case "assistant.iteration":
       return {
         title: `Iterazione ${asTraceText(payload.iteration) ?? "?"}`,

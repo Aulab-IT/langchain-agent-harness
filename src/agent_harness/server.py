@@ -595,6 +595,7 @@ class RunManager:
                 "grader.completed",
                 "usage.snapshot",
                 "assistant.iteration",
+                "model.escalated",
             }:
                 self._emit(run_id, session_id, event_type, event)
 

@@ -5,7 +5,7 @@ import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -32,11 +32,10 @@ from agent_harness.improve import (
     resolve_runtime_overrides,
 )
 from agent_harness.middleware import (
-    DEFAULT_HIGH_KEYWORDS,
-    DEFAULT_MID_KEYWORDS,
     TIERS,
     Override,
     Tier,
+    TierLadder,
     TierModel,
     build_model_router,
 )
@@ -50,6 +49,8 @@ class Harness:
     graph: Any
     settings: Settings
     tools: list[BaseTool]
+    # La scala dei modelli del run: il router la legge, `GoalRunner` la fa salire.
+    ladder: TierLadder = field(default_factory=TierLadder)
     grader: RubricGrader | None = None
     config_arm: str = "baseline"
     config_fingerprint: str = ""
@@ -190,10 +191,6 @@ async def tool_catalog(settings: Settings) -> list[dict[str, Any]]:
         catalog.extend(_describe(tool, "mcp:local_harness") for tool in mcp)
         _TOOL_CATALOG = catalog
         return catalog
-
-
-def _keywords(raw: str) -> tuple[str, ...]:
-    return tuple(word.strip().casefold() for word in raw.split(",") if word.strip())
 
 
 @dataclass(frozen=True)
@@ -422,15 +419,12 @@ async def build_harness(
                 f"openai:{spec.name}",
                 HarnessProfile(excluded_tools=frozenset({"execute"})),
             )
+        ladder = TierLadder()
         middleware: list[AgentMiddleware[Any, Any, Any]] = [
             build_model_router(
                 tiers,
+                ladder,
                 session_override=model_override,
-                high_keywords=_keywords(settings.harness_router_high_keywords)
-                or DEFAULT_HIGH_KEYWORDS,
-                mid_keywords=_keywords(settings.harness_router_mid_keywords)
-                or DEFAULT_MID_KEYWORDS,
-                context_threshold=settings.harness_router_context_threshold,
                 event_callback=event_callback,
             ),
             AuditMiddleware(
@@ -464,6 +458,7 @@ async def build_harness(
             graph=graph,
             settings=settings,
             tools=tools,
+            ladder=ladder,
             grader=grader,
             config_arm=selection.arm,
             config_fingerprint=selection.fingerprint,

@@ -145,6 +145,7 @@ const RUN_EVENT_TYPES = [
   "assistant.delta",
   "assistant.iteration",
   "model.selected",
+  "model.escalated",
   "usage.live",
   "usage.snapshot",
   "usage.updated",

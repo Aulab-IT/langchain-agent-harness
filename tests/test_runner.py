@@ -5,6 +5,7 @@ import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langgraph.types import Interrupt
 
+from agent_harness.middleware import TierLadder
 from agent_harness.runner import GoalRunner, final_text
 from agent_harness.verification import GradeResult
 
@@ -41,10 +42,20 @@ class FakeStreamingGraph:
         yield "values", {"messages": [AIMessage(content="Ciao")]}
 
 
-def fake_harness(graph: FakeGraph, continuations: int = 3, grader: Any = None) -> Any:
+def fake_harness(
+    graph: FakeGraph,
+    continuations: int = 3,
+    grader: Any = None,
+    escalation_threshold: float = 0.5,
+) -> Any:
     return SimpleNamespace(
         graph=graph,
-        settings=SimpleNamespace(harness_max_continuations=continuations),
+        settings=SimpleNamespace(
+            harness_max_continuations=continuations,
+            harness_escalation_threshold=escalation_threshold,
+        ),
+        # Il runner fa salire la scala quando un'iterazione non supera il criterio di uscita.
+        ladder=TierLadder(),
         grader=grader,
     )
 
@@ -261,3 +272,136 @@ async def test_empty_goal_is_rejected() -> None:
     graph = FakeGraph([])
     with pytest.raises(ValueError):
         await GoalRunner(fake_harness(graph)).run(" ", thread_id="t-4")
+
+@pytest.mark.asyncio
+async def test_a_failed_iteration_climbs_the_ladder_and_announces_it() -> None:
+    """Il cuore dell'escalation: non si prevede la difficoltà, la si misura."""
+    graph = FakeGraph(
+        [
+            {"messages": [AIMessage(content="Tentativo debole. [GOAL_COMPLETE]")]},
+            {"messages": [AIMessage(content="Ora è giusta. [GOAL_COMPLETE]")]},
+        ]
+    )
+    grader = FakeGrader(
+        [
+            GradeResult(passed=False, score=0.4, feedback="Manca la verifica."),
+            GradeResult(passed=True, score=0.9, feedback=""),
+        ]
+    )
+    harness = fake_harness(graph, 2, grader)
+    eventi: list[dict[str, object]] = []
+
+    result = await GoalRunner(harness, event_callback=eventi.append).run(
+        "Rispondi", thread_id="esc-1"
+    )
+
+    assert result.completed is True
+    assert harness.ladder.current == "mid"
+    salite = [e for e in eventi if e["type"] == "model.escalated"]
+    assert salite == [{"type": "model.escalated", "tier": "mid", "iteration": 2}]
+
+
+@pytest.mark.asyncio
+async def test_a_borderline_score_retries_on_the_same_rung_instead_of_paying_more() -> None:
+    """Fra la soglia di uscita (0.7) e quella di escalation (0.5) si riprova, non si sale.
+
+    Misurato sull'eval set: 3 risposte corrette su 16 prendono fra 0.61 e 0.67. Salire su
+    ognuna significherebbe comprare il modello caro per un lavoro già fatto bene.
+    """
+    graph = FakeGraph(
+        [
+            {"messages": [AIMessage(content="Quasi. [GOAL_COMPLETE]")]},
+            {"messages": [AIMessage(content="Ecco. [GOAL_COMPLETE]")]},
+        ]
+    )
+    grader = FakeGrader(
+        [
+            GradeResult(passed=False, score=0.65, feedback="Manca un dettaglio."),
+            GradeResult(passed=True, score=0.9, feedback=""),
+        ]
+    )
+    harness = fake_harness(graph, 2, grader)
+    eventi: list[dict[str, object]] = []
+
+    result = await GoalRunner(harness, event_callback=eventi.append).run("x", thread_id="bord")
+
+    assert result.completed is True
+    assert result.iterations == 2
+    assert harness.ladder.current == "low"
+    assert not [e for e in eventi if e["type"] == "model.escalated"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_environment_verification_climbs_even_without_a_grade() -> None:
+    """Il criterio di uscita ha due gambe: il grader e la verifica riuscita nella sandbox."""
+    graph = FakeGraph(
+        [
+            {"messages": [AIMessage(content="Ho scritto il file.")]},
+            {"messages": [AIMessage(content="Ora verificato.")]},
+        ]
+    )
+    harness = fake_harness(graph, 2, grader=None)
+    eventi: list[dict[str, object]] = []
+
+    # "Scrivi" attiva `requires_environment_verification`, e nessun ToolMessage docker_exec
+    # con exit_code=0 compare fra i messaggi: la verifica non è riuscita.
+    await GoalRunner(harness, event_callback=eventi.append).run(
+        "Scrivi /workspace/x.txt", thread_id="verif"
+    )
+
+    assert harness.ladder.current == "mid"
+    assert [e["tier"] for e in eventi if e["type"] == "model.escalated"] == ["mid"]
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_passes_first_time_never_leaves_the_cheapest_tier() -> None:
+    graph = FakeGraph([{"messages": [AIMessage(content="Giusta subito. [GOAL_COMPLETE]")]}])
+    grader = FakeGrader([GradeResult(passed=True, score=0.9, feedback="")])
+    harness = fake_harness(graph, 3, grader)
+    eventi: list[dict[str, object]] = []
+
+    await GoalRunner(harness, event_callback=eventi.append).run("Rispondi", thread_id="esc-2")
+
+    assert harness.ladder.current == "low"
+    assert not [e for e in eventi if e["type"] == "model.escalated"]
+
+
+@pytest.mark.asyncio
+async def test_the_ladder_does_not_climb_past_the_top() -> None:
+    """Con tre iterazioni fallite si arriva a `high` e ci si resta: non esiste un quarto gradino."""
+    graph = FakeGraph([{"messages": [AIMessage(content=f"Tentativo {i}.")]} for i in range(4)])
+    grader = FakeGrader([GradeResult(passed=False, score=0.2, feedback="no") for _ in range(4)])
+    harness = fake_harness(graph, 4, grader)
+    eventi: list[dict[str, object]] = []
+
+    result = await GoalRunner(harness, event_callback=eventi.append).run("x", thread_id="esc-3")
+
+    assert result.completed is False
+    assert harness.ladder.current == "high"
+    assert [e["tier"] for e in eventi if e["type"] == "model.escalated"] == ["mid", "high"]
+
+
+@pytest.mark.asyncio
+async def test_a_second_goal_starts_again_from_the_bottom() -> None:
+    graph = FakeGraph(
+        [
+            {"messages": [AIMessage(content="a")]},
+            {"messages": [AIMessage(content="b. [GOAL_COMPLETE]")]},
+            {"messages": [AIMessage(content="c. [GOAL_COMPLETE]")]},
+        ]
+    )
+    grader = FakeGrader(
+        [
+            GradeResult(passed=False, score=0.3, feedback="no"),
+            GradeResult(passed=True, score=0.9, feedback=""),
+            GradeResult(passed=True, score=0.9, feedback=""),
+        ]
+    )
+    harness = fake_harness(graph, 2, grader)
+    runner = GoalRunner(harness)
+
+    await runner.run("primo obiettivo difficile", thread_id="esc-4")
+    assert harness.ladder.current == "mid"
+
+    await runner.run("secondo obiettivo facile", thread_id="esc-4")
+    assert harness.ladder.current == "low"

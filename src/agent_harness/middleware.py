@@ -1,22 +1,32 @@
 """Instradamento su una scala di tre gradini di costo crescente.
 
-Il router precedente decideva sull'ultimo messaggio della lista, che durante un turno è quasi
-sempre un `ToolMessage`: l'output di un tool contenente la parola "refactor" faceva scattare il
-modello forte. E la soglia sulla lunghezza (`len(messages) > 24`) era a senso unico, perché il
-numero di messaggi non diminuisce mai: superata una volta, il modello forte restava scelto per
-sempre. Nessuna isteresi può rimediare a una grandezza monotona.
+Storia breve di questo file, perché spiega la forma che ha adesso.
 
-Qui la decisione si prende sull'ultimo messaggio **umano** — l'unica cosa che esprima davvero
-l'intento — e resta stabile per tutto il turno che quel messaggio ha aperto. È questa la
-stabilità che serve: dentro un turno `messages[-1]` continua a cambiare fra `AIMessage` e
-`ToolMessage`, e una decisione ricalcolata a ogni giro farebbe oscillare il modello a metà
-ragionamento.
+Il primo router decideva sull'ultimo messaggio della lista, che durante un turno è quasi sempre
+un `ToolMessage`: l'output di un tool contenente la parola "refactor" faceva scattare il modello
+caro. E la soglia sulla lunghezza (`len(messages) > 24`) era a senso unico, perché il numero di
+messaggi non diminuisce mai.
 
-La scala ha tre gradini, e la regola di costo è una sola: **si sta in basso finché qualcosa non
-dice di salire.** Non esistono parole chiave per il gradino basso, perché è il luogo di riposo.
-Un segnale debole (conversazione lunga) fa salire di un gradino, non di due.
+Il secondo leggeva l'ultimo messaggio **umano** e cercava parole chiave. Meglio, ma restava un
+*predittore*: guardava la richiesta e scommetteva sulla difficoltà, prima che succedesse
+qualcosa. Sbagliava in due modi — saliva su richieste banali che contenevano una parola cara, e
+restava in basso su richieste difficili scritte in una lingua che le liste non coprivano.
+Misurato: `analyze the csv file` restava in basso, `analizza il csv` saliva.
 
-L'utente può sempre scavalcare la scelta, per sessione o per singolo messaggio.
+Questo non predice. **Parte dal gradino più basso e sale solo quando il gradino ha fallito.**
+Il segnale non è una parola, è il grader: se la risposta non supera il criterio di uscita, la
+continuazione riparte un gradino sopra. Non ci sono liste di parole, quindi non c'è nessuna
+lingua privilegiata; e non si paga il modello caro per una richiesta che il modello economico
+avrebbe risolto, perché prima gli si lascia provare.
+
+Costa una iterazione in più sui compiti difficili. Costava cinque volte tanto su quelli facili
+che contenevano la parola sbagliata.
+
+La decisione resta congelata per tutto il turno aperto da un messaggio umano: dentro un turno
+`messages[-1]` alterna fra `AIMessage` e `ToolMessage`, e ricalcolare a ogni chiamata farebbe
+oscillare il modello a metà ragionamento.
+
+L'utente può sempre scavalcare la scelta, per sessione o con un marcatore nel messaggio.
 """
 
 from __future__ import annotations
@@ -43,15 +53,14 @@ TIERS: tuple[Tier, ...] = ("low", "mid", "high")
 # Etichette italiane usate in interfaccia e nel marcatore di messaggio.
 TIER_LABELS: dict[Tier, str] = {"low": "basso", "mid": "medio", "high": "alto"}
 
-# Marcatore che il composer aggiunge al messaggio quando l'utente forza un gradino. È in
-# chiaro nel testo: l'utente vede esattamente cosa ha chiesto, nulla entra nel prompt di
-# nascosto. Vedi `client/src/lib/modelOverride.ts`.
+# Marcatore che l'utente può scrivere a mano nel testo per forzare un gradino. È in chiaro:
+# nulla entra nel prompt di nascosto. `base` e `forte` sopravvivono come alias della vecchia
+# scala binaria — sono già dentro i messaggi salvati e nei checkpoint, e smettere di capirli
+# non li toglierebbe da lì.
 _MESSAGE_OVERRIDE = re.compile(
     r"\[modello:\s*(basso|medio|alto|low|mid|high|base|forte|default|strong)\]",
     re.IGNORECASE,
 )
-# `base` e `forte` sopravvivono come alias della vecchia scala binaria: sono già scritti nei
-# messaggi salvati e nei checkpoint, e riscriverli sarebbe riscrivere la storia della chat.
 _OVERRIDE_ALIASES: dict[str, Tier] = {
     "basso": "low",
     "low": "low",
@@ -65,47 +74,12 @@ _OVERRIDE_ALIASES: dict[str, Tier] = {
     "strong": "high",
 }
 
-# Il gradino alto costa cinque volte il basso in input e cinque in output. Ci si sale solo se la
-# richiesta *dichiara* complessità strutturale. Parole troppo comuni ("design", "prove", "test")
-# sono escluse di proposito: una falsa corrispondenza qui è la voce di spesa più cara del sistema.
-DEFAULT_HIGH_KEYWORDS = (
-    "complesso",
-    "complessa",
-    "architettura",
-    "approfondito",
-    "approfondita",
-    "refactor",
-    "multi-file",
-    "dimostra",
-    "complex",
-    "architecture",
-    "in depth",
-    "thorough",
-)
-
-# Il gradino medio costa due volte e mezza il basso. Ci si sale per lavoro nell'ambiente o su più
-# fonti: cose che il gradino basso sbaglia abbastanza spesso da rendere il risparmio illusorio,
-# perché una risposta sbagliata si paga con un'altra iterazione.
-DEFAULT_MID_KEYWORDS = (
-    "confronta",
-    "verifica",
-    "debug",
-    "analizza",
-    "riscrivi",
-    "ottimizza",
-    "spiega perché",
-    "compare",
-    "investigate",
-    "optimi",
-    "explain why",
-)
-
 
 @dataclass(frozen=True)
 class RouteDecision:
     tier: Tier
     reason: str
-    source: Literal["message_override", "session_override", "keyword", "context_size", "default"]
+    source: Literal["message_override", "session_override", "escalation", "default"]
 
 
 @dataclass(frozen=True)
@@ -115,6 +89,29 @@ class TierModel:
     name: str
     effort: str
     model: BaseChatModel
+
+
+class TierLadder:
+    """Il gradino corrente del run, condiviso fra `GoalRunner` e il router.
+
+    Muta in un punto solo — `escalate()`, chiamato dal runner quando l'iterazione non ha
+    superato il criterio di uscita — e si azzera all'inizio di ogni obiettivo.
+    """
+
+    def __init__(self, start: Tier = "low") -> None:
+        self._start: Tier = start
+        self.current: Tier = start
+
+    def reset(self) -> None:
+        self.current = self._start
+
+    def escalate(self) -> bool:
+        """Sale di un gradino. False se era già in cima: non c'è dove salire."""
+        index = TIERS.index(self.current)
+        if index == len(TIERS) - 1:
+            return False
+        self.current = TIERS[index + 1]
+        return True
 
 
 def _last_human(messages: Sequence[BaseMessage]) -> BaseMessage | None:
@@ -139,17 +136,14 @@ def _text(message: BaseMessage) -> str:
 
 def decide_tier(
     messages: Sequence[BaseMessage],
+    ladder: TierLadder,
     *,
     session_override: Override = "auto",
-    high_keywords: tuple[str, ...] = DEFAULT_HIGH_KEYWORDS,
-    mid_keywords: tuple[str, ...] = DEFAULT_MID_KEYWORDS,
-    context_threshold: int = 40,
 ) -> RouteDecision:
     """Sceglie il gradino per il turno aperto dall'ultimo messaggio umano.
 
-    L'ordine è di precedenza crescente di autorità: il contesto è il segnale più debole, la
-    richiesta esplicita dell'utente sul singolo messaggio è la più forte. A parità di segnali
-    si sceglie il gradino più basso.
+    Precedenza crescente di autorità: il gradino raggiunto per escalation è il default, la
+    sessione lo scavalca, il marcatore nel messaggio scavalca tutto.
     """
     human = _last_human(messages)
     text = _text(human).casefold() if human is not None else ""
@@ -162,37 +156,27 @@ def decide_tier(
     if session_override != "auto":
         return RouteDecision(session_override, "impostato per questa sessione", "session_override")
 
-    matched = next((word for word in high_keywords if word in text), None)
-    if matched:
-        return RouteDecision("high", f"la richiesta contiene «{matched}»", "keyword")
-
-    matched = next((word for word in mid_keywords if word in text), None)
-    if matched:
-        return RouteDecision("mid", f"la richiesta contiene «{matched}»", "keyword")
-
-    if len(messages) > context_threshold:
-        # Un solo gradino: la lunghezza è un indizio debole, e il salto al gradino alto
-        # quintuplicherebbe il costo di ogni turno successivo per un sospetto.
+    if ladder.current != "low":
         return RouteDecision(
-            "mid", f"conversazione lunga ({len(messages)} messaggi)", "context_size"
+            ladder.current,
+            "il gradino precedente non ha superato il criterio di uscita",
+            "escalation",
         )
 
-    return RouteDecision("low", "richiesta ordinaria", "default")
+    return RouteDecision("low", "primo tentativo, gradino più economico", "default")
 
 
 def build_model_router(
     tiers: dict[Tier, TierModel],
+    ladder: TierLadder,
     *,
     session_override: Override = "auto",
-    high_keywords: tuple[str, ...] = DEFAULT_HIGH_KEYWORDS,
-    mid_keywords: tuple[str, ...] = DEFAULT_MID_KEYWORDS,
-    context_threshold: int = 40,
     event_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> AgentMiddleware[Any, Any, Any]:
     """Instrada sulla scala e dichiara la scelta con un evento `model.selected`."""
 
-    # La decisione si ricalcola solo quando cambia il messaggio umano in coda: dentro un turno
-    # resta congelata, e l'evento non si ripete a ogni chiamata al modello.
+    # La decisione si ricalcola solo quando cambia il messaggio umano in coda, o quando il
+    # gradino è salito: dentro un turno resta congelata e l'evento non si ripete.
     state: dict[str, str | None] = {"turn": None}
 
     @wrap_model_call
@@ -204,17 +188,12 @@ def build_model_router(
         human = _last_human(messages)
         turn_key = "" if human is None else human.id or _text(human)[:120]
 
-        decision = decide_tier(
-            messages,
-            session_override=session_override,
-            high_keywords=high_keywords,
-            mid_keywords=mid_keywords,
-            context_threshold=context_threshold,
-        )
+        decision = decide_tier(messages, ladder, session_override=session_override)
         chosen = tiers[decision.tier]
+        fingerprint = f"{turn_key}|{decision.tier}"
 
-        if event_callback is not None and state["turn"] != turn_key:
-            state["turn"] = turn_key
+        if event_callback is not None and state["turn"] != fingerprint:
+            state["turn"] = fingerprint
             event_callback(
                 {
                     "type": "model.selected",

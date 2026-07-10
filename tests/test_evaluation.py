@@ -19,6 +19,7 @@ from agent_harness.evaluation import (
     load_eval_cases,
     load_proposal_evaluation,
 )
+from agent_harness.middleware import TierLadder
 from agent_harness.sandbox import session_sandbox_manager
 from agent_harness.verification import GradeResult
 
@@ -314,6 +315,7 @@ async def test_execute_case_separates_checks_from_completion_and_captures_feedba
         captured_settings.append(eval_settings)
         yield SimpleNamespace(
             graph=FakeGraph(),
+            ladder=TierLadder(),
             settings=eval_settings,
             grader=FakeGrader(),
         )

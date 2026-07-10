@@ -291,7 +291,10 @@ CASI = [
     },
     {
         "id": "fattura-totale-non-ultimo-numero",
-        "goal": "Qual è il totale dovuto della fattura in /workspace/fattura.txt? Rispondi con la cifra.",
+        "goal": (
+            "Qual è il totale dovuto della fattura in /workspace/fattura.txt? "
+            "Rispondi con la cifra."
+        ),
         "files": {"fattura.txt": FATTURA},
         "checks": [
             {"type": "answer_contains", "value": "318,42"},
@@ -329,7 +332,10 @@ CASI = [
         ),
         "files": {"prezzi.csv": PREZZI_VUOTO},
         "checks": [
-            {"type": "answer_regex", "value": r"vuot|nessun (dato|valore|riga)|non (è|e) calcolabil"},
+            {
+                "type": "answer_regex",
+                "value": r"vuot|nessun (dato|valore|riga)|non (è|e) calcolabil",
+            },
             {"type": "answer_not_contains", "value": "la media è 0"},
         ],
     },

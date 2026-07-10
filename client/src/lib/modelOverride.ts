@@ -69,7 +69,7 @@ export function modelLabel(
 
 /** A cosa serve ciascun gradino, nelle parole con cui il router lo sceglie. */
 export const OVERRIDE_PURPOSE: Record<ModelOverride, string> = {
-  auto: "Sceglie il router a ogni messaggio, e resta sul gradino basso finché la richiesta non chiede di salire.",
+  auto: "Parte dal gradino basso. Se la risposta non supera il criterio di uscita, il tentativo successivo sale di un gradino.",
   low: "Richieste ordinarie: domande dirette, testi brevi, calcoli.",
   mid: "Lavoro sui file, verifiche nella sandbox, confronti fra fonti.",
   high: "Architettura, refactor, problemi dichiaratamente complessi.",

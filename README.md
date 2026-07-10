@@ -134,20 +134,48 @@ beneficio, e la coppia inversa spende reasoning su un modello che non lo sfrutta
 | medio | `gpt-5.6-terra` | `medium` | 2,50 | 15 |
 | alto | `gpt-5.6-sol` | `high` | 5 | 30 |
 
-La regola di costo è una sola: **si resta in basso finché qualcosa non dice di salire.** Il
-gradino basso non ha parole chiave, perché è il luogo di riposo. Le parole del gradino medio
-(`analizza`, `verifica`, `confronta`, `debug`…) indicano lavoro nell'ambiente, dove una risposta
-sbagliata costa un'altra iterazione e il risparmio diventa illusorio. Quelle del gradino alto
-(`architettura`, `refactor`, `complesso`…) indicano complessità strutturale. Una conversazione
-lunga fa salire di **un solo** gradino: è un indizio debole, e pagarlo cinque volte tanto non si
-giustifica.
+**Il router non prevede la difficoltà: la misura.** Ogni obiettivo parte dal gradino basso. Se
+l'iterazione fallisce nettamente — il grader dà meno di `HARNESS_ESCALATION_THRESHOLD`, oppure
+la verifica nella sandbox non riesce — la continuazione riparte un gradino sopra. Non ci sono
+liste di parole chiave, quindi nessuna lingua è privilegiata: `analyze the csv file` e
+`analizza il csv` si comportano allo stesso modo. E non si paga il modello caro per una
+richiesta che quello economico avrebbe risolto, perché prima gli si lascia provare.
+
+Le soglie sono **due**, perché le domande sono due:
+
+| Soglia | Default | Domanda | Se non è soddisfatta |
+|---|---|---|---|
+| `HARNESS_RUBRIC_THRESHOLD` | 0,70 | L'obiettivo è raggiunto? | L'agente riprova |
+| `HARNESS_ESCALATION_THRESHOLD` | 0,50 | Questo gradino ce la fa? | Il router sale di un gradino |
+
+Fra le due, l'agente riprova **con lo stesso modello**: un secondo tentativo economico invece di
+uno caro. Misurato sull'eval set: tre risposte corrette su sedici prendono fra 0,61 e 0,67, e
+salire su ognuna significherebbe comprare il modello caro per un lavoro già fatto bene.
+
+Costa un'iterazione in più sui compiti difficili. Il router precedente costava cinque volte
+tanto su quelli facili che contenevano la parola sbagliata.
+
+L'escalation vale per un obiettivo, non per la sessione: il messaggio successivo riparte dal
+basso. Il pulsante nel composer fissa un gradino e spegne l'automatismo; un marcatore
+`[Modello: alto]` scritto a mano nel testo scavalca anche quello.
 
 Il grader a rubrica, il subagent revisore e il ricercatore non arrivano mai al gradino alto: il
 primo gira una volta per iterazione, l'ultimo a ogni ricerca. All'alto ci arriva soltanto
-l'agente principale, e solo se il router o l'utente lo chiedono.
+l'agente principale.
 
-Tutto è configurabile senza toccare il codice: `OPENAI_MODEL_LOW|MID|HIGH`,
-`OPENAI_EFFORT_LOW|MID|HIGH`, `HARNESS_ROUTER_MID_KEYWORDS`, `HARNESS_ROUTER_HIGH_KEYWORDS`.
+Modelli, reasoning effort e prezzi si configurano da `.env`: `OPENAI_MODEL_LOW|MID|HIGH`,
+`OPENAI_EFFORT_LOW|MID|HIGH`, `OPENAI_PRICE_IN|OUT_LOW|MID|HIGH`.
+
+### Valutare prima di fidarsi
+
+```bash
+uv run harness eval --repeat 3            # ogni caso tre volte: un caso che passa 2/3 è instabile
+uv run python evals/calibrate_grader.py   # il grader separa le risposte buone dalle cattive?
+```
+
+Il secondo comando è il prerequisito del primo. L'escalation del router si regge sul grader: se
+il grader non discrimina, l'escalation eredita il rumore. Il criterio è `max(cattive) <
+min(buone)`, e lo script esce con codice diverso da zero se le due nuvole si sovrappongono.
 
 ## Capacità dell'agente
 
