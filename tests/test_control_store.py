@@ -1,8 +1,10 @@
+import shutil
+import threading
 from pathlib import Path
 
 import pytest
 
-from agent_harness.config import Settings
+from agent_harness.config import SKILLS_LOCK, Settings
 from agent_harness.control_store import ControlStore
 
 
@@ -61,6 +63,111 @@ def test_messages_without_a_model_stay_none(tmp_path: Path) -> None:
     store.add_message(session["id"], "user", "domanda")
 
     assert store.list_messages(session["id"])[0]["model"] is None
+    store.close()
+
+
+def test_both_databases_use_wal(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+
+    mode = store._connection.execute("PRAGMA journal_mode").fetchone()[0]
+    timeout = store._connection.execute("PRAGMA busy_timeout").fetchone()[0]
+
+    assert mode.lower() == "wal"
+    assert timeout > 0
+    store.close()
+
+
+def test_two_sessions_writing_events_in_parallel_do_not_lock_the_database(
+    tmp_path: Path,
+) -> None:
+    """Due sessioni che scrivono e leggono insieme non si disturbano.
+
+    Nota su cosa questo test *non* dimostra: `ControlStore` condivide una sola connessione
+    protetta da un `RLock`, quindi dentro un processo gli accessi sono già serializzati e il
+    test passa anche senza WAL (verificato disattivandolo). WAL e `busy_timeout` servono al
+    caso multi-processo — server e CLI aperti insieme sullo stesso `control.sqlite` — e sono
+    verificati da `test_both_databases_use_wal`.
+    """
+    store = make_store(tmp_path)
+    sessions = [store.create_session(f"s{index}") for index in range(2)]
+    runs = [store.create_run(session["id"]) for session in sessions]
+    errors: list[Exception] = []
+
+    def writer(index: int) -> None:
+        try:
+            for step in range(60):
+                store.add_event(
+                    runs[index]["id"], sessions[index]["id"], "tool.started", {"n": step}
+                )
+        except Exception as exc:
+            errors.append(exc)
+
+    def reader(index: int) -> None:
+        try:
+            for _ in range(60):
+                store.list_events(runs[index]["id"])
+                store.get_run(runs[index]["id"])
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [
+        *(threading.Thread(target=writer, args=(index,)) for index in range(2)),
+        *(threading.Thread(target=reader, args=(index,)) for index in range(2)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    for index in range(2):
+        assert len(store.list_events(runs[index]["id"])) == 60
+    store.close()
+
+
+def test_session_root_preparation_is_safe_while_a_skill_is_being_installed(
+    tmp_path: Path,
+) -> None:
+    """La gara vera: una sessione copia `skills/` mentre un'altra scrittura lo sta rifacendo.
+
+    Senza `SKILLS_LOCK`, `copytree` incontra una cartella che `install_skill` ha appena
+    cancellato e sta ricreando, e solleva `FileNotFoundError`.
+    """
+    store = make_store(tmp_path)
+    sessions = [store.create_session(f"s{index}") for index in range(3)]
+    errors: list[Exception] = []
+    stop = threading.Event()
+
+    def churn() -> None:
+        # Imita `_finalize_install`: rmtree della cartella skill, poi ricreazione.
+        source = tmp_path / "skills" / "research"
+        while not stop.is_set():
+            try:
+                with SKILLS_LOCK:
+                    shutil.rmtree(source, ignore_errors=True)
+                    source.mkdir(parents=True, exist_ok=True)
+                    (source / "SKILL.md").write_text("# Research\n")
+            except Exception as exc:
+                errors.append(exc)
+
+    def prepare(session_id: str) -> None:
+        try:
+            for _ in range(30):
+                store.prepare_session_root(session_id)
+        except Exception as exc:
+            errors.append(exc)
+
+    writer = threading.Thread(target=churn, daemon=True)
+    writer.start()
+    readers = [threading.Thread(target=prepare, args=(item["id"],)) for item in sessions]
+    for thread in readers:
+        thread.start()
+    for thread in readers:
+        thread.join()
+    stop.set()
+    writer.join(timeout=5)
+
+    assert errors == []
     store.close()
 
 

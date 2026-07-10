@@ -14,6 +14,7 @@ from typing import Annotated, Any, Literal
 
 import uvicorn
 from fastapi import Body, FastAPI, Header, HTTPException, Query, Request, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -106,6 +107,16 @@ _ALLOWED_UPLOADS = {
     ".zip",
 }
 _MAX_UPLOAD_SIZE = 25 * 1024 * 1024
+# Tipi che il browser rende senza poterli eseguire. Immagini raster e PDF: nient'altro.
+# `.svg` e `.html` sono documenti attivi e non compaiono qui — vedi `preview_file`.
+INLINE_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".pdf": "application/pdf",
+}
 _ALLOWED_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}
 
 settings = Settings()
@@ -1096,7 +1107,10 @@ async def stream_run_events(
         cursor = after
         idle_ticks = 0
         while True:
-            events = store.list_events(run_id, after_id=cursor)
+            # SQLite è sincrono: eseguirlo qui bloccherebbe l'event loop quattro volte al
+            # secondo per ogni stream aperto, e con due sessioni attive lo streaming di una
+            # si fermerebbe durante le query dell'altra.
+            events = await run_in_threadpool(store.list_events, run_id, after_id=cursor)
             if events:
                 idle_ticks = 0
                 for event in events:
@@ -1104,7 +1118,7 @@ async def stream_run_events(
                     yield f"id: {cursor}\nevent: {event['type']}\ndata: {json.dumps(event)}\n\n"
             else:
                 idle_ticks += 1
-            run = store.get_run(run_id)
+            run = await run_in_threadpool(store.get_run, run_id)
             if run["status"] in _TERMINAL_RUN_STATES and not events:
                 break
             if idle_ticks >= 40:
@@ -1599,12 +1613,49 @@ async def upload_file(session_id: str, file: UploadFile) -> dict[str, Any]:
     }
 
 
+@app.get("/api/sessions/{session_id}/preview/{file_path:path}")
+async def preview_file(session_id: str, file_path: str) -> FileResponse:
+    """Serve un file inline, solo per i tipi che il browser non può trasformare in codice.
+
+    `svg` e `html` sono deliberatamente esclusi. Sono file che l'agente può scrivere, e
+    servirli inline su questa origine significherebbe eseguire script che l'agente controlla
+    nel contesto dell'API: cookie, token e ogni endpoint diventerebbero raggiungibili. Restano
+    scaricabili da `/files/`, che forza sempre l'allegato.
+
+    Il Content-Type viene derivato dall'estensione e mai indovinato dal contenuto: `nosniff`
+    impedisce al browser di riconsiderare la nostra decisione.
+    """
+    _require_session(session_id)
+    target = _safe_workspace_path(session_id, file_path)
+    if not target.is_file() or target.is_symlink():
+        raise HTTPException(status_code=404, detail="File non trovato.")
+    media_type = INLINE_MEDIA_TYPES.get(target.suffix.lower())
+    if media_type is None:
+        raise HTTPException(
+            status_code=415,
+            detail="Anteprima non disponibile per questo tipo: scarica il file.",
+        )
+    return FileResponse(
+        target,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": "inline",
+            "X-Content-Type-Options": "nosniff",
+            # Difesa in profondità: anche se un tipo pericoloso arrivasse qui per errore, il
+            # documento non può caricare nulla né eseguire script.
+            "Content-Security-Policy": "default-src 'none'; img-src 'self'; object-src 'none'",
+        },
+    )
+
+
 @app.get("/api/sessions/{session_id}/files/{file_path:path}")
 async def download_file(session_id: str, file_path: str) -> FileResponse:
     _require_session(session_id)
     target = _safe_workspace_path(session_id, file_path)
     if not target.is_file() or target.is_symlink():
         raise HTTPException(status_code=404, detail="File non trovato.")
+    # `filename=` impone Content-Disposition: attachment. Vale per ogni tipo, svg e html
+    # compresi: da qui non si serve mai nulla inline.
     return FileResponse(target, filename=target.name)
 
 

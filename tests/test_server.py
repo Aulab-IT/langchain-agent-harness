@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, ToolMessage
 
@@ -113,6 +114,58 @@ def test_promoting_an_empty_memory_is_refused(client: TestClient) -> None:
     client.put(f"/api/sessions/{session['id']}/memory", json={"content": "   \n"})
 
     assert client.post(f"/api/sessions/{session['id']}/memory/promote").status_code == 422
+
+
+def _upload(client: TestClient, session_id: str, name: str, data: bytes) -> None:
+    response = client.post(
+        f"/api/sessions/{session_id}/files",
+        files={"file": (name, data, "application/octet-stream")},
+    )
+    assert response.status_code == 201, response.text
+
+
+def test_preview_serves_images_inline_with_a_type_it_chose_itself(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={"title": "Anteprima"}).json()
+    _upload(client, session["id"], "grafico.png", b"\x89PNG\r\n\x1a\n fake")
+
+    response = client.get(f"/api/sessions/{session['id']}/preview/grafico.png")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["content-disposition"] == "inline"
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_preview_refuses_svg_and_html_because_they_are_executable_documents(
+    client: TestClient,
+) -> None:
+    session = client.post("/api/sessions", json={"title": "Anteprima"}).json()
+    _upload(client, session["id"], "x.svg", b"<svg onload='alert(1)'></svg>")
+    _upload(client, session["id"], "x.html", b"<script>alert(1)</script>")
+
+    for name in ("x.svg", "x.html"):
+        response = client.get(f"/api/sessions/{session['id']}/preview/{name}")
+        assert response.status_code == 415, name
+
+
+def test_download_forces_attachment_even_for_html(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={"title": "Anteprima"}).json()
+    _upload(client, session["id"], "x.html", b"<script>alert(1)</script>")
+
+    response = client.get(f"/api/sessions/{session['id']}/files/x.html")
+
+    assert response.status_code == 200
+    assert "attachment" in response.headers["content-disposition"]
+
+
+def test_preview_does_not_escape_the_workspace(client: TestClient) -> None:
+    """Testato sulla guardia, non via HTTP: il client normalizza `../` prima di inviare."""
+    session = client.post("/api/sessions", json={"title": "Anteprima"}).json()
+
+    with pytest.raises(HTTPException) as excinfo:
+        server._safe_workspace_path(session["id"], "../../control.sqlite")
+
+    assert excinfo.value.status_code == 400
 
 
 def test_sessions_and_files_are_isolated(client: TestClient) -> None:

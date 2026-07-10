@@ -1,8 +1,7 @@
 import { memo } from "react";
-import { fileDownloadUrl } from "../../api";
 import { timeLabel } from "../../lib/format";
 import type { Message } from "../../types";
-import { FileIcon } from "../shared/FileIcon";
+import { FilePreview } from "./FilePreview";
 import { MarkdownContent } from "./MarkdownContent";
 
 // Il badge mostra il modello che ha davvero risposto, registrato dall'evento `model.selected`.
@@ -52,18 +51,9 @@ export const ChatMessage = memo(function ChatMessage({
           <MarkdownContent content={message.content} sessionId={sessionId} />
         </div>
         {message.attachments?.length ? (
-          <div className={`mt-2 flex flex-wrap gap-2 ${isAgent ? "" : "justify-end"}`}>
+          <div className={`mt-2 flex flex-wrap items-start gap-2 ${isAgent ? "" : "justify-end"}`}>
             {message.attachments.map((name) => (
-              <a
-                key={name}
-                className="inline-flex max-w-[200px] items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm hover:bg-surface-raised"
-                href={fileDownloadUrl(sessionId, name)}
-                download
-                title={name}
-              >
-                <FileIcon type={name.split(".").pop()?.toUpperCase() ?? ""} />
-                <span className="truncate">{name}</span>
-              </a>
+              <FilePreview key={name} sessionId={sessionId} name={name} />
             ))}
           </div>
         ) : null}

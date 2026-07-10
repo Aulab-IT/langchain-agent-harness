@@ -199,6 +199,11 @@ export function fileDownloadUrl(sessionId: string, fileName: string): string {
   return `${API_URL}/api/sessions/${sessionId}/files/${encodeURIComponent(fileName)}`;
 }
 
+/** Serve inline solo immagini raster e PDF; per gli altri tipi il backend risponde 415. */
+export function filePreviewUrl(sessionId: string, fileName: string): string {
+  return `${API_URL}/api/sessions/${sessionId}/preview/${encodeURIComponent(fileName)}`;
+}
+
 // --- Loop 3: triggers ---
 
 export function listTriggers(): Promise<Trigger[]> {

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from agent_harness.config import Settings
+from agent_harness.config import SKILLS_LOCK, Settings
 
 
 def utc_now() -> str:
@@ -553,11 +553,14 @@ class ControlStore:
         workspace.mkdir(parents=True, exist_ok=True)
         (root / "memories").mkdir(exist_ok=True)
         # Ricopia le skill da zero a ogni run, così modifiche ed eliminazioni dal pannello
-        # si riflettono nel run successivo.
-        shutil.rmtree(root / "skills", ignore_errors=True)
-        (root / "skills").mkdir(exist_ok=True)
-        if self.settings.skills_dir.exists():
-            shutil.copytree(self.settings.skills_dir, root / "skills", dirs_exist_ok=True)
+        # si riflettono nel run successivo. Il lock è di processo e serializza le copie: due
+        # sessioni che partono insieme leggono lo stesso albero sorgente, e senza di esso una
+        # skill installata a metà copia finirebbe nella sessione a pezzi.
+        with SKILLS_LOCK:
+            shutil.rmtree(root / "skills", ignore_errors=True)
+            (root / "skills").mkdir(exist_ok=True)
+            if self.settings.skills_dir.exists():
+                shutil.copytree(self.settings.skills_dir, root / "skills", dirs_exist_ok=True)
         # La memoria di sessione si semina UNA VOLTA dal template di progetto. Ricopiarla a
         # ogni run distruggerebbe gli apprendimenti che l'agente ci scrive dentro.
         memory_file = root / "memories" / "AGENTS.md"

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+# Serializza le operazioni sull'albero `skills/` condiviso: la copia verso le radici di
+# sessione (`control_store.prepare_session_root`) e le scritture dei tool skill_* e delle
+# rotte REST (`skills.py`). Sta qui perché è l'unico modulo che entrambi importano.
+SKILLS_LOCK = threading.RLock()
 
 # Mount point delle directory host dentro il container sandbox.
 SANDBOX_WORKSPACE_MOUNT = "/workspace"

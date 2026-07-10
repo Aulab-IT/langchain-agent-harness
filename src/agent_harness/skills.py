@@ -19,6 +19,8 @@ from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
+from agent_harness.config import SKILLS_LOCK
+
 # Regola dello standard Agent Skills (agentskills.io) per il campo `name`:
 # 1-64 caratteri, minuscole a-z e 0-9, trattini singoli, senza inizio/fine trattino.
 _NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -151,16 +153,18 @@ def write_skill(skills_dir: Path, name: str, content: str) -> dict[str, Any]:
     errors = validate_skill(front.get("name", name), name, front)
     if errors:
         raise ValueError("; ".join(errors))
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / "SKILL.md").write_text(content, encoding="utf-8")
-    return read_skill(skills_dir, name)
+    with SKILLS_LOCK:
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "SKILL.md").write_text(content, encoding="utf-8")
+        return read_skill(skills_dir, name)
 
 
 def delete_skill(skills_dir: Path, name: str) -> None:
     directory = _skill_dir(skills_dir, name)
-    if not directory.is_dir():
-        raise FileNotFoundError(name)
-    shutil.rmtree(directory)
+    with SKILLS_LOCK:
+        if not directory.is_dir():
+            raise FileNotFoundError(name)
+        shutil.rmtree(directory)
 
 
 # ---------------------------------------------------------------------------
@@ -231,12 +235,13 @@ def write_skill_file(
         errors = validate_skill(front.get("name", name), name, front)
         if errors:
             raise ValueError("; ".join(errors))
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if isinstance(content, bytes):
-        target.write_bytes(content)
-    else:
-        target.write_text(content, encoding="utf-8")
-    return read_skill_file(skills_dir, name, relpath)
+    with SKILLS_LOCK:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            target.write_bytes(content)
+        else:
+            target.write_text(content, encoding="utf-8")
+        return read_skill_file(skills_dir, name, relpath)
 
 
 def delete_skill_file(skills_dir: Path, name: str, relpath: str) -> None:
@@ -244,12 +249,13 @@ def delete_skill_file(skills_dir: Path, name: str, relpath: str) -> None:
     target = _resolve_within(directory, relpath)
     if target == (directory.resolve() / "SKILL.md"):
         raise ValueError("SKILL.md non è eliminabile come file di risorsa.")
-    if target.is_dir():
-        shutil.rmtree(target)
-    elif target.exists():
-        target.unlink()
-    else:
-        raise FileNotFoundError(relpath)
+    with SKILLS_LOCK:
+        if target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            target.unlink()
+        else:
+            raise FileNotFoundError(relpath)
 
 
 # ---------------------------------------------------------------------------
@@ -427,15 +433,21 @@ def _finalize_install(
     if errors:
         raise ValueError("; ".join(errors))
     target = _skill_dir(skills_dir, name)
-    if target.exists() and not force:
-        raise FileExistsError(name)
-    if target.exists():
-        shutil.rmtree(target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    # symlinks=False: eventuali symlink residui vengono copiati come file reali, non seguiti fuori.
-    shutil.copytree(skill_src, target, symlinks=False)
-    record_skill_event(skills_dir, name=name, source=source, value=value, by=by, action="install")
-    return read_skill(skills_dir, name)
+    # L'installazione è la scrittura più lunga sull'albero condiviso: senza il lock una
+    # sessione che prepara la propria radice potrebbe copiarne una versione a metà.
+    with SKILLS_LOCK:
+        if target.exists() and not force:
+            raise FileExistsError(name)
+        if target.exists():
+            shutil.rmtree(target)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # symlinks=False: eventuali symlink residui vengono copiati come file reali, non
+        # seguiti fuori.
+        shutil.copytree(skill_src, target, symlinks=False)
+        record_skill_event(
+            skills_dir, name=name, source=source, value=value, by=by, action="install"
+        )
+        return read_skill(skills_dir, name)
 
 
 def install_skill_from_archive(
