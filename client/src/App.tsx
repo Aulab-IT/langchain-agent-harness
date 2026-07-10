@@ -87,6 +87,7 @@ export default function App() {
             onTabChange={selectTab}
             sessionId={session.id}
             sessionTitle={session.title}
+            modelOverride={session.model_override}
             messageCount={session.messages.filter((message) => message.role !== "system").length}
             files={session.files}
             skills={skillItems}

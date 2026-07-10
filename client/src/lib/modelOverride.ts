@@ -18,6 +18,23 @@ export function withModelMarker(message: string, choice: MessageModel): string {
   return `${clean} ${MARKERS[choice]}`;
 }
 
+/**
+ * Che modello mostrare quando nessun run ha ancora dichiarato la sua scelta.
+ *
+ * Se la sessione è forzata, il modello è già determinato e non c'è ragione di far finta di non
+ * saperlo. Se è su `auto`, decide il router dal contenuto del messaggio: qualunque nome
+ * scriveremmo sarebbe un'ipotesi, quindi diciamo che è il default e lo etichettiamo come tale.
+ */
+export function expectedModel(
+  defaultModel: string,
+  strongModel: string,
+  override: ModelOverride,
+): { name: string; source: "sessione" | "default" } {
+  if (override === "strong") return { name: strongModel, source: "sessione" };
+  if (override === "default") return { name: defaultModel, source: "sessione" };
+  return { name: defaultModel, source: "default" };
+}
+
 export const SESSION_OVERRIDE_LABELS: Record<ModelOverride, string> = {
   auto: "Sessione: modello automatico",
   default: "Sessione: sempre modello base",
