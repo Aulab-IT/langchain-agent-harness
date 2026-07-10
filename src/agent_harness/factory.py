@@ -16,11 +16,10 @@ from deepagents.middleware.filesystem import FilesystemPermission
 from deepagents.middleware.subagents import SubAgent
 from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 from langchain.agents.middleware.human_in_the_loop import InterruptOnConfig
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from pydantic import SecretStr
 
 from agent_harness.audit import AuditMiddleware, EventCallback
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
@@ -40,8 +39,18 @@ from agent_harness.middleware import (
     build_model_router,
 )
 from agent_harness.prompts import SYSTEM_PROMPT
+from agent_harness.providers import (
+    BuildOptions,
+    ProviderRegistry,
+    default_registry,
+    openai_descriptor,
+)
 from agent_harness.tools import build_tools
 from agent_harness.verification import RubricGrader
+
+# Registry dei provider: sostituisce il `ChatOpenAI` cablato. Ogni ruolo modello chiede al
+# registry il modello del proprio descriptor, e il vendor resta confinato all'adattatore.
+_REGISTRY: ProviderRegistry = default_registry()
 
 
 @dataclass
@@ -220,40 +229,35 @@ def tier_spec(settings: Settings, tier: Tier) -> TierSpec:
     return TierSpec(tier=tier, name=name, effort=effort, price_in=price_in, price_out=price_out)
 
 
+def _build_options(settings: Settings) -> BuildOptions:
+    return BuildOptions(api_key=settings.openai_api_key, timeout=120, max_retries=3)
+
+
 def build_tier_models(settings: Settings) -> dict[Tier, TierModel]:
-    api_key = settings.require_openai_key()
+    settings.require_openai_key()
+    options = _build_options(settings)
     built: dict[Tier, TierModel] = {}
     for tier in TIERS:
         spec = tier_spec(settings, tier)
+        descriptor = openai_descriptor(spec.name, reasoning_effort=spec.effort)
         built[tier] = TierModel(
             name=spec.name,
             effort=spec.effort,
-            model=_openai_model(spec.name, api_key, reasoning_effort=spec.effort),
+            model=_REGISTRY.build(descriptor, options),
         )
     return built
 
 
-def build_judge_model(settings: Settings) -> ChatOpenAI:
+def build_judge_model(settings: Settings) -> BaseChatModel:
     """Giudice del loop hill-climbing: gira di rado e le sue conclusioni promuovono config.
 
     È l'unico posto in cui si paga il gradino alto senza che l'utente lo abbia chiesto: una
     proposta di configurazione sbagliata costa più di qualche dollaro di reasoning.
     """
+    settings.require_openai_key()
     spec = tier_spec(settings, "high")
-    return _openai_model(spec.name, settings.require_openai_key(), reasoning_effort=spec.effort)
-
-
-def _openai_model(name: str, api_key: str, *, reasoning_effort: str) -> ChatOpenAI:
-    return ChatOpenAI(
-        model=name,
-        api_key=SecretStr(api_key),
-        reasoning_effort=reasoning_effort,
-        use_responses_api=True,
-        store=False,
-        include=["reasoning.encrypted_content"],
-        max_retries=3,
-        timeout=120,
-    )
+    descriptor = openai_descriptor(spec.name, reasoning_effort=spec.effort)
+    return _REGISTRY.build(descriptor, _build_options(settings))
 
 
 @asynccontextmanager

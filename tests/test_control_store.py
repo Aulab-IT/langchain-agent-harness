@@ -279,3 +279,44 @@ def test_list_files_hides_dependencies_and_cache(tmp_path: Path) -> None:
     names = {item["name"] for item in store.list_files(session["id"])}
     assert names == {"output/report.md", "scripts/fetch.py"}
     store.close()
+
+
+def test_model_call_ledger_roundtrip(tmp_path: Path) -> None:
+    from decimal import Decimal
+
+    from agent_harness.pricing import ModelCallUsage
+
+    store = make_store(tmp_path)
+    session = store.create_session()
+    run = store.create_run(session["id"])
+    usage = ModelCallUsage(
+        provider="openai",
+        model="gpt-x",
+        execution_kind="cloud",
+        input_tokens=100,
+        output_tokens=40,
+        input_cost=Decimal("0.001"),
+        output_cost=Decimal("0.002"),
+        pricing_version="v1",
+    )
+    call_id = store.record_model_call(usage, run_id=run["id"], session_id=session["id"], tier="low")
+    rows = store.list_run_model_calls(run["id"])
+    assert len(rows) == 1
+    assert rows[0]["id"] == call_id
+    assert rows[0]["provider"] == "openai"
+    # Il costo resta stringa (Decimal serializzato), non float.
+    assert rows[0]["total_cost"] == "0.003"
+    assert rows[0]["tier"] == "low"
+    store.close()
+
+
+def test_pricing_catalog_persist_is_idempotent(tmp_path: Path) -> None:
+    from agent_harness.pricing import catalog_from_settings
+
+    store = make_store(tmp_path)
+    catalog = catalog_from_settings(Settings(_env_file=None, project_root=tmp_path))
+    store.upsert_pricing_catalog(catalog)
+    store.upsert_pricing_catalog(catalog)  # secondo giro non duplica
+    loaded = store.load_pricing_catalog()
+    assert len(loaded.entries()) == len(catalog.entries())
+    store.close()

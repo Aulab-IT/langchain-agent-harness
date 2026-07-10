@@ -45,6 +45,7 @@ from agent_harness.improve import (
     write_proposal,
 )
 from agent_harness.middleware import TIERS, Override
+from agent_harness.pricing import catalog_from_settings
 from agent_harness.promotion import (
     list_config_versions,
     promote_proposal,
@@ -873,6 +874,9 @@ sandbox_reaper = SandboxIdleReaper(
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     cleanup_orphan_sandboxes(session_sandbox_manager, store.list_all_session_ids())
+    # Semina il listino prezzi versionato dai valori in Settings (idempotente): dà al
+    # ledger dei costi un catalogo da cui risolvere, senza sovrascrivere versioni già presenti.
+    store.upsert_pricing_catalog(catalog_from_settings(settings))
     if settings.harness_enable_triggers:
         trigger_scheduler.start()
     sandbox_reaper.start()
@@ -881,6 +885,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     finally:
         await trigger_scheduler.stop()
         await sandbox_reaper.stop_task()
+        # La connessione al control DB va chiusa esplicitamente: senza questa chiamata
+        # il file WAL non veniva mai richiuso in modo pulito allo shutdown.
+        store.close()
 
 
 app = FastAPI(

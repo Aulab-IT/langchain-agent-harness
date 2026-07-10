@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     openai_price_in_high: float = Field(default=5.0, ge=0)
     openai_price_out_high: float = Field(default=30.0, ge=0)
     harness_context_window: int = Field(default=128_000, ge=1_000)
+    # Budget di contesto realmente applicato (Fase 1): la finestra utile è
+    # `harness_context_window - harness_reserved_output_tokens`; oltre `warning` si segnala,
+    # oltre `compaction` si riduce. Prima `harness_context_window` era solo un metadato in UI.
+    harness_reserved_output_tokens: int = Field(default=4_000, ge=0, le=64_000)
+    harness_context_warning_ratio: float = Field(default=0.7, ge=0.1, le=1.0)
+    harness_context_compaction_ratio: float = Field(default=0.8, ge=0.1, le=1.0)
 
     harness_max_continuations: int = Field(default=3, ge=1, le=10)
     harness_eval_max_continuations: int = Field(default=1, ge=1, le=3)

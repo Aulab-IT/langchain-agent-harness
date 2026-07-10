@@ -6,10 +6,12 @@ import sqlite3
 import threading
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from agent_harness.config import SKILLS_LOCK, Settings
+from agent_harness.pricing import ModelCallUsage, PriceEntry, PricingCatalog
 
 
 def utc_now() -> str:
@@ -122,6 +124,43 @@ class ControlStore:
                     created_at TEXT NOT NULL,
                     last_fired_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS model_calls (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT REFERENCES runs(id) ON DELETE CASCADE,
+                    session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
+                    iteration INTEGER NOT NULL DEFAULT 0,
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    tier TEXT,
+                    execution_kind TEXT NOT NULL DEFAULT 'cloud',
+                    input_tokens INTEGER NOT NULL DEFAULT 0,
+                    cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+                    output_tokens INTEGER NOT NULL DEFAULT 0,
+                    reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+                    input_cost TEXT NOT NULL DEFAULT '0',
+                    output_cost TEXT NOT NULL DEFAULT '0',
+                    reasoning_cost TEXT NOT NULL DEFAULT '0',
+                    total_cost TEXT NOT NULL DEFAULT '0',
+                    effective_local_cost TEXT,
+                    currency TEXT NOT NULL DEFAULT 'USD',
+                    pricing_version TEXT NOT NULL DEFAULT '',
+                    usage_source TEXT NOT NULL DEFAULT 'provider',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS pricing_catalog (
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    version TEXT NOT NULL,
+                    input_price TEXT NOT NULL,
+                    output_price TEXT NOT NULL,
+                    cached_input_price TEXT NOT NULL DEFAULT '0',
+                    reasoning_price TEXT NOT NULL DEFAULT '0',
+                    currency TEXT NOT NULL DEFAULT 'USD',
+                    source TEXT NOT NULL DEFAULT 'config',
+                    valid_from TEXT NOT NULL DEFAULT '',
+                    valid_to TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY (provider, model, version, valid_from)
+                );
                 CREATE INDEX IF NOT EXISTS idx_messages_session
                     ON messages(session_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_runs_session
@@ -130,6 +169,8 @@ class ControlStore:
                     ON events(run_id, id);
                 CREATE INDEX IF NOT EXISTS idx_triggers_token
                     ON triggers(token);
+                CREATE INDEX IF NOT EXISTS idx_model_calls_run
+                    ON model_calls(run_id, created_at);
                 """
             )
             self._connection.execute(
@@ -451,6 +492,118 @@ class ControlStore:
                     run_id,
                 ),
             )
+
+    def record_model_call(
+        self,
+        usage: ModelCallUsage,
+        *,
+        run_id: str | None = None,
+        session_id: str | None = None,
+        iteration: int = 0,
+        tier: str | None = None,
+    ) -> str:
+        """Registra una singola chiamata al modello nel ledger ``model_calls``.
+
+        Una riga per chiamata, immutabile: gli aggregati per run/sessione/provider si
+        ricavano sommando queste righe, mai ricalcolando con prezzi nuovi. I costi sono
+        stringhe (``Decimal`` serializzato) per non reintrodurre l'errore del ``float``.
+        """
+        row = usage.to_row()
+        call_id = str(uuid.uuid4())
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO model_calls(
+                    id, run_id, session_id, iteration, provider, model, tier,
+                    execution_kind, input_tokens, cached_input_tokens, output_tokens,
+                    reasoning_tokens, input_cost, output_cost, reasoning_cost, total_cost,
+                    effective_local_cost, currency, pricing_version, usage_source, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    call_id,
+                    run_id,
+                    session_id,
+                    iteration,
+                    row["provider"],
+                    row["model"],
+                    tier,
+                    row["execution_kind"],
+                    row["input_tokens"],
+                    row["cached_input_tokens"],
+                    row["output_tokens"],
+                    row["reasoning_tokens"],
+                    row["input_cost"],
+                    row["output_cost"],
+                    row["reasoning_cost"],
+                    row["total_cost"],
+                    row["effective_local_cost"],
+                    row["currency"],
+                    row["pricing_version"],
+                    row["usage_source"],
+                    utc_now(),
+                ),
+            )
+        return call_id
+
+    def list_run_model_calls(self, run_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM model_calls WHERE run_id = ? ORDER BY created_at, rowid",
+                (run_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def upsert_pricing_catalog(self, catalog: PricingCatalog) -> None:
+        """Persiste il listino versionato. Idempotente sulla chiave
+        (provider, modello, versione, valid_from): rieseguirlo non duplica righe."""
+        with self._lock, self._connection:
+            for entry in catalog.entries():
+                self._connection.execute(
+                    """
+                    INSERT OR REPLACE INTO pricing_catalog(
+                        provider, model, version, input_price, output_price,
+                        cached_input_price, reasoning_price, currency, source,
+                        valid_from, valid_to
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        entry.provider,
+                        entry.model,
+                        entry.version,
+                        str(entry.input_price),
+                        str(entry.output_price),
+                        str(entry.cached_input_price),
+                        str(entry.reasoning_price),
+                        entry.currency,
+                        entry.source,
+                        entry.valid_from,
+                        entry.valid_to,
+                    ),
+                )
+
+    def load_pricing_catalog(self) -> PricingCatalog:
+        with self._lock:
+            rows = self._connection.execute("SELECT * FROM pricing_catalog").fetchall()
+        entries = [
+            PriceEntry(
+                provider=row["provider"],
+                model=row["model"],
+                input_price=Decimal(row["input_price"]),
+                output_price=Decimal(row["output_price"]),
+                cached_input_price=Decimal(row["cached_input_price"]),
+                reasoning_price=Decimal(row["reasoning_price"]),
+                currency=row["currency"],
+                source=row["source"],
+                version=row["version"],
+                valid_from=row["valid_from"],
+                valid_to=row["valid_to"],
+            )
+            for row in rows
+        ]
+        return PricingCatalog(entries)
 
     def add_event(
         self,

@@ -65,23 +65,51 @@ def context_categories(messages: list[Any]) -> list[dict[str, Any]]:
     ]
 
 
-def compute_usage(messages: list[Any], elapsed_seconds: float) -> dict[str, Any]:
-    """Costruisce l'usage del run.
+def token_metrics(messages: list[Any]) -> dict[str, int]:
+    """Le tre grandezze token tenute distinte, direttamente dai messaggi.
 
-    ``input_tokens`` riflette la dimensione del contesto all'ultima chiamata
-    al modello, non la somma delle chiamate: ogni ``usage_metadata.input_tokens``
-    del provider include già l'intera storia della conversazione fino a quel
-    punto, quindi sommarli tra più turni gonfia il conteggio ben oltre la
-    finestra di contesto reale. ``output_tokens`` invece è correttamente una
-    somma, perché ogni turno genera token nuovi che non si ripetono.
+    - ``context_input_tokens``: input dell'ULTIMA chiamata al modello, cioè la
+      dimensione del contesto a fine run. Ogni ``usage_metadata.input_tokens`` del
+      provider include già tutta la storia fino a quel punto, quindi è l'ultimo valore
+      a rappresentare il contesto, non la somma;
+    - ``cumulative_input_tokens``: somma degli input di tutte le chiamate, cioè quanto
+      contesto è stato letto complessivamente nel run (misura di costo, non di finestra);
+    - ``cumulative_output_tokens``: somma degli output, token nuovi che non si ripetono.
+
+    Confondere le prime due è il bug che la Fase 0 elimina: la UI mostrava il contesto
+    finale, l'eval sommava gli input, ed entrambi li chiamavano "input_tokens".
     """
-    input_tokens = 0
-    output_tokens = 0
+    context_input = 0
+    cumulative_input = 0
+    cumulative_output = 0
+    reasoning = 0
     for message in messages:
         if not isinstance(message, AIMessage) or not message.usage_metadata:
             continue
-        input_tokens = int(message.usage_metadata.get("input_tokens", 0))
-        output_tokens += int(message.usage_metadata.get("output_tokens", 0))
+        metadata = message.usage_metadata
+        context_input = int(metadata.get("input_tokens", 0))
+        cumulative_input += int(metadata.get("input_tokens", 0))
+        cumulative_output += int(metadata.get("output_tokens", 0))
+        details = metadata.get("output_token_details") or {}
+        reasoning += int(details.get("reasoning", 0) or 0)
+    return {
+        "context_input_tokens": context_input,
+        "cumulative_input_tokens": cumulative_input,
+        "cumulative_output_tokens": cumulative_output,
+        "reasoning_tokens": reasoning,
+    }
+
+
+def compute_usage(messages: list[Any], elapsed_seconds: float) -> dict[str, Any]:
+    """Costruisce l'usage del run.
+
+    ``input_tokens`` riflette la dimensione del contesto all'ultima chiamata al modello
+    (retro-compatibile con la UI), mentre i campi ``*_input_tokens`` separati distinguono
+    esplicitamente contesto finale e somma cumulativa: vedi :func:`token_metrics`.
+    """
+    metrics = token_metrics(messages)
+    input_tokens = metrics["context_input_tokens"]
+    output_tokens = metrics["cumulative_output_tokens"]
     return {
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
@@ -89,4 +117,10 @@ def compute_usage(messages: list[Any], elapsed_seconds: float) -> dict[str, Any]
         "output_tokens_per_second": round(output_tokens / max(elapsed_seconds, 0.001), 1),
         "context_categories": context_categories(messages),
         "estimated_context": False,
+        # Grandezze canoniche separate (Fase 0): il contesto finale non è la somma degli
+        # input, e chi vuole il costo cumulativo deve leggere il campo cumulativo.
+        "context_input_tokens": metrics["context_input_tokens"],
+        "cumulative_input_tokens": metrics["cumulative_input_tokens"],
+        "cumulative_output_tokens": metrics["cumulative_output_tokens"],
+        "reasoning_tokens": metrics["reasoning_tokens"],
     }

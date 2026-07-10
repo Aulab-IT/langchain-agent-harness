@@ -337,7 +337,15 @@ def _guard_external_host(url: str) -> None:
 class _GuardedRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Ri-applica la guardia SSRF a ogni hop di redirect."""
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: Any,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
         _guard_external_host(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
@@ -350,7 +358,7 @@ def _download_bytes(url: str, max_bytes: int = _MAX_DOWNLOAD_BYTES) -> bytes:
         data = response.read(max_bytes + 1)
     if len(data) > max_bytes:
         raise ValueError(f"Download oltre il limite di {max_bytes} byte.")
-    return data
+    return bytes(data)
 
 
 def _sniff_archive_fmt(data: bytes, url: str = "") -> str:
