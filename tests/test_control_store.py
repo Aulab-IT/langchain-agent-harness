@@ -36,8 +36,10 @@ def test_session_model_override_defaults_to_auto_and_rejects_junk(tmp_path: Path
 
     assert session["model_override"] == "auto"
 
-    store.set_session_model_override(session["id"], "strong")
-    assert store.get_session(session["id"])["model_override"] == "strong"
+    store.set_session_model_override(session["id"], "high")
+    assert store.get_session(session["id"])["model_override"] == "high"
+    store.set_session_model_override(session["id"], "mid")
+    assert store.get_session(session["id"])["model_override"] == "mid"
 
     with pytest.raises(ValueError):
         store.set_session_model_override(session["id"], "gpt-inesistente")

@@ -122,9 +122,32 @@ uv run harness run "Analizza i file nel workspace e crea report.md"
 uv run harness improve --since 100
 ```
 
-Il modello predefinito è `gpt-5.4-mini`, adatto alle numerose iterazioni di un agente.
-`OPENAI_STRONG_MODEL=gpt-5.5` viene usato dal router per compiti lunghi o esplicitamente
-complessi. Entrambi sono modificabili senza cambiare codice.
+### Scala dei modelli
+
+Il router sceglie fra tre gradini di costo crescente. Modello e reasoning effort salgono
+insieme, perché un modello caro che ragiona poco paga il prezzo alto senza comprarne il
+beneficio, e la coppia inversa spende reasoning su un modello che non lo sfrutta.
+
+| Gradino | Modello | Reasoning | $/MTok input | $/MTok output |
+|---|---|---|---|---|
+| basso | `gpt-5.6-luna` | `low` | 1 | 6 |
+| medio | `gpt-5.6-terra` | `medium` | 2,50 | 15 |
+| alto | `gpt-5.6-sol` | `high` | 5 | 30 |
+
+La regola di costo è una sola: **si resta in basso finché qualcosa non dice di salire.** Il
+gradino basso non ha parole chiave, perché è il luogo di riposo. Le parole del gradino medio
+(`analizza`, `verifica`, `confronta`, `debug`…) indicano lavoro nell'ambiente, dove una risposta
+sbagliata costa un'altra iterazione e il risparmio diventa illusorio. Quelle del gradino alto
+(`architettura`, `refactor`, `complesso`…) indicano complessità strutturale. Una conversazione
+lunga fa salire di **un solo** gradino: è un indizio debole, e pagarlo cinque volte tanto non si
+giustifica.
+
+Il grader a rubrica, il subagent revisore e il ricercatore non arrivano mai al gradino alto: il
+primo gira una volta per iterazione, l'ultimo a ogni ricerca. All'alto ci arriva soltanto
+l'agente principale, e solo se il router o l'utente lo chiedono.
+
+Tutto è configurabile senza toccare il codice: `OPENAI_MODEL_LOW|MID|HIGH`,
+`OPENAI_EFFORT_LOW|MID|HIGH`, `HARNESS_ROUTER_MID_KEYWORDS`, `HARNESS_ROUTER_HIGH_KEYWORDS`.
 
 ## Capacità dell'agente
 

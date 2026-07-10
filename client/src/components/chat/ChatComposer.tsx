@@ -18,7 +18,9 @@ import type { ModelOverride, RuntimeSkill, SessionFile } from "../../types";
 import { FileIcon } from "../shared/FileIcon";
 import { SkillMenu } from "./SkillMenu";
 
-const MESSAGE_MODEL_CYCLE: MessageModel[] = ["auto", "strong", "default"];
+// Il ciclo parte da automatico e sale: il gradino basso è l'ultimo perché forzarlo è la scelta
+// più rara, e il costo di sbagliare click è di pagare meno, non di più.
+const MESSAGE_MODEL_CYCLE: MessageModel[] = ["auto", "mid", "high", "low"];
 
 export function ChatComposer({
   disabled,

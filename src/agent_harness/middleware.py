@@ -1,4 +1,4 @@
-"""Instradamento fra modello di default e modello forte.
+"""Instradamento su una scala di tre gradini di costo crescente.
 
 Il router precedente decideva sull'ultimo messaggio della lista, che durante un turno è quasi
 sempre un `ToolMessage`: l'output di un tool contenente la parola "refactor" faceva scattare il
@@ -11,6 +11,10 @@ l'intento — e resta stabile per tutto il turno che quel messaggio ha aperto. �
 stabilità che serve: dentro un turno `messages[-1]` continua a cambiare fra `AIMessage` e
 `ToolMessage`, e una decisione ricalcolata a ogni giro farebbe oscillare il modello a metà
 ragionamento.
+
+La scala ha tre gradini, e la regola di costo è una sola: **si sta in basso finché qualcosa non
+dice di salire.** Non esistono parole chiave per il gradino basso, perché è il luogo di riposo.
+Un segnale debole (conversazione lunga) fa salire di un gradino, non di due.
 
 L'utente può sempre scavalcare la scelta, per sessione o per singolo messaggio.
 """
@@ -31,24 +35,40 @@ from langchain.agents.middleware import (
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage
 
-ModelChoice = Literal["default", "strong"]
-Override = Literal["auto", "default", "strong"]
+Tier = Literal["low", "mid", "high"]
+Override = Literal["auto", "low", "mid", "high"]
 
-# Marcatore che il composer aggiunge al messaggio quando l'utente forza un modello. È in
+TIERS: tuple[Tier, ...] = ("low", "mid", "high")
+
+# Etichette italiane usate in interfaccia e nel marcatore di messaggio.
+TIER_LABELS: dict[Tier, str] = {"low": "basso", "mid": "medio", "high": "alto"}
+
+# Marcatore che il composer aggiunge al messaggio quando l'utente forza un gradino. È in
 # chiaro nel testo: l'utente vede esattamente cosa ha chiesto, nulla entra nel prompt di
 # nascosto. Vedi `client/src/lib/modelOverride.ts`.
-_MESSAGE_OVERRIDE = re.compile(r"\[modello:\s*(forte|base|strong|default)\]", re.IGNORECASE)
-_OVERRIDE_ALIASES: dict[str, ModelChoice] = {
-    "forte": "strong",
-    "strong": "strong",
-    "base": "default",
-    "default": "default",
+_MESSAGE_OVERRIDE = re.compile(
+    r"\[modello:\s*(basso|medio|alto|low|mid|high|base|forte|default|strong)\]",
+    re.IGNORECASE,
+)
+# `base` e `forte` sopravvivono come alias della vecchia scala binaria: sono già scritti nei
+# messaggi salvati e nei checkpoint, e riscriverli sarebbe riscrivere la storia della chat.
+_OVERRIDE_ALIASES: dict[str, Tier] = {
+    "basso": "low",
+    "low": "low",
+    "base": "low",
+    "default": "low",
+    "medio": "mid",
+    "mid": "mid",
+    "alto": "high",
+    "high": "high",
+    "forte": "high",
+    "strong": "high",
 }
 
-# Bilingue perché l'harness parla italiano ma i prompt tecnici arrivano spesso in inglese.
-# Ogni parola qui dentro costa: una falsa corrispondenza manda al modello forte una richiesta
-# banale. Sono escluse di proposito parole troppo comuni ("design", "prove", "test").
-DEFAULT_STRONG_KEYWORDS = (
+# Il gradino alto costa cinque volte il basso in input e cinque in output. Ci si sale solo se la
+# richiesta *dichiara* complessità strutturale. Parole troppo comuni ("design", "prove", "test")
+# sono escluse di proposito: una falsa corrispondenza qui è la voce di spesa più cara del sistema.
+DEFAULT_HIGH_KEYWORDS = (
     "complesso",
     "complessa",
     "architettura",
@@ -63,12 +83,38 @@ DEFAULT_STRONG_KEYWORDS = (
     "thorough",
 )
 
+# Il gradino medio costa due volte e mezza il basso. Ci si sale per lavoro nell'ambiente o su più
+# fonti: cose che il gradino basso sbaglia abbastanza spesso da rendere il risparmio illusorio,
+# perché una risposta sbagliata si paga con un'altra iterazione.
+DEFAULT_MID_KEYWORDS = (
+    "confronta",
+    "verifica",
+    "debug",
+    "analizza",
+    "riscrivi",
+    "ottimizza",
+    "spiega perché",
+    "compare",
+    "investigate",
+    "optimi",
+    "explain why",
+)
+
 
 @dataclass(frozen=True)
 class RouteDecision:
-    choice: ModelChoice
+    tier: Tier
     reason: str
     source: Literal["message_override", "session_override", "keyword", "context_size", "default"]
+
+
+@dataclass(frozen=True)
+class TierModel:
+    """Un gradino: il modello, il suo reasoning effort, e l'istanza già costruita."""
+
+    name: str
+    effort: str
+    model: BaseChatModel
 
 
 def _last_human(messages: Sequence[BaseMessage]) -> BaseMessage | None:
@@ -91,55 +137,59 @@ def _text(message: BaseMessage) -> str:
     return " ".join(parts)
 
 
-def decide_model(
+def decide_tier(
     messages: Sequence[BaseMessage],
     *,
     session_override: Override = "auto",
-    strong_keywords: tuple[str, ...] = DEFAULT_STRONG_KEYWORDS,
+    high_keywords: tuple[str, ...] = DEFAULT_HIGH_KEYWORDS,
+    mid_keywords: tuple[str, ...] = DEFAULT_MID_KEYWORDS,
     context_threshold: int = 40,
 ) -> RouteDecision:
-    """Sceglie il modello per il turno aperto dall'ultimo messaggio umano.
+    """Sceglie il gradino per il turno aperto dall'ultimo messaggio umano.
 
     L'ordine è di precedenza crescente di autorità: il contesto è il segnale più debole, la
-    richiesta esplicita dell'utente sul singolo messaggio è la più forte.
+    richiesta esplicita dell'utente sul singolo messaggio è la più forte. A parità di segnali
+    si sceglie il gradino più basso.
     """
     human = _last_human(messages)
     text = _text(human).casefold() if human is not None else ""
 
     match = _MESSAGE_OVERRIDE.search(text)
     if match:
-        choice = _OVERRIDE_ALIASES[match.group(1).casefold()]
-        return RouteDecision(choice, "richiesto in questo messaggio", "message_override")
+        tier = _OVERRIDE_ALIASES[match.group(1).casefold()]
+        return RouteDecision(tier, "richiesto in questo messaggio", "message_override")
 
-    if session_override in ("default", "strong"):
+    if session_override != "auto":
         return RouteDecision(session_override, "impostato per questa sessione", "session_override")
 
-    matched = next((word for word in strong_keywords if word in text), None)
+    matched = next((word for word in high_keywords if word in text), None)
     if matched:
-        return RouteDecision("strong", f"la richiesta contiene «{matched}»", "keyword")
+        return RouteDecision("high", f"la richiesta contiene «{matched}»", "keyword")
+
+    matched = next((word for word in mid_keywords if word in text), None)
+    if matched:
+        return RouteDecision("mid", f"la richiesta contiene «{matched}»", "keyword")
 
     if len(messages) > context_threshold:
+        # Un solo gradino: la lunghezza è un indizio debole, e il salto al gradino alto
+        # quintuplicherebbe il costo di ogni turno successivo per un sospetto.
         return RouteDecision(
-            "strong",
-            f"conversazione lunga ({len(messages)} messaggi)",
-            "context_size",
+            "mid", f"conversazione lunga ({len(messages)} messaggi)", "context_size"
         )
 
-    return RouteDecision("default", "richiesta ordinaria", "default")
+    return RouteDecision("low", "richiesta ordinaria", "default")
 
 
 def build_model_router(
-    default_model: BaseChatModel,
-    strong_model: BaseChatModel,
+    tiers: dict[Tier, TierModel],
     *,
-    default_name: str = "",
-    strong_name: str = "",
     session_override: Override = "auto",
-    strong_keywords: tuple[str, ...] = DEFAULT_STRONG_KEYWORDS,
+    high_keywords: tuple[str, ...] = DEFAULT_HIGH_KEYWORDS,
+    mid_keywords: tuple[str, ...] = DEFAULT_MID_KEYWORDS,
     context_threshold: int = 40,
     event_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> AgentMiddleware[Any, Any, Any]:
-    """Instrada verso il modello forte e dichiara la scelta con un evento `model.selected`."""
+    """Instrada sulla scala e dichiara la scelta con un evento `model.selected`."""
 
     # La decisione si ricalcola solo quando cambia il messaggio umano in coda: dentro un turno
     # resta congelata, e l'evento non si ripete a ogni chiamata al modello.
@@ -154,27 +204,28 @@ def build_model_router(
         human = _last_human(messages)
         turn_key = "" if human is None else human.id or _text(human)[:120]
 
-        decision = decide_model(
+        decision = decide_tier(
             messages,
             session_override=session_override,
-            strong_keywords=strong_keywords,
+            high_keywords=high_keywords,
+            mid_keywords=mid_keywords,
             context_threshold=context_threshold,
         )
-        selected = strong_model if decision.choice == "strong" else default_model
-        name = (strong_name if decision.choice == "strong" else default_name) or decision.choice
+        chosen = tiers[decision.tier]
 
         if event_callback is not None and state["turn"] != turn_key:
             state["turn"] = turn_key
             event_callback(
                 {
                     "type": "model.selected",
-                    "model": name,
-                    "choice": decision.choice,
+                    "model": chosen.name,
+                    "tier": decision.tier,
+                    "effort": chosen.effort,
                     "reason": decision.reason,
                     "source": decision.source,
                 }
             )
 
-        return await handler(request.override(model=selected))
+        return await handler(request.override(model=chosen.model))
 
     return route_model

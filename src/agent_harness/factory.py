@@ -31,7 +31,15 @@ from agent_harness.improve import (
     overrides_fingerprint,
     resolve_runtime_overrides,
 )
-from agent_harness.middleware import DEFAULT_STRONG_KEYWORDS, Override, build_model_router
+from agent_harness.middleware import (
+    DEFAULT_HIGH_KEYWORDS,
+    DEFAULT_MID_KEYWORDS,
+    TIERS,
+    Override,
+    Tier,
+    TierModel,
+    build_model_router,
+)
 from agent_harness.prompts import SYSTEM_PROMPT
 from agent_harness.tools import build_tools
 from agent_harness.verification import RubricGrader
@@ -184,13 +192,40 @@ async def tool_catalog(settings: Settings) -> list[dict[str, Any]]:
         return catalog
 
 
-def build_strong_model(settings: Settings) -> ChatOpenAI:
-    """Modello forte isolato, riusato dal loop hill-climbing lato server."""
-    return _openai_model(
-        settings.openai_strong_model,
-        settings.require_openai_key(),
-        reasoning_effort="medium",
-    )
+def _keywords(raw: str) -> tuple[str, ...]:
+    return tuple(word.strip().casefold() for word in raw.split(",") if word.strip())
+
+
+def tier_spec(settings: Settings, tier: Tier) -> tuple[str, str]:
+    """Nome del modello e reasoning effort del gradino, senza costruire nulla."""
+    return {
+        "low": (settings.openai_model_low, settings.openai_effort_low),
+        "mid": (settings.openai_model_mid, settings.openai_effort_mid),
+        "high": (settings.openai_model_high, settings.openai_effort_high),
+    }[tier]
+
+
+def build_tier_models(settings: Settings) -> dict[Tier, TierModel]:
+    api_key = settings.require_openai_key()
+    built: dict[Tier, TierModel] = {}
+    for tier in TIERS:
+        name, effort = tier_spec(settings, tier)
+        built[tier] = TierModel(
+            name=name,
+            effort=effort,
+            model=_openai_model(name, api_key, reasoning_effort=effort),
+        )
+    return built
+
+
+def build_judge_model(settings: Settings) -> ChatOpenAI:
+    """Giudice del loop hill-climbing: gira di rado e le sue conclusioni promuovono config.
+
+    È l'unico posto in cui si paga il gradino alto senza che l'utente lo abbia chiesto: una
+    proposta di configurazione sbagliata costa più di qualche dollaro di reasoning.
+    """
+    name, effort = tier_spec(settings, "high")
+    return _openai_model(name, settings.require_openai_key(), reasoning_effort=effort)
 
 
 def _openai_model(name: str, api_key: str, *, reasoning_effort: str) -> ChatOpenAI:
@@ -222,12 +257,17 @@ async def build_harness(
     """Costruisce graph e risorse persistenti, chiudendole in modo deterministico."""
     settings = settings or Settings()
     settings.ensure_directories()
-    api_key = settings.require_openai_key()
+    settings.require_openai_key()
     active_workspace = settings.workspace_dir if workspace_dir is None else workspace_dir
     active_backend_root = settings.project_root if backend_root is None else backend_root
 
-    default_model = _openai_model(settings.openai_model, api_key, reasoning_effort="low")
-    strong_model = _openai_model(settings.openai_strong_model, api_key, reasoning_effort="medium")
+    tiers = build_tier_models(settings)
+    # Chi gira a ogni turno sta in basso; chi gira una volta per run può stare al gradino medio.
+    # Il gradino alto lo raggiunge solo l'agente principale, e solo se il router o l'utente lo
+    # chiedono: nessun componente interno lo sceglie da sé.
+    grader_model = tiers["mid"].model
+    reviewer_model = tiers["mid"].model
+    researcher_model = tiers["low"].model
 
     # Override applicati dal loop hill-climbing (propose-only + review umana), fuori dal codice.
     if harness_overrides is None:
@@ -272,7 +312,7 @@ async def build_harness(
         rubric_file = settings.state_dir / "rubric.md"
         extra_guidance = rubric_file.read_text(encoding="utf-8") if rubric_file.exists() else ""
         grader = RubricGrader.from_chat_model(
-            strong_model,
+            grader_model,
             threshold=rubric_threshold,
             extra_guidance=extra_guidance,
         )
@@ -320,7 +360,7 @@ async def build_harness(
                 for tool in tools
                 if tool.name in {"web_search", "browser_read", "current_utc_time"}
             ],
-            "model": default_model,
+            "model": researcher_model,
         },
         {
             "name": "reviewer",
@@ -333,7 +373,7 @@ async def build_harness(
                 "verifica. Non modificare file; restituisci problemi concreti e priorità."
             ),
             "tools": [],
-            "model": strong_model,
+            "model": reviewer_model,
             "permissions": [
                 FilesystemPermission(
                     operations=["read"],
@@ -359,24 +399,19 @@ async def build_harness(
         await connection.execute("PRAGMA busy_timeout = 5000")
         checkpointer = AsyncSqliteSaver(connection)
         await checkpointer.setup()
-        for model_name in {settings.openai_model, settings.openai_strong_model}:
+        for spec in tiers.values():
             register_harness_profile(
-                f"openai:{model_name}",
+                f"openai:{spec.name}",
                 HarnessProfile(excluded_tools=frozenset({"execute"})),
             )
-        configured = tuple(
-            word.strip().casefold()
-            for word in settings.harness_router_strong_keywords.split(",")
-            if word.strip()
-        )
         middleware: list[AgentMiddleware[Any, Any, Any]] = [
             build_model_router(
-                default_model,
-                strong_model,
-                default_name=settings.openai_model,
-                strong_name=settings.openai_strong_model,
+                tiers,
                 session_override=model_override,
-                strong_keywords=configured or DEFAULT_STRONG_KEYWORDS,
+                high_keywords=_keywords(settings.harness_router_high_keywords)
+                or DEFAULT_HIGH_KEYWORDS,
+                mid_keywords=_keywords(settings.harness_router_mid_keywords)
+                or DEFAULT_MID_KEYWORDS,
                 context_threshold=settings.harness_router_context_threshold,
                 event_callback=event_callback,
             ),
@@ -392,7 +427,9 @@ async def build_harness(
             ),
         ]
         graph = create_deep_agent(
-            model=default_model,
+            # Il modello del grafo è solo il punto di partenza: il router lo scavalca a ogni
+            # chiamata. È il gradino basso, così un run che non apre nessun turno costa poco.
+            model=tiers["low"].model,
             tools=tools,
             system_prompt=system_prompt,
             middleware=middleware,

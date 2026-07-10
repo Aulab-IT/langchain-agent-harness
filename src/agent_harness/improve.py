@@ -374,9 +374,9 @@ async def run_improvement(settings: Any, *, since: int = 100) -> dict[str, Any]:
 
     api_key = settings.require_openai_key()
     model = ChatOpenAI(
-        model=settings.openai_strong_model,
+        model=settings.openai_model_high,
         api_key=SecretStr(api_key),
-        reasoning_effort="medium",
+        reasoning_effort=settings.openai_effort_high,
         use_responses_api=True,
         store=False,
         timeout=120,

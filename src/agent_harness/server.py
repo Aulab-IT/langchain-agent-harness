@@ -32,7 +32,7 @@ from agent_harness.evaluation import (
     load_proposal_evaluation,
     save_proposal_evaluation,
 )
-from agent_harness.factory import build_harness, build_strong_model, tool_catalog
+from agent_harness.factory import build_harness, build_judge_model, tier_spec, tool_catalog
 from agent_harness.improve import (
     IMPROVEMENT_EVENT_TYPES,
     Proposal,
@@ -44,7 +44,7 @@ from agent_harness.improve import (
     saved_overrides,
     write_proposal,
 )
-from agent_harness.middleware import Override
+from agent_harness.middleware import TIERS, Override
 from agent_harness.promotion import (
     list_config_versions,
     promote_proposal,
@@ -142,7 +142,7 @@ class AutoApproveUpdate(BaseModel):
 
 
 class ModelOverrideUpdate(BaseModel):
-    override: Literal["auto", "default", "strong"]
+    override: Literal["auto", "low", "mid", "high"]
 
 
 class MemoryUpdate(BaseModel):
@@ -396,7 +396,7 @@ def _skills() -> list[dict[str, Any]]:
 def _model_override(session_id: str) -> Override:
     """Un valore inatteso in colonna non deve forzare un modello: si torna al router."""
     value = store.get_session(session_id).get("model_override", "auto")
-    return value if value in ("auto", "default", "strong") else "auto"
+    return value if value in ("auto", *TIERS) else "auto"
 
 
 async def _tools() -> list[dict[str, Any]]:
@@ -913,8 +913,10 @@ async def runtime_status() -> dict[str, Any]:
     return {
         "backend": "online",
         "configured": bool(settings.openai_api_key),
-        "model": settings.openai_model,
-        "strong_model": settings.openai_strong_model,
+        "models": [
+            {"tier": tier, "name": name, "effort": effort}
+            for tier, (name, effort) in ((t, tier_spec(settings, t)) for t in TIERS)
+        ],
         "context_window": settings.harness_context_window,
         "skills": _skills(),
         "tools": await _tool_summaries(),
@@ -1460,7 +1462,7 @@ async def run_improve(payload: ImproveRequest) -> dict[str, Any]:
     )
     report = build_report(runs, events)
     report_text = render_report(report)
-    judge = build_strong_model(settings).with_structured_output(Proposal)
+    judge = build_judge_model(settings).with_structured_output(Proposal)
     proposal = await propose(report_text, judge)
     path = write_proposal(proposal, report_text, _improvements_dir())
     return {

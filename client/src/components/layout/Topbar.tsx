@@ -1,6 +1,6 @@
 import { Menu, Pencil, Trash2 } from "lucide-react";
 import { runElapsedSeconds, runToAgentStatus } from "../../lib/format";
-import { expectedModel } from "../../lib/modelOverride";
+import { modelLabel as resolveModelLabel } from "../../lib/modelOverride";
 import { latestSelectedModel } from "../../lib/sessionActivity";
 import type { AgentStatus, Run, RunEvent, RuntimeStatus, SessionDetail, Usage } from "../../types";
 import { StatusDot } from "../shared/StatusDot";
@@ -35,12 +35,10 @@ export function Topbar({
   const status = runToAgentStatus(run);
   // Il modello dichiarato dal router se un run è in corso; altrimenti quello che sappiamo già
   // che verrà usato, perché la sessione lo ha forzato; altrimenti il default, etichettato.
-  const live = latestSelectedModel(events);
-  const expected =
+  const modelLabel =
     runtime && session
-      ? expectedModel(runtime.model, runtime.strong_model, session.model_override)
-      : null;
-  const modelLabel = live ?? (expected ? `${expected.name} (${expected.source})` : "—");
+      ? resolveModelLabel(runtime.models, session.model_override, latestSelectedModel(events))
+      : "—";
   const elapsed = runElapsedSeconds(run);
   const active = Boolean(run && ["queued", "running", "waiting_approval", "waiting_action"].includes(run.status));
 

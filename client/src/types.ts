@@ -26,7 +26,9 @@ export type Message = {
   model?: string | null;
 };
 
-export type ModelOverride = "auto" | "default" | "strong";
+export type ModelTier = "low" | "mid" | "high";
+export type ModelOverride = "auto" | ModelTier;
+export type RuntimeModel = { tier: ModelTier; name: string; effort: string };
 
 export type SessionFile = {
   name: string;
@@ -92,8 +94,7 @@ export type RunEvent = {
 export type RuntimeStatus = {
   backend: "online";
   configured: boolean;
-  model: string;
-  strong_model: string;
+  models: RuntimeModel[];
   context_window: number;
   skills: RuntimeSkill[];
   tools: Array<{ name: string; status: string }>;

@@ -5,8 +5,10 @@ export function SettingsView({ runtime }: { runtime: RuntimeStatus }) {
   const rows = [
     ["Backend", runtime.backend],
     ["Configurazione", runtime.configured ? "completa" : "OPENAI_API_KEY mancante"],
-    ["Modello default", runtime.model],
-    ["Modello strong", runtime.strong_model],
+    ...runtime.models.map(
+      (model) =>
+        [`Gradino ${model.tier}`, `${model.name} · reasoning ${model.effort}`] as [string, string],
+    ),
     ["Finestra contesto", `${runtime.context_window.toLocaleString("it-IT")} token`],
     ["Sandbox image", runtime.sandbox.image],
     ["Approvazione sandbox", runtime.sandbox.approval_required ? "richiesta" : "disabilitata"],

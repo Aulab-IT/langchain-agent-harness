@@ -165,6 +165,14 @@ class ControlStore:
                 self._connection.execute(
                     "ALTER TABLE sessions ADD COLUMN model_override TEXT NOT NULL DEFAULT 'auto'"
                 )
+            # La scala binaria (default/strong) è diventata a tre gradini: le sessioni esistenti
+            # si rimappano sugli estremi, che è dove l'utente le aveva messe.
+            self._connection.execute(
+                "UPDATE sessions SET model_override = 'low' WHERE model_override = 'default'"
+            )
+            self._connection.execute(
+                "UPDATE sessions SET model_override = 'high' WHERE model_override = 'strong'"
+            )
             trigger_columns = {
                 row["name"]
                 for row in self._connection.execute("PRAGMA table_info(triggers)")
@@ -275,7 +283,7 @@ class ControlStore:
 
     def set_session_model_override(self, session_id: str, override: str) -> dict[str, Any]:
         """Forza il modello per l'intera sessione, o restituisce la scelta al router (`auto`)."""
-        if override not in {"auto", "default", "strong"}:
+        if override not in {"auto", "low", "mid", "high"}:
             raise ValueError(f"Override modello non valido: {override}")
         with self._lock, self._connection:
             cursor = self._connection.execute(

@@ -15,7 +15,7 @@ import {
 } from "react";
 import type { InspectorTab } from "../../lib/constants";
 import { describeCurrentAction } from "../../lib/runTrace";
-import { expectedModel } from "../../lib/modelOverride";
+import { expectedTier, modelLabel } from "../../lib/modelOverride";
 import { latestSelectedModel, type ActivityEntry } from "../../lib/sessionActivity";
 import type {
   ModelOverride,
@@ -119,7 +119,7 @@ export function InspectorDock(props: DockProps) {
   const active = Boolean(run && ["queued", "running", "waiting_approval", "waiting_action"].includes(run.status));
   const current = describeCurrentAction(events, run);
   const liveModel = latestSelectedModel(events);
-  const expected = expectedModel(runtime.model, runtime.strong_model, modelOverride);
+  const expected = expectedTier(modelOverride);
 
   // Barra di stato compatta (chiuso), full-width, edge-to-edge — solo desktop.
   if (!open) {
@@ -160,7 +160,7 @@ export function InspectorDock(props: DockProps) {
                 : "Modello di default configurato: il router può sceglierne un altro"
           }
         >
-          <Cpu size={13} /> {liveModel ?? `${expected.name} (${expected.source})`}
+          <Cpu size={13} /> {modelLabel(runtime.models, modelOverride, liveModel)}
         </span>
         <span className="flex items-center gap-1.5">
           <Layers3 size={13} /> {usage.input_tokens.toLocaleString("it-IT")} tok · {percent}%

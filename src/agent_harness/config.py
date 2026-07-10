@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,8 +29,16 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: str | None = Field(default=None, repr=False)
-    openai_model: str = "gpt-5.4-mini"
-    openai_strong_model: str = "gpt-5.5"
+    # Scala a tre gradini. Modello e reasoning effort salgono insieme: un modello caro che
+    # ragiona poco paga il prezzo alto senza comprarne il beneficio, e la coppia inversa
+    # spende reasoning su un modello che non lo sfrutta. Tenerli agganciati rende il costo
+    # monotono lungo la scala, che è la sola proprietà che permette di dire «sali solo se serve».
+    openai_model_low: str = "gpt-5.6-luna"
+    openai_model_mid: str = "gpt-5.6-terra"
+    openai_model_high: str = "gpt-5.6-sol"
+    openai_effort_low: Literal["none", "low", "medium", "high", "xhigh", "max"] = "low"
+    openai_effort_mid: Literal["none", "low", "medium", "high", "xhigh", "max"] = "medium"
+    openai_effort_high: Literal["none", "low", "medium", "high", "xhigh", "max"] = "high"
     harness_context_window: int = Field(default=128_000, ge=1_000)
 
     harness_max_continuations: int = Field(default=3, ge=1, le=10)
@@ -50,9 +59,13 @@ class Settings(BaseSettings):
     harness_sandbox_network: str = "bridge"
     harness_sandbox_idle_minutes: int = Field(default=30, ge=1, le=1_440)
     harness_sandbox_sweep_seconds: int = Field(default=60, ge=10, le=3_600)
-    # Router fra modello di default e modello forte. Le parole chiave sono configurabili perché
-    # dipendono dalla lingua e dal dominio: la lista di default è in middleware.py.
-    harness_router_strong_keywords: str = ""
+    # Router sulla scala a tre gradini. Le parole chiave sono configurabili perché dipendono
+    # dalla lingua e dal dominio: le liste di default sono in middleware.py. Il gradino basso
+    # non ha parole chiave: è dove si sta quando nessun segnale dice di salire.
+    harness_router_mid_keywords: str = ""
+    harness_router_high_keywords: str = ""
+    # Oltre questa soglia di messaggi si sale al gradino medio, non all'alto: una conversazione
+    # lunga è un indizio debole di complessità, e pagarla al prezzo massimo non si giustifica.
     harness_router_context_threshold: int = Field(default=40, ge=4, le=500)
     # Sorgente di skill-creator, la skill che insegna a scrivere skill conformi allo standard.
     # Configurabile perché l'harness non deve avere un URL di rete incastonato nel codice.
