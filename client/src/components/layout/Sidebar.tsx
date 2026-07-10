@@ -7,6 +7,7 @@ import {
   Sparkles,
   Timer,
   TrendingUp,
+  Wrench,
   X,
 } from "lucide-react";
 import type { View } from "../../lib/constants";
@@ -113,6 +114,10 @@ export function Sidebar({
               <button type="button" className={navClass(view === "skills")} onClick={() => onView("skills")}>
                 <Sparkles size={17} />
                 Skills
+              </button>
+              <button type="button" className={navClass(view === "tools")} onClick={() => onView("tools")}>
+                <Wrench size={17} />
+                Tools
               </button>
               <button type="button" className={navClass(view === "triggers")} onClick={() => onView("triggers")}>
                 <Timer size={17} />

@@ -1,12 +1,20 @@
-import { ArrowUp, Paperclip, ShieldCheck, Square, X, Zap } from "lucide-react";
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { ArrowUp, Paperclip, ShieldCheck, Sparkles, Square, X, Zap } from "lucide-react";
+import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ACCEPTED_FILES } from "../../lib/constants";
-import type { SessionFile } from "../../types";
+import {
+  activeSkillQuery,
+  buildSkillConstraint,
+  replaceSkillQuery,
+  withSkillConstraint,
+} from "../../lib/skillConstraint";
+import type { RuntimeSkill, SessionFile } from "../../types";
 import { FileIcon } from "../shared/FileIcon";
+import { SkillMenu } from "./SkillMenu";
 
 export function ChatComposer({
   disabled,
   files,
+  skills,
   autoApprove,
   onSend,
   onUpload,
@@ -16,6 +24,7 @@ export function ChatComposer({
 }: {
   disabled: boolean;
   files: SessionFile[];
+  skills: RuntimeSkill[];
   autoApprove: boolean;
   onSend: (content: string) => void;
   onUpload: (files: FileList | null) => void;
@@ -24,22 +33,77 @@ export function ChatComposer({
   onToggleAutoApprove: (enabled: boolean) => void;
 }) {
   const [value, setValue] = useState("");
+  const [query, setQuery] = useState<string | null>(null);
+  const [highlighted, setHighlighted] = useState(0);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const matches = useMemo(() => {
+    if (query === null) return [];
+    const needle = query.toLowerCase();
+    return skills.filter((skill) => skill.name.toLowerCase().includes(needle)).slice(0, 8);
+  }, [query, skills]);
+  const menuOpen = query !== null && matches.length > 0;
+
+  const closeMenu = () => {
+    setQuery(null);
+    setHighlighted(0);
+  };
+
+  const chooseSkill = (skill: RuntimeSkill) => {
+    const input = inputRef.current;
+    const caret = input?.selectionStart ?? value.length;
+    setValue(replaceSkillQuery(value, caret));
+    setSelectedSkill(skill.name);
+    closeMenu();
+    input?.focus();
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const clean = value.trim();
     if (!clean || disabled) return;
-    onSend(clean);
+    onSend(withSkillConstraint(clean, selectedSkill));
     setValue("");
+    setSelectedSkill(null);
+    closeMenu();
     if (inputRef.current) inputRef.current.style.height = "auto";
   };
 
   const resize = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    setValue(event.target.value);
+    const next = event.target.value;
+    setValue(next);
+    setQuery(activeSkillQuery(next, event.target.selectionStart));
+    setHighlighted(0);
     event.target.style.height = "auto";
     event.target.style.height = `${Math.min(event.target.scrollHeight, 160)}px`;
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (menuOpen) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setHighlighted((current) => (current + 1) % matches.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setHighlighted((current) => (current - 1 + matches.length) % matches.length);
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        chooseSkill(matches[highlighted]);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu();
+        return;
+      }
+    }
+    if (event.key === "Enter" && !event.shiftKey) submit(event);
   };
 
   return (
@@ -69,17 +133,44 @@ export function ChatComposer({
           ))}
         </div>
       ) : null}
-      <div className="rounded-xl border border-border bg-background shadow-sm transition-[border-color,box-shadow] focus-within:border-muted focus-within:shadow-[0_0_0_1px_rgba(250,204,21,0.14)]">
+      {selectedSkill ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-sm text-accent"
+            title={buildSkillConstraint(selectedSkill)}
+          >
+            <Sparkles size={13} />
+            {selectedSkill}
+            <button
+              type="button"
+              className="ml-0.5 hover:text-foreground"
+              aria-label={`Rimuovi il vincolo sulla skill ${selectedSkill}`}
+              onClick={() => setSelectedSkill(null)}
+            >
+              <X size={13} />
+            </button>
+          </span>
+          <span className="text-xs text-muted">
+            Il messaggio chiederà all'agente di leggere e seguire questa skill. È un vincolo
+            forte, non una chiamata di funzione: l'agente resta libero di non applicarla.
+          </span>
+        </div>
+      ) : null}
+      <div className="relative rounded-xl border border-border bg-background shadow-sm transition-[border-color,box-shadow] focus-within:border-muted focus-within:shadow-[0_0_0_1px_rgba(250,204,21,0.14)]">
+        {menuOpen ? (
+          <SkillMenu skills={matches} highlighted={highlighted} onSelect={chooseSkill} />
+        ) : null}
         <textarea
           ref={inputRef}
           className="block w-full resize-none bg-transparent px-4 pt-4 text-base leading-relaxed outline-none focus:outline-none focus-visible:outline-none placeholder:text-muted"
           value={value}
           onChange={resize}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) submit(event);
-          }}
-          placeholder="Dai un obiettivo all'agente…"
+          onKeyDown={onKeyDown}
+          onBlur={closeMenu}
+          placeholder="Dai un obiettivo all'agente…  /  per una skill"
           aria-label="Messaggio"
+          aria-autocomplete="list"
+          aria-expanded={menuOpen}
           maxLength={20_000}
           rows={1}
         />

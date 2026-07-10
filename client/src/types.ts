@@ -90,7 +90,7 @@ export type RuntimeStatus = {
   model: string;
   strong_model: string;
   context_window: number;
-  skills: Array<{ name: string; status: string; description?: string }>;
+  skills: RuntimeSkill[];
   tools: Array<{ name: string; status: string }>;
   sandbox: {
     image: string;
@@ -104,6 +104,25 @@ export type RuntimeStatus = {
   triggers: { enabled: boolean; tick_seconds: number };
   overrides: Record<string, unknown>;
   canary: CanaryConfig | null;
+};
+
+export type RuntimeSkill = { name: string; status: string; description?: string };
+
+export type ToolArgument = {
+  name: string;
+  type: string;
+  required: boolean;
+  description: string;
+  default: unknown;
+};
+
+export type ToolDescriptor = {
+  name: string;
+  status: string;
+  origin: string;
+  summary: string;
+  description: string;
+  arguments: ToolArgument[];
 };
 
 export type Skill = {

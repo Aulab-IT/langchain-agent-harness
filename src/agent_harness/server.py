@@ -361,8 +361,16 @@ def _skills() -> list[dict[str, Any]]:
     ]
 
 
-async def _tools() -> list[dict[str, str]]:
+async def _tools() -> list[dict[str, Any]]:
     return await tool_catalog(settings)
+
+
+async def _tool_summaries() -> list[dict[str, Any]]:
+    """Versione leggera per `/api/runtime`, che il client interroga in continuazione."""
+    return [
+        {"name": tool["name"], "status": tool["status"], "origin": tool["origin"]}
+        for tool in await _tools()
+    ]
 
 
 def _require_session(session_id: str) -> dict[str, Any]:
@@ -852,7 +860,7 @@ async def runtime_status() -> dict[str, Any]:
         "strong_model": settings.openai_strong_model,
         "context_window": settings.harness_context_window,
         "skills": _skills(),
-        "tools": await _tools(),
+        "tools": await _tool_summaries(),
         "sandbox": {
             "image": settings.harness_sandbox_image,
             "available": _sandbox_available(),
@@ -1319,6 +1327,12 @@ async def run_improve(payload: ImproveRequest) -> dict[str, Any]:
     }
 
 
+@app.get("/api/tools")
+async def get_tools() -> list[dict[str, Any]]:
+    """Catalogo completo: descrizione, origine e schema degli argomenti di ogni tool."""
+    return await _tools()
+
+
 @app.get("/api/skills")
 async def get_skills() -> list[dict[str, Any]]:
     return list_skills(settings.skills_dir)
@@ -1342,6 +1356,24 @@ async def install_skill_endpoint(payload: SkillInstall) -> dict[str, Any]:
             registry_url=settings.skills_registry_url,
             by="human",
             force=payload.force,
+        )
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=f"Skill già esistente: {exc}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/skills/install/skill-creator", status_code=status.HTTP_201_CREATED)
+async def install_skill_creator(force: bool = False) -> dict[str, Any]:
+    """Installa skill-creator dal repo configurato, così l'agente può scrivere skill conformi."""
+    try:
+        return install_skill(
+            settings.skills_dir,
+            "git",
+            settings.harness_skill_creator_repo,
+            subdir=settings.harness_skill_creator_subdir,
+            by="human",
+            force=force,
         )
     except FileExistsError as exc:
         raise HTTPException(status_code=409, detail=f"Skill già esistente: {exc}") from exc

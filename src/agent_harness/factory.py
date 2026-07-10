@@ -99,21 +99,55 @@ async def _load_mcp_tools(settings: Settings, backend_root: Path) -> list[BaseTo
     return list(await client.get_tools())
 
 
-def _describe(tool: BaseTool, origin: str) -> dict[str, str]:
-    description = (tool.description or "").strip().split("\n", 1)[0]
+def _arguments(tool: BaseTool) -> list[dict[str, Any]]:
+    """Argomenti dichiarati dal tool, appiattiti per la vista di dettaglio.
+
+    `tool.args` è già lo schema JSON delle proprietà: non lo interpretiamo, ne estraiamo
+    solo ciò che serve a spiegare l'argomento a un umano.
+    """
+    try:
+        properties = tool.args
+    except (AttributeError, NotImplementedError):
+        return []
+    required: set[str] = set()
+    schema = getattr(tool, "args_schema", None)
+    if schema is not None and hasattr(schema, "model_json_schema"):
+        required = set(schema.model_json_schema().get("required", []))
+    elif isinstance(schema, dict):
+        required = set(schema.get("required", []))
+
+    arguments: list[dict[str, Any]] = []
+    for name, spec in (properties or {}).items():
+        spec = spec if isinstance(spec, dict) else {}
+        arguments.append(
+            {
+                "name": name,
+                "type": str(spec.get("type", "any")),
+                "required": name in required,
+                "description": str(spec.get("description", ""))[:400],
+                "default": spec.get("default"),
+            }
+        )
+    return arguments
+
+
+def _describe(tool: BaseTool, origin: str) -> dict[str, Any]:
+    description = (tool.description or "").strip()
     return {
         "name": tool.name,
         "status": "ready",
         "origin": origin,
-        "description": description[:200],
+        "summary": description.split("\n", 1)[0][:200],
+        "description": description[:2_000],
+        "arguments": _arguments(tool),
     }
 
 
-_TOOL_CATALOG: list[dict[str, str]] | None = None
+_TOOL_CATALOG: list[dict[str, Any]] | None = None
 _TOOL_CATALOG_LOCK = asyncio.Lock()
 
 
-async def tool_catalog(settings: Settings) -> list[dict[str, str]]:
+async def tool_catalog(settings: Settings) -> list[dict[str, Any]]:
     """Nomi e descrizioni dei tool realmente costruiti per un run.
 
     Costruisce gli stessi oggetti tool di `build_harness` — sandbox compresa, il cui

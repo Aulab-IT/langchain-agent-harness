@@ -12,6 +12,13 @@ export const EMPTY_USAGE: Usage = {
   estimated_context: true,
 };
 
-export type View = "control" | "traces" | "skills" | "triggers" | "improve" | "settings";
+export type View =
+  | "control"
+  | "traces"
+  | "skills"
+  | "tools"
+  | "triggers"
+  | "improve"
+  | "settings";
 
 export type InspectorTab = "trace" | "files" | "capabilities" | "context" | "sandbox";

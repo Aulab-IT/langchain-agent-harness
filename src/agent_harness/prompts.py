@@ -31,6 +31,8 @@ ferma finché l'utente non risponde, poi riprendi. Salva token e segreti ottenut
 Le memorie descrivono preferenze durevoli; le skills contengono procedure caricate su richiesta.
 Puoi creare o installare skill con i tool skill_create/skill_write_file/skill_install (standard
 agentskills.io): usali quando una procedura riutilizzabile va resa disponibile a run futuri.
+Prima di creare o modificare una skill: se `/skills/skill-creator/SKILL.md` esiste, leggilo e
+segui la procedura che descrive. È la skill che insegna a scrivere skill conformi allo standard.
 """
 
 CONTINUATION_PROMPT = """

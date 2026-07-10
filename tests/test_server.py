@@ -38,6 +38,46 @@ def test_status_exposes_runtime_without_secrets(client: TestClient) -> None:
     assert "docker_exec" in {tool["name"] for tool in payload["tools"]}
 
 
+def test_tools_endpoint_describes_real_tools_with_their_arguments(client: TestClient) -> None:
+    response = client.get("/api/tools")
+
+    assert response.status_code == 200
+    tools = {tool["name"]: tool for tool in response.json()}
+    # Il vecchio elenco letterale annunciava un tool "mcp:local_harness" inesistente.
+    assert "mcp:local_harness" not in tools
+    assert tools["docker_exec"]["origin"] == "built-in"
+
+    arguments = {arg["name"]: arg for arg in tools["docker_exec"]["arguments"]}
+    assert arguments["command"]["required"] is True
+    assert arguments["with_network"]["required"] is False
+    assert arguments["with_network"]["type"] == "boolean"
+    assert tools["docker_exec"]["description"]
+
+
+def test_skill_creator_route_installs_from_the_configured_source(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_install(
+        skills_dir: object, source: str, value: str, **kwargs: object
+    ) -> dict[str, str]:
+        seen.update({"source": source, "value": value, **kwargs})
+        return {"name": "skill-creator"}
+
+    monkeypatch.setattr(server, "install_skill", fake_install)
+
+    response = client.post("/api/skills/install/skill-creator")
+
+    assert response.status_code == 201
+    assert response.json()["name"] == "skill-creator"
+    assert seen["source"] == "git"
+    assert seen["value"] == server.settings.harness_skill_creator_repo
+    assert seen["subdir"] == server.settings.harness_skill_creator_subdir
+    # La rotta statica non deve essere catturata da /api/skills/{name}.
+    assert seen["by"] == "human"
+
+
 def test_sessions_and_files_are_isolated(client: TestClient) -> None:
     first = client.post("/api/sessions", json={"title": "Prima"}).json()
     second = client.post("/api/sessions", json={"title": "Seconda"}).json()

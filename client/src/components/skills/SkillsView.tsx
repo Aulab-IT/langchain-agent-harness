@@ -20,6 +20,7 @@ import {
   getSkill,
   getSkillFile,
   installSkill,
+  installSkillCreator,
   listSkillFiles,
   listSkillInstalls,
   listSkills,
@@ -113,6 +114,25 @@ export function SkillsView() {
     }
   };
 
+  // skill-creator è la skill che insegna a scrivere skill conformi allo standard: il system
+  // prompt impone all'agente di leggerla prima di crearne o modificarne una, se è installata.
+  const hasSkillCreator = skills.some((skill) => skill.name === "skill-creator");
+
+  const addSkillCreator = async () => {
+    setError("");
+    setBusy(true);
+    try {
+      await installSkillCreator();
+      await refresh();
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Installazione di skill-creator fallita",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const openEditor = async (skillName: string) => {
     setError("");
     try {
@@ -169,6 +189,18 @@ export function SkillsView() {
               installarle; le modifiche valgono dal run successivo.
             </p>
           </div>
+          {hasSkillCreator ? null : (
+            <button
+              type="button"
+              onClick={addSkillCreator}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm font-semibold text-accent hover:bg-accent/20 disabled:opacity-50"
+              title="Installa skill-creator: l'agente la leggerà prima di creare o modificare una skill."
+            >
+              <Sparkles size={16} />
+              {busy ? "Installazione…" : "Installa skill-creator"}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setInstallOpen((v) => !v)}

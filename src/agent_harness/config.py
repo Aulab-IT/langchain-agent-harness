@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     harness_sandbox_network: str = "bridge"
     harness_sandbox_idle_minutes: int = Field(default=30, ge=1, le=1_440)
     harness_sandbox_sweep_seconds: int = Field(default=60, ge=10, le=3_600)
+    # Sorgente di skill-creator, la skill che insegna a scrivere skill conformi allo standard.
+    # Configurabile perché l'harness non deve avere un URL di rete incastonato nel codice.
+    harness_skill_creator_repo: str = "https://github.com/anthropics/skills"
+    harness_skill_creator_subdir: str = "skills/skill-creator"
     # Base del registry Agent Skills usato per l'install per nome (adattatore in skills.py).
     skills_registry_url: str = "https://agentskills.io/registry"
 

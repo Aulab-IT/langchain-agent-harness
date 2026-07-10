@@ -1,6 +1,6 @@
 import { BrainCircuit, Clock3, MessageSquareText, Sparkles, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import type { Run, RunEvent, SessionDetail, SessionFile } from "../../types";
+import type { Run, RunEvent, RuntimeSkill, SessionDetail, SessionFile } from "../../types";
 import { deriveToolSteps } from "../../lib/sessionActivity";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessage } from "./ChatMessage";
@@ -13,6 +13,7 @@ export function ChatPanel({
   run,
   events,
   pending,
+  skills,
   onSend,
   onUpload,
   onRemovePending,
@@ -23,6 +24,7 @@ export function ChatPanel({
 }: {
   session: SessionDetail;
   run: Run | null;
+  skills: RuntimeSkill[];
   events: RunEvent[];
   pending: SessionFile[];
   onSend: (content: string) => void;
@@ -209,6 +211,7 @@ export function ChatPanel({
       <ChatComposer
         disabled={active}
         files={pending}
+        skills={skills}
         autoApprove={session.auto_approve}
         onSend={onSend}
         onUpload={onUpload}

@@ -20,6 +20,7 @@ import type {
   SkillFileContent,
   SkillInstall,
   SkillInstallSource,
+  ToolDescriptor,
   Trigger,
 } from "./types";
 
@@ -257,6 +258,10 @@ export function listSkills(): Promise<Skill[]> {
   return request("/api/skills");
 }
 
+export function listTools(): Promise<ToolDescriptor[]> {
+  return request("/api/tools");
+}
+
 export function getSkill(name: string): Promise<SkillDetail> {
   return request(`/api/skills/${encodeURIComponent(name)}`);
 }
@@ -275,6 +280,10 @@ export function updateSkill(name: string, content: string): Promise<SkillDetail>
 
 export function deleteSkill(name: string): Promise<void> {
   return request(`/api/skills/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+export function installSkillCreator(force = false): Promise<SkillDetail> {
+  return request(`/api/skills/install/skill-creator?force=${force}`, { method: "POST" });
 }
 
 export function installSkill(body: {

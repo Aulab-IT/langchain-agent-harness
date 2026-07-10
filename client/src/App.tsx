@@ -12,6 +12,7 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { Topbar } from "./components/layout/Topbar";
 import { SettingsView } from "./components/settings/SettingsView";
 import { SkillsView } from "./components/skills/SkillsView";
+import { ToolsView } from "./components/tools/ToolsView";
 import { Spinner } from "./components/shared/PanelEmpty";
 import { TraceView } from "./components/traces/TraceView";
 import { TriggersView } from "./components/triggers/TriggersView";
@@ -139,6 +140,10 @@ export default function App() {
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <SkillsView />
           </div>
+        ) : view === "tools" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <ToolsView />
+          </div>
         ) : view === "triggers" ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <TriggersView runtime={runtime} />
@@ -158,6 +163,7 @@ export default function App() {
               className="min-h-0 flex-1"
             session={session}
             run={run}
+            skills={runtime.skills}
             events={events}
             pending={pending}
             onSend={handleSend}
