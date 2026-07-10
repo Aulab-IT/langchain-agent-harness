@@ -4,13 +4,16 @@ import asyncio
 import json
 import subprocess
 import uuid
+from pathlib import Path
 from typing import Any
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
 from agent_harness.config import Settings
+from agent_harness.evaluation import CaseResult, execute_eval_case, load_eval_cases, summarize
 from agent_harness.factory import build_harness
 from agent_harness.improve import run_improvement
 from agent_harness.runner import GoalRunner
@@ -97,6 +100,73 @@ def improve(
         console.print(f"[bold]Sintesi:[/bold] {result['summary']}")
     console.print(f"Proposta salvata: [cyan]{result['path']}[/cyan]")
     console.print("[dim]Propose-only. Valuta e promuovi dal Control Center.[/dim]")
+
+
+# `typer.Option` non può stare in un default valutato all'import (ruff B008).
+_CASES_OPTION = typer.Option(Path("evals/cases.json"), help="File dei casi.")
+
+
+async def _run_eval(settings: Settings, only: str | None, cases_path: Path) -> list[CaseResult]:
+    cases = load_eval_cases(cases_path)
+    if only:
+        wanted = {name.strip() for name in only.split(",") if name.strip()}
+        cases = [case for case in cases if case.id in wanted]
+        if not cases:
+            raise typer.BadParameter(f"Nessun caso con id in {sorted(wanted)}")
+    root = settings.state_dir / "evaluations" / "baseline-run"
+    results: list[CaseResult] = []
+    for index, case in enumerate(cases, start=1):
+        console.print(f"[dim]({index}/{len(cases)})[/dim] {case.id}…")
+        # Un solo braccio: nessun candidato da confrontare, si misura la baseline così com'è.
+        results.append(await execute_eval_case(settings, case, {}, "baseline", root))
+    return results
+
+
+@app.command()
+def eval(
+    only: str = typer.Option("", help="Esegui solo questi id, separati da virgola."),
+    cases: Path = _CASES_OPTION,
+) -> None:
+    """Esegue l'eval set con l'harness reale e stampa i risultati caso per caso.
+
+    Costa: ogni caso è un run completo, con chiamate al modello e alla sandbox. Serve a sapere
+    se i check discriminano e se il grader è rumoroso, prima di fidarsi del gate di promozione.
+    """
+    settings = Settings()
+    results = asyncio.run(_run_eval(settings, only or None, cases))
+
+    table = Table(title="Eval baseline")
+    table.add_column("caso")
+    table.add_column("check", justify="center")
+    table.add_column("score", justify="right")
+    table.add_column("grader", justify="right")
+    table.add_column("iter", justify="right")
+    table.add_column("token", justify="right")
+    table.add_column("tempo", justify="right")
+    for result in results:
+        grader = ", ".join(f"{score:.2f}" for score in result.grader_scores) or "—"
+        table.add_row(
+            result.case_id,
+            "[green]✓[/green]" if result.checks_passed else "[red]✗[/red]",
+            f"{result.check_score:.2f}",
+            grader,
+            str(result.iterations),
+            f"{result.tokens:,}",
+            f"{result.elapsed_ms / 1000:.1f}s",
+        )
+    console.print(table)
+
+    summary = summarize(results)
+    console.print(
+        f"[bold]check pass rate[/bold] {summary.check_pass_rate:.0%} · "
+        f"[bold]score medio[/bold] {summary.avg_check_score:.2f} · "
+        f"[bold]completion[/bold] {summary.completion_rate:.0%} · "
+        f"[bold]token[/bold] {summary.total_tokens:,} · "
+        f"[bold]tempo[/bold] {summary.elapsed_ms / 1000:.0f}s"
+    )
+    for result in results:
+        if result.check_failures:
+            console.print(f"[red]{result.case_id}[/red]: " + "; ".join(result.check_failures))
 
 
 @app.command()
