@@ -28,7 +28,14 @@ export type Message = {
 
 export type ModelTier = "low" | "mid" | "high";
 export type ModelOverride = "auto" | ModelTier;
-export type RuntimeModel = { tier: ModelTier; name: string; effort: string };
+export type RuntimeModel = {
+  tier: ModelTier;
+  name: string;
+  effort: string;
+  /** Dollari per milione di token. Il backend è la fonte: vedi `Settings.openai_price_*`. */
+  price_in: number;
+  price_out: number;
+};
 
 export type SessionFile = {
   name: string;

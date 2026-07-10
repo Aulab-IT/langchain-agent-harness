@@ -1,12 +1,7 @@
 import { ArrowUp, Cpu, Paperclip, ShieldCheck, Sparkles, Square, X, Zap } from "lucide-react";
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ACCEPTED_FILES } from "../../lib/constants";
-import {
-  OVERRIDE_TONE,
-  nextOverride,
-  overrideLabel,
-  overrideTitle,
-} from "../../lib/modelOverride";
+import { OVERRIDE_TONE, nextOverride, overrideLabel } from "../../lib/modelOverride";
 import {
   activeSkillQuery,
   buildSkillConstraint,
@@ -15,6 +10,8 @@ import {
 } from "../../lib/skillConstraint";
 import type { ModelOverride, RuntimeModel, RuntimeSkill, SessionFile } from "../../types";
 import { FileIcon } from "../shared/FileIcon";
+import { Tooltip } from "../shared/Tooltip";
+import { ModelTooltip } from "./ModelTooltip";
 import { SkillMenu } from "./SkillMenu";
 
 export function ChatComposer({
@@ -219,15 +216,16 @@ export function ChatComposer({
               {autoApprove ? <Zap size={14} /> : <ShieldCheck size={14} />}
               {autoApprove ? "Sandbox autonoma" : "Sandbox con approvazione"}
             </button>
-            <button
-              type="button"
-              className={`inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs transition-colors ${OVERRIDE_TONE[sessionModel]}`}
-              onClick={() => onSessionModel(nextOverride(sessionModel))}
-              title={overrideTitle(sessionModel, models)}
-            >
-              <Cpu size={14} />
-              {overrideLabel(sessionModel)}
-            </button>
+            <Tooltip content={<ModelTooltip override={sessionModel} models={models} />}>
+              <button
+                type="button"
+                className={`inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs transition-colors ${OVERRIDE_TONE[sessionModel]}`}
+                onClick={() => onSessionModel(nextOverride(sessionModel))}
+              >
+                <Cpu size={14} />
+                {overrideLabel(sessionModel)}
+              </button>
+            </Tooltip>
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden text-xs text-muted md:inline">Invio ↵ · A capo ⇧↵</span>

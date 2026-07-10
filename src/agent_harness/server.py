@@ -914,8 +914,14 @@ async def runtime_status() -> dict[str, Any]:
         "backend": "online",
         "configured": bool(settings.openai_api_key),
         "models": [
-            {"tier": tier, "name": name, "effort": effort}
-            for tier, (name, effort) in ((t, tier_spec(settings, t)) for t in TIERS)
+            {
+                "tier": spec.tier,
+                "name": spec.name,
+                "effort": spec.effort,
+                "price_in": spec.price_in,
+                "price_out": spec.price_out,
+            }
+            for spec in (tier_spec(settings, tier) for tier in TIERS)
         ],
         "context_window": settings.harness_context_window,
         "skills": _skills(),

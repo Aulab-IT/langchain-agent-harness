@@ -1,3 +1,4 @@
+import itertools
 import json
 from collections.abc import Iterator
 from pathlib import Path
@@ -37,6 +38,18 @@ def test_status_exposes_runtime_without_secrets(client: TestClient) -> None:
     assert payload["backend"] == "online"
     assert "openai_api_key" not in payload
     assert "docker_exec" in {tool["name"] for tool in payload["tools"]}
+
+
+def test_status_exposes_the_three_rungs_with_their_price(client: TestClient) -> None:
+    models = client.get("/api/status").json()["models"]
+
+    assert [model["tier"] for model in models] == ["low", "mid", "high"]
+    # Il costo deve crescere lungo la scala, altrimenti «sali solo se serve» non vuol dire nulla.
+    for cheaper, dearer in itertools.pairwise(models):
+        assert cheaper["price_in"] < dearer["price_in"]
+        assert cheaper["price_out"] < dearer["price_out"]
+    assert models[0]["effort"] == "low"
+    assert models[2]["effort"] == "high"
 
 
 def test_tools_endpoint_describes_real_tools_with_their_arguments(client: TestClient) -> None:

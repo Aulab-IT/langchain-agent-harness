@@ -51,20 +51,6 @@ export function overrideLabel(override: ModelOverride): string {
   return `Modello: ${TIER_NAMES[override]}`;
 }
 
-export function overrideTitle(override: ModelOverride, models: RuntimeModel[]): string {
-  if (override === "auto") {
-    return (
-      "Il router sceglie il gradino dal contenuto della richiesta, e resta in basso finché " +
-      "nulla dice di salire. Clicca per fissarlo per questa sessione."
-    );
-  }
-  const model = modelOfTier(models, override);
-  const name = model ? ` (${model.name}, reasoning ${model.effort})` : "";
-  return (
-    `Questa sessione usa il gradino ${TIER_NAMES[override]}${name} dal prossimo messaggio, ` +
-    "finché non lo cambi. Clicca per passare al gradino successivo."
-  );
-}
 
 /**
  * Etichetta del modello per navbar e barra di stato: il nome dichiarato dal router se un run è
@@ -79,4 +65,24 @@ export function modelLabel(
   const { tier, source } = expectedTier(override);
   const model = modelOfTier(models, tier);
   return model ? `${model.name} (${source})` : "—";
+}
+
+/** A cosa serve ciascun gradino, nelle parole con cui il router lo sceglie. */
+export const OVERRIDE_PURPOSE: Record<ModelOverride, string> = {
+  auto: "Sceglie il router a ogni messaggio, e resta sul gradino basso finché la richiesta non chiede di salire.",
+  low: "Richieste ordinarie: domande dirette, testi brevi, calcoli.",
+  mid: "Lavoro sui file, verifiche nella sandbox, confronti fra fonti.",
+  high: "Architettura, refactor, problemi dichiaratamente complessi.",
+};
+
+/** Il pallino colorato del tooltip, con lo stesso codice del pulsante. */
+export const OVERRIDE_DOT: Record<ModelOverride, string> = {
+  auto: "bg-muted",
+  low: "bg-success",
+  mid: "bg-warning",
+  high: "bg-danger",
+};
+
+export function overrideTitleLabel(override: ModelOverride): string {
+  return override === "auto" ? "Automatico" : `Gradino ${TIER_NAMES[override]}`;
 }

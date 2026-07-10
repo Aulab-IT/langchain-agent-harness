@@ -196,24 +196,42 @@ def _keywords(raw: str) -> tuple[str, ...]:
     return tuple(word.strip().casefold() for word in raw.split(",") if word.strip())
 
 
-def tier_spec(settings: Settings, tier: Tier) -> tuple[str, str]:
-    """Nome del modello e reasoning effort del gradino, senza costruire nulla."""
-    return {
+@dataclass(frozen=True)
+class TierSpec:
+    """Cosa sappiamo di un gradino senza costruire il modello: nome, effort, listino."""
+
+    tier: Tier
+    name: str
+    effort: str
+    price_in: float
+    price_out: float
+
+
+def tier_spec(settings: Settings, tier: Tier) -> TierSpec:
+    names = {
         "low": (settings.openai_model_low, settings.openai_effort_low),
         "mid": (settings.openai_model_mid, settings.openai_effort_mid),
         "high": (settings.openai_model_high, settings.openai_effort_high),
-    }[tier]
+    }
+    prices = {
+        "low": (settings.openai_price_in_low, settings.openai_price_out_low),
+        "mid": (settings.openai_price_in_mid, settings.openai_price_out_mid),
+        "high": (settings.openai_price_in_high, settings.openai_price_out_high),
+    }
+    name, effort = names[tier]
+    price_in, price_out = prices[tier]
+    return TierSpec(tier=tier, name=name, effort=effort, price_in=price_in, price_out=price_out)
 
 
 def build_tier_models(settings: Settings) -> dict[Tier, TierModel]:
     api_key = settings.require_openai_key()
     built: dict[Tier, TierModel] = {}
     for tier in TIERS:
-        name, effort = tier_spec(settings, tier)
+        spec = tier_spec(settings, tier)
         built[tier] = TierModel(
-            name=name,
-            effort=effort,
-            model=_openai_model(name, api_key, reasoning_effort=effort),
+            name=spec.name,
+            effort=spec.effort,
+            model=_openai_model(spec.name, api_key, reasoning_effort=spec.effort),
         )
     return built
 
@@ -224,8 +242,8 @@ def build_judge_model(settings: Settings) -> ChatOpenAI:
     È l'unico posto in cui si paga il gradino alto senza che l'utente lo abbia chiesto: una
     proposta di configurazione sbagliata costa più di qualche dollaro di reasoning.
     """
-    name, effort = tier_spec(settings, "high")
-    return _openai_model(name, settings.require_openai_key(), reasoning_effort=effort)
+    spec = tier_spec(settings, "high")
+    return _openai_model(spec.name, settings.require_openai_key(), reasoning_effort=spec.effort)
 
 
 def _openai_model(name: str, api_key: str, *, reasoning_effort: str) -> ChatOpenAI:

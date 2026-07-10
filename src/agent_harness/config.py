@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     openai_effort_low: Literal["none", "low", "medium", "high", "xhigh", "max"] = "low"
     openai_effort_mid: Literal["none", "low", "medium", "high", "xhigh", "max"] = "medium"
     openai_effort_high: Literal["none", "low", "medium", "high", "xhigh", "max"] = "high"
+    # Dollari per milione di token, input e output. Stanno accanto al nome del modello perché
+    # chi cambia l'uno deve cambiare l'altro: un prezzo che resta indietro non fa rumore, si
+    # limita a mentire nel tooltip finché non arriva la fattura.
+    openai_price_in_low: float = Field(default=1.0, ge=0)
+    openai_price_out_low: float = Field(default=6.0, ge=0)
+    openai_price_in_mid: float = Field(default=2.5, ge=0)
+    openai_price_out_mid: float = Field(default=15.0, ge=0)
+    openai_price_in_high: float = Field(default=5.0, ge=0)
+    openai_price_out_high: float = Field(default=30.0, ge=0)
     harness_context_window: int = Field(default=128_000, ge=1_000)
 
     harness_max_continuations: int = Field(default=3, ge=1, le=10)
