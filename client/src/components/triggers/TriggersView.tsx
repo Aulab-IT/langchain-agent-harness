@@ -10,19 +10,17 @@ import {
 } from "../../api";
 import { relativeLabel } from "../../lib/format";
 import type { RuntimeStatus, Trigger } from "../../types";
-
-const CRON_HINTS = [
-  ["*/5 * * * *", "ogni 5 minuti"],
-  ["0 9 * * 1-5", "ogni giorno feriale alle 09:00"],
-  ["0 * * * *", "ogni ora"],
-];
+import { browserZone } from "../../lib/timezone";
+import { CronPicker } from "./CronPicker";
 
 export function TriggersView({ runtime }: { runtime: RuntimeStatus }) {
   const [triggers, setTriggers] = useState<Trigger[]>([]);
   const [kind, setKind] = useState<"cron" | "webhook">("cron");
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
-  const [cron, setCron] = useState("*/5 * * * *");
+  const [cron, setCron] = useState("0 9 * * *");
+  const [timezone, setTimezone] = useState(browserZone());
+  const [criteria, setCriteria] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -48,9 +46,12 @@ export function TriggersView({ runtime }: { runtime: RuntimeStatus }) {
         name: name.trim(),
         goal_template: goal.trim(),
         cron_expr: kind === "cron" ? cron.trim() : null,
+        timezone,
+        success_criteria: criteria.trim(),
       });
       setName("");
       setGoal("");
+      setCriteria("");
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Creazione fallita");
@@ -149,28 +150,20 @@ export function TriggersView({ runtime }: { runtime: RuntimeStatus }) {
             value={goal}
             onChange={(event) => setGoal(event.target.value)}
           />
+          <textarea
+            className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            placeholder="Criterio di successo: quando l'obiettivo si considera raggiunto (facoltativo)"
+            rows={2}
+            value={criteria}
+            onChange={(event) => setCriteria(event.target.value)}
+          />
           {kind === "cron" ? (
-            <div className="space-y-1">
-              <input
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm outline-none focus:border-accent"
-                placeholder="* * * * *"
-                value={cron}
-                onChange={(event) => setCron(event.target.value)}
-              />
-              <div className="flex flex-wrap gap-2 text-xs text-muted">
-                {CRON_HINTS.map(([expr, label]) => (
-                  <button
-                    key={expr}
-                    type="button"
-                    className="rounded border border-border px-2 py-0.5 font-mono hover:text-foreground"
-                    onClick={() => setCron(expr)}
-                    title={label}
-                  >
-                    {expr}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <CronPicker
+              expr={cron}
+              timezone={timezone}
+              onExpr={setCron}
+              onTimezone={setTimezone}
+            />
           ) : (
             <p className="text-xs text-muted">
               Il webhook riceve un token; il payload dell'evento è trattato come dato non
@@ -210,11 +203,25 @@ export function TriggersView({ runtime }: { runtime: RuntimeStatus }) {
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{trigger.name}</div>
                     <div className="font-mono text-xs text-muted">
-                      {trigger.kind === "cron" ? trigger.cron_expr : "webhook"}
+                      {trigger.kind === "cron"
+                        ? `${trigger.cron_expr} · ${trigger.timezone}`
+                        : "webhook"}
                       {trigger.last_fired_at
                         ? ` · ultimo ${relativeLabel(trigger.last_fired_at)}`
                         : " · mai eseguito"}
                     </div>
+                    {trigger.success_criteria ? (
+                      <div
+                        className="truncate text-xs text-muted"
+                        title={trigger.success_criteria}
+                      >
+                        Criterio d'uscita: {trigger.success_criteria}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-warning">
+                        Nessun criterio d'uscita: il run si ferma quando il grader è soddisfatto.
+                      </div>
+                    )}
                   </div>
                   <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
                     <input

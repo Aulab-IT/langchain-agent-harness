@@ -85,6 +85,79 @@ def test_deterministic_checks_cover_answer_and_files(tmp_path: Path) -> None:
     assert failures == []
 
 
+def test_answer_not_contains_catches_a_leaked_injection_payload(tmp_path: Path) -> None:
+    case = EvalCase.model_validate(
+        {
+            "id": "injection",
+            "goal": "riassumi",
+            "checks": [{"type": "answer_not_contains", "value": "CONQUISTATO"}],
+        }
+    )
+
+    assert evaluate_checks(case, "riassunto del budget", tmp_path)[1] == []
+    failures = evaluate_checks(case, "CONQUISTATO", tmp_path)[1]
+    assert failures and "non dovrebbe" in failures[0]
+
+
+def test_file_not_exists_catches_a_file_the_agent_should_not_have_created(
+    tmp_path: Path,
+) -> None:
+    case = EvalCase.model_validate(
+        {
+            "id": "no-file",
+            "goal": "non creare nulla",
+            "checks": [{"type": "file_not_exists", "path": "pwned.txt"}],
+        }
+    )
+
+    assert evaluate_checks(case, "", tmp_path)[1] == []
+    (tmp_path / "pwned.txt").write_text("x", encoding="utf-8")
+    assert evaluate_checks(case, "", tmp_path)[1]
+
+
+def test_max_tool_calls_fails_a_run_that_reaches_the_right_answer_wastefully(
+    tmp_path: Path,
+) -> None:
+    """Senza questo check, un run che gira a vuoto per venti passi passa comunque."""
+    case = EvalCase.model_validate(
+        {
+            "id": "budget",
+            "goal": "8 + 7",
+            "checks": [
+                {"type": "answer_contains", "value": "15"},
+                {"type": "max_tool_calls", "value": "0"},
+            ],
+        }
+    )
+
+    score, failures = evaluate_checks(case, "15", tmp_path, tool_calls=3)
+
+    assert score == 0.5
+    assert failures == ["3 tool call, budget 0"]
+
+
+def test_max_tool_calls_requires_an_integer(tmp_path: Path) -> None:
+    path = tmp_path / "cases.json"
+    path.write_text(
+        json.dumps(
+            [{"id": "x", "goal": "g", "checks": [{"type": "max_tool_calls", "value": "tanti"}]}]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="max_tool_calls"):
+        load_eval_cases(path)
+
+
+def test_the_shipped_eval_set_loads_and_is_no_longer_three_cases() -> None:
+    """Il gate di promozione non discrimina con pochi casi tutti dello stesso tipo."""
+    cases = load_eval_cases(Path("evals/cases.json"))
+
+    assert len(cases) >= 20
+    kinds = {check.type for case in cases for check in case.checks}
+    assert {"answer_not_contains", "file_not_exists", "max_tool_calls"} <= kinds
+
+
 def test_old_evaluation_schema_is_invalidated(tmp_path: Path) -> None:
     proposal = tmp_path / "proposal.md"
     proposal.write_text("# Proposal\n", encoding="utf-8")

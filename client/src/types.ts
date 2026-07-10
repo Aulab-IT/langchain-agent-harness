@@ -184,6 +184,13 @@ export type Trigger = {
   enabled: boolean;
   created_at: string;
   last_fired_at: string | null;
+  timezone: string;
+  success_criteria: string;
+};
+
+export type CronPreview = {
+  description: string;
+  next_runs: string[];
 };
 
 export type ImprovementSummary = {

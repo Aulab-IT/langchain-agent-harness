@@ -5,7 +5,12 @@ import pytest
 
 from agent_harness.config import Settings
 from agent_harness.control_store import ControlStore
-from agent_harness.triggers import TriggerScheduler, cron_matches
+from agent_harness.triggers import (
+    TriggerScheduler,
+    cron_matches,
+    describe_cron,
+    next_runs,
+)
 
 
 def _dt(minute: int = 0, hour: int = 0, day: int = 1, month: int = 1) -> datetime:
@@ -39,6 +44,49 @@ def test_cron_weekday_range() -> None:
     weekday = moment.isoweekday() % 7
     assert cron_matches(f"0 9 * * {weekday}", moment)
     assert not cron_matches(f"0 9 * * {(weekday + 1) % 7}", moment)
+
+
+def test_nine_in_rome_is_not_nine_in_utc() -> None:
+    """Il bug che rendeva inutile qualunque selettore: `0 9 * * *` valutato in UTC."""
+    winter = datetime(2026, 1, 15, 8, 0, tzinfo=UTC)  # 09:00 a Roma (CET, UTC+1)
+    summer = datetime(2026, 7, 15, 7, 0, tzinfo=UTC)  # 09:00 a Roma (CEST, UTC+2)
+
+    assert cron_matches("0 9 * * *", winter, "Europe/Rome")
+    assert cron_matches("0 9 * * *", summer, "Europe/Rome")
+    # Lo stesso istante in UTC non è le nove.
+    assert not cron_matches("0 9 * * *", winter, "UTC")
+    assert not cron_matches("0 9 * * *", summer, "UTC")
+
+
+def test_daylight_saving_is_handled_by_the_zone_not_by_cron() -> None:
+    """A luglio Roma è UTC+2: le 09:00 locali cadono alle 07:00 UTC, non alle 08:00."""
+    assert not cron_matches("0 9 * * *", datetime(2026, 7, 15, 8, 0, tzinfo=UTC), "Europe/Rome")
+
+
+def test_unknown_timezone_is_rejected_not_silently_treated_as_utc() -> None:
+    with pytest.raises(ValueError, match="Timezone non valida"):
+        cron_matches("0 9 * * *", datetime(2026, 1, 15, 8, 0, tzinfo=UTC), "Marte/Olympus")
+
+
+def test_next_runs_are_returned_in_the_trigger_timezone() -> None:
+    runs = next_runs("0 9 * * *", "Europe/Rome", count=3)
+
+    assert len(runs) == 3
+    assert all(moment.hour == 9 and moment.minute == 0 for moment in runs)
+    assert runs[0] < runs[1] < runs[2]
+
+
+def test_next_runs_is_short_rather_than_wrong_for_an_impossible_expression() -> None:
+    assert next_runs("0 0 30 2 *", "UTC", count=3) == []
+
+
+def test_describe_cron_reads_like_italian() -> None:
+    assert describe_cron("0 9 * * *", "Europe/Rome") == "Ogni giorno alle 09:00 (fuso Europe/Rome)"
+    assert describe_cron("*/15 * * * *") == "Ogni 15 minuti"
+    assert describe_cron("30 8 * * 1") == "Ogni lunedì alle 08:30"
+    assert describe_cron("0 0 1 * *") == "Il giorno 1 di ogni mese alle 00:00"
+    # Forme che non sappiamo tradurre restano l'espressione, invece di una frase inventata.
+    assert describe_cron("5,17 3-6 * * 2-4") == "5,17 3-6 * * 2-4"
 
 
 def test_cron_invalid_raises() -> None:

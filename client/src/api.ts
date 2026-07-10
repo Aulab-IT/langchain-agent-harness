@@ -1,6 +1,7 @@
 import type {
   CanaryAnalysis,
   ContextData,
+  CronPreview,
   ConfigVersion,
   EvaluationArtifact,
   ImproveResult,
@@ -216,8 +217,14 @@ export function createTrigger(body: {
   goal_template: string;
   cron_expr?: string | null;
   session_id?: string | null;
+  timezone?: string;
+  success_criteria?: string;
 }): Promise<Trigger> {
   return request("/api/triggers", jsonOptions("POST", body));
+}
+
+export function previewCron(cron_expr: string, timezone: string): Promise<CronPreview> {
+  return request("/api/triggers/preview", jsonOptions("POST", { cron_expr, timezone }));
 }
 
 export function toggleTrigger(triggerId: string, enabled: boolean): Promise<Trigger> {

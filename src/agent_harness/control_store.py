@@ -165,6 +165,20 @@ class ControlStore:
                 self._connection.execute(
                     "ALTER TABLE sessions ADD COLUMN model_override TEXT NOT NULL DEFAULT 'auto'"
                 )
+            trigger_columns = {
+                row["name"]
+                for row in self._connection.execute("PRAGMA table_info(triggers)")
+            }
+            # `0 9 * * *` sono le nove nel fuso di chi ha creato il trigger, non in UTC.
+            if "timezone" not in trigger_columns:
+                self._connection.execute(
+                    "ALTER TABLE triggers ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC'"
+                )
+            # Criterio di uscita del loop, proprio di questo trigger.
+            if "success_criteria" not in trigger_columns:
+                self._connection.execute(
+                    "ALTER TABLE triggers ADD COLUMN success_criteria TEXT NOT NULL DEFAULT ''"
+                )
 
     def create_session(self, title: str = "Nuova sessione") -> dict[str, Any]:
         session_id = str(uuid.uuid4())
@@ -616,6 +630,8 @@ class ControlStore:
         cron_expr: str | None = None,
         session_id: str | None = None,
         token: str | None = None,
+        timezone: str = "UTC",
+        success_criteria: str = "",
     ) -> dict[str, Any]:
         trigger_id = str(uuid.uuid4())
         now = utc_now()
@@ -624,9 +640,9 @@ class ControlStore:
                 """
                 INSERT INTO triggers(
                     id, kind, name, cron_expr, token, goal_template,
-                    session_id, enabled, created_at
+                    session_id, enabled, created_at, timezone, success_criteria
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
                 """,
                 (
                     trigger_id,
@@ -637,6 +653,8 @@ class ControlStore:
                     goal_template,
                     session_id,
                     now,
+                    timezone,
+                    success_criteria,
                 ),
             )
         return self.get_trigger(trigger_id)

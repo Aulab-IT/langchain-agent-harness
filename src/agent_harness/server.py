@@ -74,7 +74,12 @@ from agent_harness.skills import (
     write_skill,
     write_skill_file,
 )
-from agent_harness.triggers import TriggerScheduler, cron_matches
+from agent_harness.triggers import (
+    TriggerScheduler,
+    cron_matches,
+    describe_cron,
+    next_runs,
+)
 from agent_harness.usage import CATEGORY_COLORS, compute_usage, token_estimate
 
 _LOGGER = logging.getLogger(__name__)
@@ -160,6 +165,13 @@ class TriggerCreate(BaseModel):
     goal_template: Annotated[str, Field(min_length=1, max_length=8_000)]
     cron_expr: Annotated[str | None, Field(default=None, max_length=120)]
     session_id: str | None = None
+    timezone: Annotated[str, Field(default="UTC", max_length=64)]
+    success_criteria: Annotated[str, Field(default="", max_length=2_000)]
+
+
+class CronPreview(BaseModel):
+    cron_expr: Annotated[str, Field(min_length=1, max_length=120)]
+    timezone: Annotated[str, Field(default="UTC", max_length=64)]
 
 
 class TriggerToggle(BaseModel):
@@ -797,6 +809,11 @@ def _require_trigger(trigger_id: str) -> dict[str, Any]:
 def _trigger_goal(trigger: dict[str, Any], payload: Any = None) -> str:
     """Costruisce il goal del run; il payload webhook è allegato come dato NON attendibile."""
     goal = str(trigger["goal_template"])
+    criteria = str(trigger.get("success_criteria") or "").strip()
+    if criteria:
+        # Criterio di uscita del loop, dichiarato quando il trigger è stato creato: senza,
+        # un run periodico non ha modo di sapere quando ha finito.
+        goal += f"\n\n[Criterio di successo — considera l'obiettivo raggiunto solo se]\n{criteria}"
     if payload not in (None, {}, ""):
         body = json.dumps(payload, ensure_ascii=False, indent=2)[:4_000]
         goal += (
@@ -1162,6 +1179,19 @@ async def list_triggers() -> list[dict[str, Any]]:
     return store.list_triggers()
 
 
+@app.post("/api/triggers/preview")
+async def preview_cron(payload: CronPreview) -> dict[str, Any]:
+    """Traduce l'espressione e mostra le prossime esecuzioni, nel fuso scelto."""
+    try:
+        runs = next_runs(payload.cron_expr, payload.timezone, count=3)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {
+        "description": describe_cron(payload.cron_expr, payload.timezone),
+        "next_runs": [moment.isoformat() for moment in runs],
+    }
+
+
 @app.post("/api/triggers", status_code=status.HTTP_201_CREATED)
 async def create_trigger(payload: TriggerCreate) -> dict[str, Any]:
     if payload.session_id and not store.session_exists(payload.session_id):
@@ -1172,7 +1202,7 @@ async def create_trigger(payload: TriggerCreate) -> dict[str, Any]:
         if not payload.cron_expr:
             raise HTTPException(status_code=422, detail="cron_expr richiesto per trigger cron.")
         try:
-            cron_matches(payload.cron_expr, datetime.now(UTC))
+            cron_matches(payload.cron_expr, datetime.now(UTC), payload.timezone)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         cron_expr = payload.cron_expr
@@ -1185,6 +1215,8 @@ async def create_trigger(payload: TriggerCreate) -> dict[str, Any]:
         cron_expr=cron_expr,
         session_id=payload.session_id,
         token=token,
+        timezone=payload.timezone,
+        success_criteria=payload.success_criteria,
     )
 
 

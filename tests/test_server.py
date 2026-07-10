@@ -168,6 +168,52 @@ def test_preview_does_not_escape_the_workspace(client: TestClient) -> None:
     assert excinfo.value.status_code == 400
 
 
+def test_cron_preview_translates_and_projects_in_the_chosen_timezone(client: TestClient) -> None:
+    response = client.post(
+        "/api/triggers/preview",
+        json={"cron_expr": "0 9 * * *", "timezone": "Europe/Rome"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["description"] == "Ogni giorno alle 09:00 (fuso Europe/Rome)"
+    assert len(payload["next_runs"]) == 3
+    assert all("T09:00" in run for run in payload["next_runs"])
+
+
+def test_cron_preview_rejects_an_unknown_timezone(client: TestClient) -> None:
+    response = client.post(
+        "/api/triggers/preview",
+        json={"cron_expr": "0 9 * * *", "timezone": "Marte/Olympus"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_trigger_stores_timezone_and_exit_criteria(client: TestClient) -> None:
+    response = client.post(
+        "/api/triggers",
+        json={
+            "kind": "cron",
+            "name": "Report",
+            "goal_template": "Scrivi il report giornaliero.",
+            "cron_expr": "0 9 * * *",
+            "timezone": "Europe/Rome",
+            "success_criteria": "Il file output/report.md esiste e cita la data di oggi.",
+        },
+    )
+
+    assert response.status_code == 201
+    trigger = response.json()
+    assert trigger["timezone"] == "Europe/Rome"
+    assert "output/report.md" in trigger["success_criteria"]
+
+    # Il criterio finisce nel goal del run, come sezione dedicata.
+    goal = server._trigger_goal(trigger)
+    assert "Criterio di successo" in goal
+    assert "output/report.md" in goal
+
+
 def test_sessions_and_files_are_isolated(client: TestClient) -> None:
     first = client.post("/api/sessions", json={"title": "Prima"}).json()
     second = client.post("/api/sessions", json={"title": "Seconda"}).json()

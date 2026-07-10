@@ -18,8 +18,26 @@ from agent_harness.improve import overrides_fingerprint
 EVALUATION_SCHEMA_VERSION: Literal[2] = 2
 
 
+CheckType = Literal[
+    "answer_contains",
+    "answer_not_contains",
+    "answer_regex",
+    "file_exists",
+    "file_not_exists",
+    "file_contains",
+    "max_tool_calls",
+]
+
+# Check che non guardano né la risposta né il filesystem, ma la condotta del run.
+_BEHAVIOUR_CHECKS = frozenset({"max_tool_calls"})
+_PATH_CHECKS = frozenset({"file_exists", "file_not_exists", "file_contains"})
+_VALUE_CHECKS = frozenset(
+    {"answer_contains", "answer_not_contains", "answer_regex", "file_contains", "max_tool_calls"}
+)
+
+
 class EvalCheck(BaseModel):
-    type: Literal["answer_contains", "answer_regex", "file_exists", "file_contains"]
+    type: CheckType
     value: str = Field(default="", max_length=2_000)
     path: str = Field(default="", max_length=240)
 
@@ -98,8 +116,8 @@ def _confined_path(root: Path, relative: str) -> Path:
 def load_eval_cases(path: Path) -> list[EvalCase]:
     """Carica un eval set locale e valida schema, path e dimensione."""
     raw = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, list) or not 1 <= len(raw) <= 20:
-        raise ValueError("Eval set deve contenere da 1 a 20 casi.")
+    if not isinstance(raw, list) or not 1 <= len(raw) <= 40:
+        raise ValueError("Eval set deve contenere da 1 a 40 casi.")
     cases = [EvalCase.model_validate(item) for item in raw]
     if len({case.id for case in cases}) != len(cases):
         raise ValueError("Gli id dei casi eval devono essere univoci.")
@@ -109,12 +127,14 @@ def load_eval_cases(path: Path) -> list[EvalCase]:
                 raise ValueError(f"Fixture eval non valida: {case.id}")
             _confined_path(Path("/tmp/eval-workspace"), relative)
         for check in case.checks:
-            if check.type.startswith("file_"):
+            if check.type in _PATH_CHECKS:
                 if not check.path:
                     raise ValueError(f"Check file senza path: {case.id}")
                 _confined_path(Path("/tmp/eval-workspace"), check.path)
-            elif not check.value:
-                raise ValueError(f"Check risposta senza value: {case.id}")
+            if check.type in _VALUE_CHECKS and not check.value:
+                raise ValueError(f"Check senza value: {case.id} ({check.type})")
+            if check.type == "max_tool_calls" and not check.value.isdigit():
+                raise ValueError(f"max_tool_calls richiede un intero: {case.id}")
     return cases
 
 
@@ -130,18 +150,35 @@ def eval_set_hash(cases: list[EvalCase]) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def evaluate_checks(case: EvalCase, answer: str, workspace: Path) -> tuple[float, list[str]]:
+def evaluate_checks(
+    case: EvalCase,
+    answer: str,
+    workspace: Path,
+    *,
+    tool_calls: int = 0,
+) -> tuple[float, list[str]]:
+    """Applica i check deterministici. Nessun modello giudica: solo testo, file e condotta.
+
+    `tool_calls` è il numero di chiamate a tool emesse durante il run, e serve a `max_tool_calls`:
+    è l'unico modo di far fallire un caso che *arriva* alla risposta giusta girando a vuoto.
+    """
     failures: list[str] = []
     for check in case.checks:
         if check.type == "answer_contains":
             if check.value.casefold() not in answer.casefold():
                 failures.append(f"Risposta non contiene: {check.value}")
+        elif check.type == "answer_not_contains":
+            if check.value.casefold() in answer.casefold():
+                failures.append(f"Risposta contiene ciò che non dovrebbe: {check.value}")
         elif check.type == "answer_regex":
             if re.search(check.value, answer, flags=re.IGNORECASE | re.MULTILINE) is None:
                 failures.append(f"Risposta non soddisfa regex: {check.value}")
         elif check.type == "file_exists":
             if not _confined_path(workspace, check.path).is_file():
                 failures.append(f"File mancante: {check.path}")
+        elif check.type == "file_not_exists":
+            if _confined_path(workspace, check.path).exists():
+                failures.append(f"File creato ma non doveva esistere: {check.path}")
         elif check.type == "file_contains":
             target = _confined_path(workspace, check.path)
             if not target.is_file():
@@ -150,8 +187,16 @@ def evaluate_checks(case: EvalCase, answer: str, workspace: Path) -> tuple[float
                 encoding="utf-8", errors="replace"
             ).casefold():
                 failures.append(f"{check.path} non contiene: {check.value}")
+        elif check.type == "max_tool_calls":
+            budget = int(check.value)
+            if tool_calls > budget:
+                failures.append(f"{tool_calls} tool call, budget {budget}")
     score = round((len(case.checks) - len(failures)) / len(case.checks), 3)
     return score, failures
+
+
+def count_tool_calls(messages: list[Any]) -> int:
+    return sum(len(getattr(message, "tool_calls", []) or []) for message in messages)
 
 
 def summarize(results: list[CaseResult]) -> ArmSummary:
@@ -382,7 +427,12 @@ async def execute_eval_case(
             if metadata:
                 tokens += int(metadata.get("input_tokens", 0))
                 tokens += int(metadata.get("output_tokens", 0))
-        score, check_failures = evaluate_checks(case, result.text, workspace)
+        score, check_failures = evaluate_checks(
+            case,
+            result.text,
+            workspace,
+            tool_calls=count_tool_calls(result.messages),
+        )
         protocol_failures: list[str] = []
         if not result.completed:
             if (
