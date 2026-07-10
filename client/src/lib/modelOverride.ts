@@ -33,6 +33,18 @@ export function nextOverride(current: ModelOverride): ModelOverride {
   return OVERRIDE_CYCLE[(index + 1) % OVERRIDE_CYCLE.length];
 }
 
+/**
+ * Verde, giallo, rosso: il colore dice il costo, non la correttezza. Il rosso non segnala un
+ * errore, segnala che quel gradino costa cinque volte il verde. Il testo del pulsante nomina
+ * comunque il gradino, perché il colore da solo non è un'informazione accessibile.
+ */
+export const OVERRIDE_TONE: Record<ModelOverride, string> = {
+  auto: "text-muted hover:bg-surface-raised hover:text-foreground",
+  low: "text-success hover:bg-success/10",
+  mid: "text-warning hover:bg-warning/10",
+  high: "text-danger hover:bg-danger/10",
+};
+
 export function overrideLabel(override: ModelOverride): string {
   if (override === "auto") return "Modello: automatico";
   return `Modello: ${TIER_NAMES[override]}`;

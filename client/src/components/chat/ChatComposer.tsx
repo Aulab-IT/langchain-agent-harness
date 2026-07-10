@@ -1,7 +1,12 @@
 import { ArrowUp, Cpu, Paperclip, ShieldCheck, Sparkles, Square, X, Zap } from "lucide-react";
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ACCEPTED_FILES } from "../../lib/constants";
-import { nextOverride, overrideLabel, overrideTitle } from "../../lib/modelOverride";
+import {
+  OVERRIDE_TONE,
+  nextOverride,
+  overrideLabel,
+  overrideTitle,
+} from "../../lib/modelOverride";
 import {
   activeSkillQuery,
   buildSkillConstraint,
@@ -216,11 +221,7 @@ export function ChatComposer({
             </button>
             <button
               type="button"
-              className={`inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs transition-colors ${
-                sessionModel === "auto"
-                  ? "text-muted hover:bg-surface-raised hover:text-foreground"
-                  : "text-accent hover:bg-accent/10"
-              }`}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs transition-colors ${OVERRIDE_TONE[sessionModel]}`}
               onClick={() => onSessionModel(nextOverride(sessionModel))}
               title={overrideTitle(sessionModel, models)}
             >
