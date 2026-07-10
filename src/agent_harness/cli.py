@@ -4,7 +4,10 @@ import asyncio
 import json
 import subprocess
 import uuid
+import warnings
+from datetime import UTC, datetime
 from pathlib import Path
+from statistics import mean
 from typing import Any
 
 import typer
@@ -106,57 +109,109 @@ def improve(
 _CASES_OPTION = typer.Option(Path("evals/cases.json"), help="File dei casi.")
 
 
-async def _run_eval(settings: Settings, only: str | None, cases_path: Path) -> list[CaseResult]:
+def _silence_openai_serializer_warnings() -> None:
+    """Zittisce gli avvisi di serializzazione di pydantic emessi dal client OpenAI.
+
+    Il client dichiara `output` come unione di una trentina di tipi (chiamate MCP, code
+    interpreter, shell locale…). Ogni risposta ne è uno solo, e pydantic avvisa per tutti gli
+    altri. Sono venti righe per chiamata, non riguardano il nostro codice e non cambiano il
+    risultato: coprirebbero la tabella dell'eval. Il filtro è sul messaggio, non sulla
+    categoria, così gli altri `UserWarning` continuano ad arrivare.
+    """
+    warnings.filterwarnings(
+        "ignore", message="Pydantic serializer warnings", category=UserWarning
+    )
+
+
+async def _run_eval(
+    settings: Settings, only: str | None, cases_path: Path, repeat: int
+) -> list[CaseResult]:
+    _silence_openai_serializer_warnings()
     cases = load_eval_cases(cases_path)
     if only:
         wanted = {name.strip() for name in only.split(",") if name.strip()}
         cases = [case for case in cases if case.id in wanted]
         if not cases:
             raise typer.BadParameter(f"Nessun caso con id in {sorted(wanted)}")
-    root = settings.state_dir / "evaluations" / "baseline-run"
+    # Radice nuova a ogni invocazione, e sotto-radice per ogni giro. `execute_eval_case` fa
+    # rmtree della cartella del caso prima di ricrearla: su macOS, Docker Desktop rifiuta di
+    # bind-montare un percorso che ha già montato e che nel frattempo è stato cancellato e
+    # ricreato. Riusare una radice fissa faceva fallire ogni run successivo al primo, con un
+    # errore che sembrava colpa del modello.
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    base = settings.state_dir / "evaluations" / f"baseline-{stamp}"
     results: list[CaseResult] = []
-    for index, case in enumerate(cases, start=1):
-        console.print(f"[dim]({index}/{len(cases)})[/dim] {case.id}…")
-        # Un solo braccio: nessun candidato da confrontare, si misura la baseline così com'è.
-        results.append(await execute_eval_case(settings, case, {}, "baseline", root))
+    totale = len(cases) * repeat
+    fatti = 0
+    for giro in range(repeat):
+        root = base / f"giro-{giro + 1}" if repeat > 1 else base
+        for case in cases:
+            fatti += 1
+            suffisso = f" [dim](giro {giro + 1}/{repeat})[/dim]" if repeat > 1 else ""
+            console.print(f"[dim]({fatti}/{totale})[/dim] {case.id}…{suffisso}")
+            # Un braccio solo: nessun candidato da confrontare, si misura la baseline com'è.
+            results.append(await execute_eval_case(settings, case, {}, "baseline", root))
     return results
+
+
+def _aggregate(results: list[CaseResult]) -> dict[str, list[CaseResult]]:
+    per_caso: dict[str, list[CaseResult]] = {}
+    for result in results:
+        per_caso.setdefault(result.case_id, []).append(result)
+    return per_caso
 
 
 @app.command()
 def eval(
     only: str = typer.Option("", help="Esegui solo questi id, separati da virgola."),
+    repeat: int = typer.Option(1, min=1, max=10, help="Ripetizioni per caso: misura la varianza."),
     cases: Path = _CASES_OPTION,
 ) -> None:
     """Esegue l'eval set con l'harness reale e stampa i risultati caso per caso.
 
     Costa: ogni caso è un run completo, con chiamate al modello e alla sandbox. Serve a sapere
     se i check discriminano e se il grader è rumoroso, prima di fidarsi del gate di promozione.
+
+    Con `--repeat` ogni caso gira più volte. Un caso che passa 2 volte su 3 non è «passato»:
+    è instabile, e distinguerlo da una regressione richiede più di un campione.
     """
     settings = Settings()
-    results = asyncio.run(_run_eval(settings, only or None, cases))
+    results = asyncio.run(_run_eval(settings, only or None, cases, repeat))
+    per_caso = _aggregate(results)
 
-    table = Table(title="Eval baseline")
+    table = Table(title=f"Eval baseline (repeat={repeat})")
     table.add_column("caso")
     table.add_column("check", justify="center")
     table.add_column("score", justify="right")
     table.add_column("grader", justify="right")
-    table.add_column("iter", justify="right")
     table.add_column("token", justify="right")
     table.add_column("tempo", justify="right")
-    for result in results:
-        grader = ", ".join(f"{score:.2f}" for score in result.grader_scores) or "—"
+    for case_id, runs in per_caso.items():
+        passati = sum(run.checks_passed for run in runs)
+        if passati == len(runs):
+            esito = "[green]✓[/green]" if repeat == 1 else f"[green]{passati}/{len(runs)}[/green]"
+        elif passati == 0:
+            esito = "[red]✗[/red]" if repeat == 1 else f"[red]{passati}/{len(runs)}[/red]"
+        else:
+            esito = f"[yellow]{passati}/{len(runs)} instabile[/yellow]"
+        voti = [score for run in runs for score in run.grader_scores]
+        grader = f"{mean(voti):.2f}" if voti else "—"
         table.add_row(
-            result.case_id,
-            "[green]✓[/green]" if result.checks_passed else "[red]✗[/red]",
-            f"{result.check_score:.2f}",
+            case_id,
+            esito,
+            f"{mean([run.check_score for run in runs]):.2f}",
             grader,
-            str(result.iterations),
-            f"{result.tokens:,}",
-            f"{result.elapsed_ms / 1000:.1f}s",
+            f"{sum(run.tokens for run in runs):,}",
+            f"{sum(run.elapsed_ms for run in runs) / 1000:.1f}s",
         )
     console.print(table)
 
     summary = summarize(results)
+    instabili = [
+        cid
+        for cid, runs in per_caso.items()
+        if 0 < sum(r.checks_passed for r in runs) < len(runs)
+    ]
     console.print(
         f"[bold]check pass rate[/bold] {summary.check_pass_rate:.0%} · "
         f"[bold]score medio[/bold] {summary.avg_check_score:.2f} · "
@@ -164,9 +219,16 @@ def eval(
         f"[bold]token[/bold] {summary.total_tokens:,} · "
         f"[bold]tempo[/bold] {summary.elapsed_ms / 1000:.0f}s"
     )
+    if instabili:
+        console.print(f"[yellow]casi instabili:[/yellow] {', '.join(instabili)}")
+    visti: set[str] = set()
     for result in results:
-        if result.check_failures:
+        if result.check_failures and result.case_id not in visti:
+            visti.add(result.case_id)
             console.print(f"[red]{result.case_id}[/red]: " + "; ".join(result.check_failures))
+            if result.answer:
+                testo = " ".join(result.answer.split())[:220]
+                console.print(f"  [dim]risposta:[/dim] {testo}…")
 
 
 @app.command()

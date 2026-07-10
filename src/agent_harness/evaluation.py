@@ -51,6 +51,9 @@ class EvalCase(BaseModel):
 
 class CaseResult(BaseModel):
     case_id: str
+    # La risposta finale, troncata. Senza, un check fallito non si può diagnosticare: si vede
+    # che la stringa attesa manca, non cosa il modello abbia detto al posto suo.
+    answer: str = ""
     checks_passed: bool
     check_score: float = Field(ge=0, le=1)
     protocol_completed: bool
@@ -392,7 +395,15 @@ async def execute_eval_case(
     grader_events: list[dict[str, Any]] = []
 
     async def approve(_: dict[str, Any]) -> bool:
+        # L'eval gira come una sessione in modalità autonoma: ogni tool sensibile è approvato.
+        # È il caso peggiore, ed è quello che vogliamo misurare.
         return True
+
+    async def no_human(_: dict[str, Any]) -> dict[str, Any]:
+        # `request_user_action` ferma il run in attesa di una persona. In eval non c'è nessuno:
+        # l'azione risulta annullata, che è la risposta onesta. Senza questo callback l'agente
+        # che chiede conferma — cioè quello che si comporta bene — farebbe crashare il caso.
+        return {"cancelled": True}
 
     def capture_event(event: dict[str, Any]) -> None:
         if event.get("type") == "grader.completed":
@@ -417,6 +428,7 @@ async def execute_eval_case(
                 harness,
                 approval_callback=approve,
                 event_callback=capture_event,
+                interaction_callback=no_human,
             ).run(
                 case.goal,
                 thread_id=session_id,
@@ -459,6 +471,7 @@ async def execute_eval_case(
         ]
         return CaseResult(
             case_id=case.id,
+            answer=result.text[:4_000],
             checks_passed=not check_failures,
             check_score=score,
             protocol_completed=result.completed,
