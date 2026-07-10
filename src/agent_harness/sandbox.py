@@ -26,6 +26,22 @@ class DockerExecInput(BaseModel):
         description="Comando shell da eseguire dentro /workspace nel container isolato.",
     )
     timeout_seconds: int = Field(default=60, ge=1, le=120)
+    with_network: bool = Field(
+        default=False,
+        description=(
+            "Concede accesso rete al container SOLO per questo comando, poi lo revoca. "
+            "Attivalo per QUALSIASI comando che ha bisogno di internet: installare una "
+            "libreria mancante (`pip install`), chiamare un'API esterna, un flusso OAuth, "
+            "scaricare dati. Se un comando fallisce con errori tipo 'Temporary failure in "
+            "name resolution', 'Failed to establish a new connection' o simili, RIPETILO "
+            "con with_network=true. Richiede sempre conferma esplicita dell'utente, anche "
+            "in modalità autonoma, quindi non abusarne. Il filesystem è read-only: "
+            "installa le librerie dentro /workspace, es. "
+            "`pip install --target /workspace/.pylib <pkg>` e poi usa "
+            "`PYTHONPATH=/workspace/.pylib` (aggiungi `TMPDIR=/workspace/.tmp` se la "
+            "build scrive file temporanei)."
+        ),
+    )
 
 
 def _docker_ids() -> tuple[int, int]:
@@ -43,6 +59,14 @@ class SessionSandboxManager:
     def container_name(self, session_id: str) -> str:
         safe = session_id.replace("-", "")[:20]
         return f"harness-sbx-{safe}"
+
+    def isolated_network_name(self, session_id: str) -> str:
+        """Rete Docker `--internal` dedicata alla sessione: nessun accesso a internet e,
+        essendo per-sessione, nessuna raggiungibilità verso i container di altre sessioni
+        (isolamento equivalente a `--network none`). A differenza di `none`, però, permette
+        di collegare a caldo la rete internet (`bridge`) per una singola installazione."""
+        safe = session_id.replace("-", "")[:20]
+        return f"harness-net-{safe}"
 
     def _session_lock(self, session_id: str) -> threading.Lock:
         with self._registry_lock:
@@ -80,6 +104,53 @@ class SessionSandboxManager:
 
     def remove_container_by_name(self, name: str) -> None:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False, timeout=30)
+
+    def ensure_network(self, name: str) -> None:
+        """Crea la rete `--internal` della sessione se manca. Idempotente."""
+        inspect = subprocess.run(
+            ["docker", "network", "inspect", name],
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+        if inspect.returncode == 0:
+            return
+        subprocess.run(
+            ["docker", "network", "create", "--internal", "--driver", "bridge", name],
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+
+    def remove_network(self, name: str) -> None:
+        """Rimuove la rete della sessione (best-effort; fallisce senza sollevare se in uso)."""
+        with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+            subprocess.run(
+                ["docker", "network", "rm", name],
+                capture_output=True,
+                check=False,
+                timeout=15,
+            )
+
+    def list_network_names(self) -> list[str]:
+        """Nomi delle reti harness-net-*; usato per lo sweep degli orfani."""
+        try:
+            result = subprocess.run(
+                [
+                    "docker", "network", "ls",
+                    "--format", "{{.Name}}",
+                    "--filter", "name=harness-net-",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return []
+        if result.returncode != 0:
+            return []
+        return [line for line in result.stdout.splitlines() if line.strip()]
 
     def docker_available(self) -> bool:
         if not shutil_which("docker"):
@@ -132,6 +203,47 @@ class SessionSandboxManager:
             detail = (result.stderr or result.stdout or "errore sconosciuto").strip()
             raise RuntimeError(f"Build immagine sandbox fallita:\n{detail}")
 
+    def _connect_network(self, container: str, network: str) -> None:
+        """Collega a caldo il container alla rete Docker (accesso internet on-demand)."""
+        subprocess.run(
+            ["docker", "network", "connect", network, container],
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+
+    def _disconnect_network(self, container: str, network: str) -> None:
+        """Scollega il container dalla rete. Best-effort e idempotente: se il container
+        non è collegato (o non esiste) l'errore viene ignorato, così è sicuro chiamarlo
+        anche come pulizia difensiva."""
+        with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+            subprocess.run(
+                ["docker", "network", "disconnect", "-f", network, container],
+                capture_output=True,
+                check=False,
+                timeout=15,
+            )
+
+    def container_networks(self, name: str) -> set[str]:
+        """Reti a cui il container è attualmente collegato (vuoto se assente/errore)."""
+        try:
+            result = subprocess.run(
+                [
+                    "docker", "inspect", "-f",
+                    "{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}",
+                    name,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return set()
+        if result.returncode != 0:
+            return set()
+        return {token for token in result.stdout.split() if token}
+
     def is_running(self, session_id: str) -> bool:
         name = self.container_name(session_id)
         try:
@@ -157,13 +269,24 @@ class SessionSandboxManager:
             "running": running,
         }
 
-    def run_flags(self, workspace: Path, image: str, skills_dir: Path | None = None) -> list[str]:
+    def run_flags(
+        self,
+        workspace: Path,
+        image: str,
+        skills_dir: Path | None = None,
+        isolated_network: str = "none",
+    ) -> list[str]:
         """Flag di sicurezza per `docker run`, SENZA l'immagine.
 
         In `docker run [OPTIONS] IMAGE [COMMAND]` tutto ciò che segue l'immagine è il
         comando eseguito nel container, non un'opzione docker. L'immagine va quindi
         aggiunta dal chiamante subito prima del comando (es. `--name` deve stare tra
         queste opzioni e l'immagine, mai dopo).
+
+        `isolated_network` è la rete di base del container: una rete `--internal`
+        dedicata alla sessione (nessun accesso a internet). Non si usa `--network none`
+        perché Docker vieta di collegare a caldo un'altra rete a un container in modalità
+        `none`, impedendo la concessione temporanea di internet per gli install.
 
         Se `skills_dir` esiste, viene montata read-only su /skills così l'agente può
         eseguirne gli script (senza poterli modificare dal container).
@@ -176,7 +299,7 @@ class SessionSandboxManager:
             "docker",
             "run",
             "--network",
-            "none",
+            isolated_network,
             "--read-only",
             "--cap-drop",
             "ALL",
@@ -220,7 +343,12 @@ class SessionSandboxManager:
                 raise RuntimeError("Docker non è installato o il demone non è attivo.")
             self.ensure_image(image, project_root)
             name = self.container_name(session_id)
-            if self.is_running(session_id):
+            isolated_network = self.isolated_network_name(session_id)
+            # Riusa il container solo se è collegato alla rete `--internal` attesa.
+            # Un container avviato da una versione precedente (rete `none`) non è
+            # collegabile a caldo a internet: va ricreato, altrimenti `with_network`
+            # fallirebbe silenziosamente per sempre su questa sessione.
+            if self.is_running(session_id) and isolated_network in self.container_networks(name):
                 return name
             subprocess.run(
                 ["docker", "rm", "-f", name],
@@ -228,8 +356,9 @@ class SessionSandboxManager:
                 check=False,
                 timeout=15,
             )
+            self.ensure_network(isolated_network)
             command = [
-                *self.run_flags(workspace, image, project_root / "skills"),
+                *self.run_flags(workspace, image, project_root / "skills", isolated_network),
                 "--name",
                 name,
                 "-d",
@@ -260,6 +389,8 @@ class SessionSandboxManager:
                 check=False,
                 timeout=30,
             )
+            # Rimossa la rete `--internal` della sessione, ora senza container collegati.
+            self.remove_network(self.isolated_network_name(session_id))
         self.forget(session_id)
 
     def execute(
@@ -272,19 +403,31 @@ class SessionSandboxManager:
         *,
         timeout_seconds: int = 60,
         output_limit: int = 12_000,
+        with_network: bool = False,
+        network: str = "bridge",
     ) -> str:
         if "\x00" in command:
             raise ValueError("Il comando contiene un byte NUL.")
         self.touch(session_id)
         try:
             container = self.ensure_running(session_id, workspace, image, project_root)
-            result = subprocess.run(
-                ["docker", "exec", container, "sh", "-lc", command],
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-                check=False,
-            )
+            if with_network:
+                # Concessione per-comando: collega la rete solo per questo exec e la
+                # revoca sempre nel finally, anche se il comando fallisce o va in timeout.
+                # `connect` è innocuo se una connessione residua di un run crashato è
+                # ancora presente (errore ignorato con check=False); il finally la ripulisce.
+                self._connect_network(container, network)
+            try:
+                result = subprocess.run(
+                    ["docker", "exec", container, "sh", "-lc", command],
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_seconds,
+                    check=False,
+                )
+            finally:
+                if with_network:
+                    self._disconnect_network(container, network)
         except FileNotFoundError:
             return "ERRORE: Docker non è installato o non è nel PATH."
         except subprocess.TimeoutExpired:
@@ -327,6 +470,13 @@ def cleanup_orphan_sandboxes(
     orphans = [name for name in manager.list_container_names() if name not in known_names]
     for name in orphans:
         manager.remove_container_by_name(name)
+    # Rimuove anche le reti `--internal` orfane (rimosso prima il container che le usa).
+    known_networks = {
+        manager.isolated_network_name(session_id) for session_id in known_session_ids
+    }
+    for network in manager.list_network_names():
+        if network not in known_networks:
+            manager.remove_network(network)
     return orphans
 
 
@@ -401,6 +551,7 @@ class DockerSandbox:
     image: str = "langchain-harness-sandbox:latest"
     output_limit: int = 12_000
     project_root: Path = PROJECT_ROOT
+    network: str = "bridge"
     manager: SessionSandboxManager = field(default_factory=lambda: session_sandbox_manager)
 
     def command_line(self, command: str) -> list[str]:
@@ -412,7 +563,11 @@ class DockerSandbox:
 
     def run_command_line(self, command: str = "sleep infinity") -> list[str]:
         """Compatibilità test: comando docker run per avviare il container."""
-        flags = self.manager.run_flags(self.workspace, self.image)
+        flags = self.manager.run_flags(
+            self.workspace,
+            self.image,
+            isolated_network=self.manager.isolated_network_name(self.session_id),
+        )
         return [
             *flags,
             "--name",
@@ -422,7 +577,9 @@ class DockerSandbox:
             *command.split(),
         ]
 
-    def execute(self, command: str, timeout_seconds: int = 60) -> str:
+    def execute(
+        self, command: str, timeout_seconds: int = 60, with_network: bool = False
+    ) -> str:
         return self.manager.execute(
             self.session_id,
             self.workspace,
@@ -431,6 +588,8 @@ class DockerSandbox:
             command,
             timeout_seconds=timeout_seconds,
             output_limit=self.output_limit,
+            with_network=with_network,
+            network=self.network,
         )
 
     def as_tool(self) -> BaseTool:
@@ -440,7 +599,11 @@ class DockerSandbox:
             description=(
                 "Esegue test, script e comandi in un container Docker isolato dedicato "
                 "a questa conversazione. La sandbox viene avviata automaticamente al primo "
-                "uso. Solo /workspace è condiviso in scrittura."
+                "uso. Solo /workspace è condiviso in scrittura. Normalmente il container "
+                "non ha rete: se un comando ha bisogno di internet (installare una "
+                "libreria, chiamare un'API, OAuth) o fallisce con errori di rete/DNS, "
+                "richiamalo con with_network=true (accesso rete temporaneo, solo per quel "
+                "comando e previa conferma dell'utente)."
             ),
             args_schema=DockerExecInput,
         )

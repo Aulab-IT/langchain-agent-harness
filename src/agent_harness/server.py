@@ -21,8 +21,9 @@ from pydantic import BaseModel, Field
 from starlette.responses import Response
 
 from agent_harness.canary import CANARY_EVENT_TYPES, CanaryAnalysis, analyze_canary
+from agent_harness.command_review import review_command
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
-from agent_harness.control_store import ControlStore
+from agent_harness.control_store import OUTPUT_DIR, ControlStore
 from agent_harness.evaluation import (
     evaluate_candidate,
     execute_eval_case,
@@ -30,7 +31,7 @@ from agent_harness.evaluation import (
     load_proposal_evaluation,
     save_proposal_evaluation,
 )
-from agent_harness.factory import build_harness, build_strong_model
+from agent_harness.factory import build_harness, build_strong_model, tool_catalog
 from agent_harness.improve import (
     IMPROVEMENT_EVENT_TYPES,
     Proposal,
@@ -121,6 +122,11 @@ class SessionUpdate(BaseModel):
 
 class AutoApproveUpdate(BaseModel):
     enabled: bool
+
+
+class ActionResponse(BaseModel):
+    response: Annotated[str, Field(default="", max_length=8_000)] = ""
+    cancel: bool = False
 
 
 class MessageCreate(BaseModel):
@@ -355,15 +361,8 @@ def _skills() -> list[dict[str, Any]]:
     ]
 
 
-def _tools() -> list[dict[str, str]]:
-    names = ["current_utc_time", "docker_exec"]
-    if settings.harness_enable_web_search:
-        names.append("web_search")
-    if settings.harness_enable_browser:
-        names.append("browser_read")
-    if settings.harness_enable_mcp:
-        names.append("mcp:local_harness")
-    return [{"name": name, "status": "ready"} for name in names]
+async def _tools() -> list[dict[str, str]]:
+    return await tool_catalog(settings)
 
 
 def _require_session(session_id: str) -> dict[str, Any]:
@@ -431,10 +430,38 @@ def _extract_command(value: Any) -> str | None:
     return None
 
 
+_MAX_CHAT_ATTACHMENTS = 20
+
+
+def _select_attachments(changed_files: list[str]) -> list[str]:
+    """Sceglie cosa allegare in chat: solo i deliverable, non gli intermedi.
+
+    Se l'agente ha scritto nella cartella convenzionale `output/`, allega solo quei file;
+    altrimenti allega i file cambiati (già ripuliti da dipendenze/cache in list_files),
+    limitandone il numero per non invadere la conversazione.
+    """
+    prefix = f"{OUTPUT_DIR}/"
+    output_files = [name for name in changed_files if name.startswith(prefix)]
+    selected = output_files or changed_files
+    return selected[:_MAX_CHAT_ATTACHMENTS]
+
+
+def _pending_with_network(value: Any) -> bool:
+    """True se una delle tool call in sospeso chiede accesso rete (with_network)."""
+    if isinstance(value, dict):
+        if value.get("with_network") is True:
+            return True
+        return any(_pending_with_network(nested) for nested in value.values())
+    if isinstance(value, list):
+        return any(_pending_with_network(nested) for nested in value)
+    return False
+
+
 class RunManager:
     def __init__(self) -> None:
         self.tasks: dict[str, asyncio.Task[None]] = {}
         self.approvals: dict[str, asyncio.Future[bool]] = {}
+        self.interactions: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._lock = asyncio.Lock()
 
     def _emit(
@@ -509,20 +536,37 @@ class RunManager:
                         "estimated": True,
                     },
                 )
-            elif event_type in {"grader.started", "grader.completed", "usage.snapshot"}:
+            elif event_type in {
+                "grader.started",
+                "grader.completed",
+                "usage.snapshot",
+                "assistant.iteration",
+            }:
                 self._emit(run_id, session_id, event_type, event)
 
         async def approval(payload: dict[str, Any]) -> bool:
-            safe_payload = {
+            is_network = _pending_with_network(payload)
+            safe_payload: dict[str, Any] = {
                 "action": str(payload.get("action", "docker_exec")),
-                "description": "Esecuzione comando in sandbox Docker isolata",
+                "description": (
+                    "Accesso rete temporaneo alla sandbox Docker (per questo comando)"
+                    if is_network
+                    else "Esecuzione comando in sandbox Docker isolata"
+                ),
             }
+            if is_network:
+                safe_payload["network"] = True
             command = _extract_command(payload)
             if command:
                 safe_payload["command"] = command
+                # Classificazione statica: dice all'utente cosa fa il comando prima che
+                # lo approvi. Non è un'autorizzazione, è una spiegazione.
+                safe_payload["review"] = review_command(command).as_dict()
             # Letto live a ogni richiesta: se la sessione lavora in autonomia, l'agente
             # procede subito, senza fermare il run né mostrare il modale di conferma.
-            if store.get_session(session_id).get("auto_approve"):
+            # ECCEZIONE: le richieste di accesso rete richiedono SEMPRE conferma
+            # esplicita, anche in modalità autonoma.
+            if not is_network and store.get_session(session_id).get("auto_approve"):
                 self._emit(run_id, session_id, "approval.auto", safe_payload)
                 return True
             future: asyncio.Future[bool] = loop.create_future()
@@ -544,6 +588,34 @@ class RunManager:
             )
             return approved
 
+        async def interaction(payload: dict[str, Any]) -> dict[str, Any]:
+            # Azione umana sbloccante: si attende SEMPRE l'utente (l'autonomia non può
+            # svolgere un'azione reale come un consenso OAuth nel browser).
+            safe_payload = {
+                "title": str(payload.get("title", ""))[:200],
+                "instructions": str(payload.get("instructions", ""))[:6_000],
+                "response_kind": str(payload.get("response_kind", "confirm")),
+                "url": payload.get("url"),
+            }
+            future: asyncio.Future[dict[str, Any]] = loop.create_future()
+            self.interactions[run_id] = future
+            store.update_run(run_id, status="waiting_action")
+            self._emit(run_id, session_id, "action.requested", safe_payload)
+            try:
+                resolved = await asyncio.wait_for(future, timeout=1_800)
+            except TimeoutError:
+                resolved = {"cancelled": True}
+            finally:
+                self.interactions.pop(run_id, None)
+            store.update_run(run_id, status="running")
+            self._emit(
+                run_id,
+                session_id,
+                "action.resolved",
+                {"cancelled": bool(resolved.get("cancelled"))},
+            )
+            return resolved
+
         goal_runner: GoalRunner | None = None
         try:
             if not settings.openai_api_key:
@@ -559,7 +631,7 @@ class RunManager:
             ) as harness:
                 manifest = _attachment_manifest(session_id)
                 goal = content + manifest if len(content) + len(manifest) <= 20_000 else content
-                goal_runner = GoalRunner(harness, approval, agent_event)
+                goal_runner = GoalRunner(harness, approval, agent_event, interaction)
                 result = await goal_runner.run(goal, thread_id=session_id)
 
             elapsed = time.monotonic() - started
@@ -575,10 +647,12 @@ class RunManager:
                 elif metadata["modified_at"] != files_before[name]["modified_at"]:
                     changed_files.append(name)
                     self._emit(run_id, session_id, "file.updated", metadata)
-            # I file nuovi/modificati dal run compaiono anche come allegati del messaggio,
-            # non solo nel pannello File: la produzione è visibile subito in chat.
+            # In chat vogliamo solo l'output richiesto, non gli artefatti intermedi.
+            # `list_files` già esclude dipendenze e cache (es. .pylib, __pycache__); se
+            # l'agente ha usato la cartella `output/` per i deliverable, allega solo quelli.
+            attachments = _select_attachments(changed_files)
             store.add_message(
-                session_id, "assistant", clean_text, run_id=run_id, attachments=changed_files
+                session_id, "assistant", clean_text, run_id=run_id, attachments=attachments
             )
             store.update_run(run_id, status="completed", usage=usage)
             self._emit(run_id, session_id, "usage.updated", usage)
@@ -624,6 +698,7 @@ class RunManager:
             )
         finally:
             self.approvals.pop(run_id, None)
+            self.interactions.pop(run_id, None)
             self.tasks.pop(run_id, None)
 
     async def resolve_approval(self, run_id: str, approved: bool) -> None:
@@ -633,6 +708,13 @@ class RunManager:
             raise HTTPException(status_code=409, detail="Nessuna approvazione pendente.")
         future.set_result(approved)
 
+    async def resolve_action(self, run_id: str, response: str, cancel: bool) -> None:
+        _require_run(run_id)
+        future = self.interactions.get(run_id)
+        if future is None or future.done():
+            raise HTTPException(status_code=409, detail="Nessuna azione utente pendente.")
+        future.set_result({"cancelled": True} if cancel else {"response": response})
+
     async def cancel(self, run_id: str) -> None:
         run = _require_run(run_id)
         if run["status"] in _TERMINAL_RUN_STATES:
@@ -640,6 +722,9 @@ class RunManager:
         future = self.approvals.get(run_id)
         if future is not None and not future.done():
             future.set_result(False)
+        action_future = self.interactions.get(run_id)
+        if action_future is not None and not action_future.done():
+            action_future.set_result({"cancelled": True})
         task = self.tasks.get(run_id)
         if task is None:
             store.update_run(run_id, status="cancelled")
@@ -767,12 +852,12 @@ async def runtime_status() -> dict[str, Any]:
         "strong_model": settings.openai_strong_model,
         "context_window": settings.harness_context_window,
         "skills": _skills(),
-        "tools": _tools(),
+        "tools": await _tools(),
         "sandbox": {
             "image": settings.harness_sandbox_image,
             "available": _sandbox_available(),
             "approval_required": settings.harness_require_approval,
-            "network": "disabled",
+            "network": "on-demand (per comando, con conferma)",
             "memory": "512 MB",
             "cpu": "1 core",
         },
@@ -937,6 +1022,12 @@ async def approve_run(run_id: str) -> dict[str, str]:
 async def reject_run(run_id: str) -> dict[str, str]:
     await run_manager.resolve_approval(run_id, False)
     return {"status": "rejected"}
+
+
+@app.post("/api/runs/{run_id}/action", status_code=status.HTTP_202_ACCEPTED)
+async def submit_action(run_id: str, payload: ActionResponse) -> dict[str, str]:
+    await run_manager.resolve_action(run_id, payload.response, payload.cancel)
+    return {"status": "resolved"}
 
 
 @app.post("/api/runs/{run_id}/cancel", status_code=status.HTTP_202_ACCEPTED)

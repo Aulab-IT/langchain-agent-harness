@@ -1,7 +1,7 @@
 import { ChevronDown, Layers3, PanelRight, X } from "lucide-react";
 import type { InspectorTab } from "../../lib/constants";
+import type { ActivityEntry } from "../../lib/sessionActivity";
 import type {
-  ActivityItem,
   Run,
   RunEvent,
   RuntimeStatus,
@@ -9,16 +9,16 @@ import type {
   SessionSandbox,
   Usage,
 } from "../../types";
-import { CapabilitiesPanel } from "../inspector/CapabilitiesPanel";
 import { ContextPanel } from "../inspector/ContextPanel";
 import { FilesPanel } from "../inspector/FilesPanel";
 import { RunTracePanel } from "../inspector/RunTracePanel";
 import { SandboxPanel } from "../inspector/SandboxPanel";
+import { SessionActivityPanel } from "../inspector/SessionActivityPanel";
 
 const TABS: Array<{ id: InspectorTab; label: string }> = [
   { id: "trace", label: "Trace" },
   { id: "files", label: "File" },
-  { id: "capabilities", label: "Capacità" },
+  { id: "capabilities", label: "Attività" },
   { id: "context", label: "Contesto" },
   { id: "sandbox", label: "Sandbox" },
 ];
@@ -46,8 +46,8 @@ export function InspectorRail({
   onTabChange: (tab: InspectorTab) => void;
   sessionId: string;
   files: SessionFile[];
-  skills: ActivityItem[];
-  tools: ActivityItem[];
+  skills: ActivityEntry[];
+  tools: ActivityEntry[];
   usage: Usage;
   contextWindow: number;
   runtime: RuntimeStatus;
@@ -128,7 +128,7 @@ export function InspectorRail({
           />
         ) : null}
         {tab === "capabilities" ? (
-          <CapabilitiesPanel skills={skills} tools={tools} />
+          <SessionActivityPanel skills={skills} tools={tools} />
         ) : null}
         {tab === "context" ? (
           <ContextPanel usage={usage} contextWindow={contextWindow} sessionId={sessionId} />

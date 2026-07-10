@@ -5,6 +5,7 @@ description = "Progetto didattico: anatomia completa di un agent harness con Lan
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "aiosqlite>=0.20.0",
     "ddgs>=9.0.0",
     "deepagents>=0.5.0",
     "fastapi>=0.115.0",

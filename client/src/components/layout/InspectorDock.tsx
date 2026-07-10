@@ -15,8 +15,8 @@ import {
 } from "react";
 import type { InspectorTab } from "../../lib/constants";
 import { describeCurrentAction } from "../../lib/runTrace";
+import type { ActivityEntry } from "../../lib/sessionActivity";
 import type {
-  ActivityItem,
   Run,
   RunEvent,
   RuntimeStatus,
@@ -42,8 +42,8 @@ type DockProps = {
   sessionTitle: string;
   messageCount: number;
   files: SessionFile[];
-  skills: ActivityItem[];
-  tools: ActivityItem[];
+  skills: ActivityEntry[];
+  tools: ActivityEntry[];
   usage: Usage;
   contextWindow: number;
   runtime: RuntimeStatus;
@@ -59,6 +59,7 @@ const STATUS_DOT: Record<string, string> = {
   running: "bg-accent",
   queued: "bg-accent",
   waiting_approval: "bg-warning",
+  waiting_action: "bg-accent",
   failed: "bg-danger",
 };
 
@@ -111,7 +112,7 @@ export function InspectorDock(props: DockProps) {
 
   const percent = Math.min(100, Math.round((usage.input_tokens / contextWindow) * 100));
   const status = run?.status ?? "idle";
-  const active = Boolean(run && ["queued", "running", "waiting_approval"].includes(run.status));
+  const active = Boolean(run && ["queued", "running", "waiting_approval", "waiting_action"].includes(run.status));
   const current = describeCurrentAction(events, run);
 
   // Barra di stato compatta (chiuso), full-width, edge-to-edge — solo desktop.

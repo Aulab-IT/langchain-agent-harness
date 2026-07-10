@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     harness_enable_mcp: bool = True
     harness_require_approval: bool = True
     harness_sandbox_image: str = "langchain-harness-sandbox:latest"
+    # Rete Docker collegata a caldo, per comando e solo su conferma, quando l'agente
+    # chiede accesso rete (docker_exec with_network=True). Revocata subito dopo.
+    harness_sandbox_network: str = "bridge"
     harness_sandbox_idle_minutes: int = Field(default=30, ge=1, le=1_440)
     harness_sandbox_sweep_seconds: int = Field(default=60, ge=10, le=3_600)
     # Base del registry Agent Skills usato per l'install per nome (adattatore in skills.py).

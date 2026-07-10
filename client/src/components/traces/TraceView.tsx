@@ -6,6 +6,7 @@ import {
   CircleX,
   Clock3,
   FileText,
+  HandHelping,
   Layers3,
   Play,
   ShieldCheck,
@@ -157,6 +158,7 @@ function eventMeta(type: string) {
   if (type.startsWith("tool.")) return { Icon: Wrench, color: "text-info" };
   if (type.startsWith("grader.")) return { Icon: CircleCheck, color: "text-accent" };
   if (type.startsWith("approval.")) return { Icon: ShieldCheck, color: "text-warning" };
+  if (type.startsWith("action.")) return { Icon: HandHelping, color: "text-accent" };
   if (type.startsWith("skill.")) return { Icon: Sparkles, color: "text-accent" };
   if (type.startsWith("file.")) return { Icon: FileText, color: "text-success" };
   if (type === "agent.started") return { Icon: Bot, color: "text-accent" };

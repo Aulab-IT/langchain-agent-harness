@@ -30,7 +30,7 @@ export function Topbar({
 }) {
   const status = runToAgentStatus(run);
   const elapsed = runElapsedSeconds(run);
-  const active = Boolean(run && ["queued", "running", "waiting_approval"].includes(run.status));
+  const active = Boolean(run && ["queued", "running", "waiting_approval", "waiting_action"].includes(run.status));
 
   return (
     <header className="shrink-0 border-b border-border bg-surface/80 px-3 py-2.5 backdrop-blur-sm lg:px-4">

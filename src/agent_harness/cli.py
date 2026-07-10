@@ -26,8 +26,26 @@ def command_ok(arguments: list[str]) -> bool:
         return False
 
 
+def _payload_wants_network(value: Any) -> bool:
+    if isinstance(value, dict):
+        if value.get("with_network") is True:
+            return True
+        return any(_payload_wants_network(nested) for nested in value.values())
+    if isinstance(value, list):
+        return any(_payload_wants_network(nested) for nested in value)
+    return False
+
+
 async def ask_approval(payload: dict[str, Any]) -> bool:
-    console.print(Panel(json.dumps(payload, indent=2, ensure_ascii=False), title="Approvazione"))
+    wants_network = _payload_wants_network(payload)
+    title = "Accesso rete sandbox" if wants_network else "Approvazione"
+    console.print(Panel(json.dumps(payload, indent=2, ensure_ascii=False), title=title))
+    if wants_network:
+        console.print(
+            "[yellow]Concede accesso rete temporaneo al container, solo per questo "
+            "comando. La rete viene revocata subito dopo.[/yellow]"
+        )
+        return typer.confirm("Concedere accesso rete per questo comando?", default=False)
     return typer.confirm("Approvare questa operazione?", default=False)
 
 

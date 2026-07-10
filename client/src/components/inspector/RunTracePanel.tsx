@@ -91,7 +91,7 @@ function TraceRow({ event }: { event: RunEvent }) {
 }
 
 export function RunTracePanel({ run, events }: { run: Run | null; events: RunEvent[] }) {
-  const active = Boolean(run && ["queued", "running", "waiting_approval"].includes(run.status));
+  const active = Boolean(run && ["queued", "running", "waiting_approval", "waiting_action"].includes(run.status));
   const [now, setNow] = useState(() => Date.now());
 
   // A run fermo non serve un tick al secondo: aggiornare ogni minuto basta a tenere

@@ -147,6 +147,13 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         subject,
         tone: "running",
       };
+    case "assistant.iteration":
+      return {
+        title: `Iterazione ${asTraceText(payload.iteration) ?? "?"}`,
+        detail: "Il criterio di uscita non è stato raggiunto: l'agente continua.",
+        subject,
+        tone: "info",
+      };
     case "assistant.completed":
       return {
         title: "Risposta finale salvata",
@@ -211,6 +218,20 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         detail: null,
         subject,
         tone: payload.approved ? "success" : "danger",
+      };
+    case "action.requested":
+      return {
+        title: `Azione utente richiesta: ${compactTraceValue(payload.title, 80) ?? "intervento"}`,
+        detail: compactTraceValue(payload.instructions, 180),
+        subject,
+        tone: "warning",
+      };
+    case "action.resolved":
+      return {
+        title: payload.cancelled ? "Azione utente annullata" : "Azione utente completata",
+        detail: null,
+        subject,
+        tone: payload.cancelled ? "danger" : "success",
       };
     case "grader.started":
       return {

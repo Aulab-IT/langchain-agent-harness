@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from agent_harness.browser import browser_read_tool
 from agent_harness.config import PROJECT_ROOT
+from agent_harness.interaction import user_action_tool
 from agent_harness.sandbox import DockerSandbox
 
 
@@ -52,6 +53,7 @@ def build_tools(
     enable_browser: bool = True,
     output_limit: int,
     sandbox_image: str = "langchain-harness-sandbox:latest",
+    sandbox_network: str = "bridge",
     project_root: Path | None = None,
 ) -> list[BaseTool]:
     sandbox = DockerSandbox(
@@ -60,8 +62,9 @@ def build_tools(
         image=sandbox_image,
         output_limit=output_limit,
         project_root=project_root or PROJECT_ROOT,
+        network=sandbox_network,
     )
-    tools: list[BaseTool] = [current_utc_time, sandbox.as_tool()]
+    tools: list[BaseTool] = [current_utc_time, sandbox.as_tool(), user_action_tool()]
     if enable_web_search:
         tools.append(
             StructuredTool.from_function(

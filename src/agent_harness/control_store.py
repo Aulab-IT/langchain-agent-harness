@@ -16,6 +16,47 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+# Cartelle di dipendenze/cache che l'agente crea come artefatti interni: non sono output
+# e non vanno mostrate nel pannello File né allegate in chat.
+_VENDORED_DIRS = frozenset(
+    {
+        "__pycache__",
+        "pycache",
+        "node_modules",
+        "site-packages",
+        "dist-info",
+        ".git",
+        ".ipynb_checkpoints",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+    }
+)
+
+# Estensioni di artefatti compilati/bytecode: rumore indipendente dal nome della cartella
+# (es. un pycache prefix genera migliaia di .pyc fuori da __pycache__).
+_ARTIFACT_SUFFIXES = frozenset(
+    {".pyc", ".pyo", ".pyd", ".so", ".o", ".a", ".dylib", ".class", ".egg-info"}
+)
+
+# Sottocartella convenzionale per i deliverable finali: se presente, la chat allega solo
+# questi file (gli intermedi restano nel workspace ma non invadono la conversazione).
+OUTPUT_DIR = "output"
+
+
+def _is_surfaced_file(relative: Path) -> bool:
+    """True se il file va mostrato all'utente (non è nascosto, vendored o compilato)."""
+    if relative.suffix.lower() in _ARTIFACT_SUFFIXES:
+        return False
+    for part in relative.parts:
+        if part.startswith("."):
+            return False
+        if part in _VENDORED_DIRS:
+            return False
+    return True
+
+
 class ControlStore:
     """Persistent control-plane state and session-isolated workspaces."""
 
@@ -26,6 +67,11 @@ class ControlStore:
         self._lock = threading.RLock()
         self._connection = sqlite3.connect(self.path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
+        # WAL: due sessioni attive scrivono eventi in parallelo. Senza WAL un lettore
+        # blocca lo scrittore e lo stream SSE di una sessione stalla durante il run
+        # dell'altra. busy_timeout evita che una contesa breve diventi "database is locked".
+        self._connection.execute("PRAGMA journal_mode = WAL")
+        self._connection.execute("PRAGMA busy_timeout = 5000")
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._setup()
 
@@ -92,7 +138,7 @@ class ControlStore:
                 SET status = 'failed',
                     completed_at = ?,
                     error = 'Backend riavviato durante esecuzione.'
-                WHERE status IN ('queued', 'running', 'waiting_approval')
+                WHERE status IN ('queued', 'running', 'waiting_approval', 'waiting_action')
                 """,
                 (utc_now(),),
             )
@@ -489,11 +535,15 @@ class ControlStore:
         (root / "skills").mkdir(exist_ok=True)
         if self.settings.skills_dir.exists():
             shutil.copytree(self.settings.skills_dir, root / "skills", dirs_exist_ok=True)
-        source_memory = self.settings.project_root / "memories" / "AGENTS.md"
-        if source_memory.exists():
-            shutil.copy2(source_memory, root / "memories" / "AGENTS.md")
-        else:
-            (root / "memories" / "AGENTS.md").write_text("# Memoria sessione\n", encoding="utf-8")
+        # La memoria di sessione si semina UNA VOLTA dal template di progetto. Ricopiarla a
+        # ogni run distruggerebbe gli apprendimenti che l'agente ci scrive dentro.
+        memory_file = root / "memories" / "AGENTS.md"
+        if not memory_file.exists():
+            source_memory = self.settings.project_root / "memories" / "AGENTS.md"
+            if source_memory.exists():
+                shutil.copy2(source_memory, memory_file)
+            else:
+                memory_file.write_text("# Memoria sessione\n", encoding="utf-8")
         return root
 
     def list_files(self, session_id: str) -> list[dict[str, Any]]:
@@ -508,6 +558,10 @@ class ControlStore:
                 relative = path.relative_to(workspace)
                 stat = path.stat()
             except (OSError, ValueError):
+                continue
+            # Nasconde dipendenze e cache installate dall'agente (es. /workspace/.pylib,
+            # __pycache__, node_modules): sono artefatti interni, non output da mostrare.
+            if not _is_surfaced_file(relative):
                 continue
             result.append(
                 {

@@ -14,12 +14,17 @@ import {
   sendMessage,
   setSessionAutoApprove,
   stopSandbox,
+  submitAction,
   subscribeRun,
   uploadContextFile,
 } from "../api";
 import { EMPTY_USAGE, type View } from "../lib/constants";
+import {
+  deriveSkillActivity,
+  deriveToolActivity,
+  deriveToolSteps,
+} from "../lib/sessionActivity";
 import type {
-  ActivityItem,
   Run,
   RunEvent,
   RuntimeStatus,
@@ -37,6 +42,7 @@ export function useHarnessSession() {
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [traceEvents, setTraceEvents] = useState<RunEvent[]>([]);
   const [approval, setApproval] = useState<Record<string, unknown> | null>(null);
+  const [actionRequest, setActionRequest] = useState<Record<string, unknown> | null>(null);
   const [pending, setPending] = useState<SessionFile[]>([]);
   const [view, setView] = useState<View>("control");
   const [search, setSearch] = useState("");
@@ -62,6 +68,17 @@ export function useHarnessSession() {
           "run.cancelled",
         ].includes(event.type),
       );
+    const latestAction = [...detail.events]
+      .reverse()
+      .find((event) =>
+        [
+          "action.requested",
+          "action.resolved",
+          "run.completed",
+          "run.failed",
+          "run.cancelled",
+        ].includes(event.type),
+      );
     startTransition(() => {
       setSession(detail);
       setRun(detail.latest_run);
@@ -69,6 +86,9 @@ export function useHarnessSession() {
       setTraceEvents(detail.trace_events);
       setApproval(
         latestApproval?.type === "approval.requested" ? latestApproval.payload : null,
+      );
+      setActionRequest(
+        latestAction?.type === "action.requested" ? latestAction.payload : null,
       );
       setPending([]);
       setError("");
@@ -124,8 +144,15 @@ export function useHarnessSession() {
         if (event.type === "approval.resolved") {
           setApproval(null);
         }
+        if (event.type === "action.requested") {
+          setActionRequest(event.payload);
+        }
+        if (event.type === "action.resolved") {
+          setActionRequest(null);
+        }
         if (["run.completed", "run.failed", "run.cancelled"].includes(event.type)) {
           setApproval(null);
+          setActionRequest(null);
           Promise.all([getRun(run.id), getSession(event.session_id), refreshSessions()])
             .then(([runValue, detail]) => {
               setRun(runValue);
@@ -171,67 +198,11 @@ export function useHarnessSession() {
     return stop;
   }, [refreshSessions, run?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeToolNames = useMemo(() => {
-    const active = new Set<string>();
-    for (const event of events) {
-      const tool = event.payload.tool;
-      if (typeof tool !== "string") continue;
-      if (event.type === "tool.started") active.add(tool);
-      if (event.type === "tool.completed" || event.type === "tool.failed") active.delete(tool);
-    }
-    return active;
-  }, [events]);
-
-  const observedTools = useMemo(() => {
-    const names = new Set(runtime?.tools.map((item) => item.name) ?? []);
-    for (const event of events) {
-      if (typeof event.payload.tool === "string") names.add(event.payload.tool);
-    }
-    return [...names];
-  }, [events, runtime?.tools]);
-
-  const toolItems = useMemo<ActivityItem[]>(
-    () =>
-      observedTools.map((name) => {
-        const latest = [...events]
-          .reverse()
-          .find(
-            (event) =>
-              event.payload.tool === name &&
-              ["tool.started", "tool.completed", "tool.failed"].includes(event.type),
-          );
-        return {
-          id: name,
-          name,
-          detail: "Tool",
-          status:
-            activeToolNames.has(name) ? "active" : latest?.type === "tool.failed" ? "error" : "ready",
-          meta:
-            activeToolNames.has(name) ? "in uso" : latest?.type === "tool.failed" ? "errore" : "pronto",
-        };
-      }),
-    [activeToolNames, events, observedTools],
-  );
-
-  const skillItems = useMemo<ActivityItem[]>(
-    () =>
-      (runtime?.skills ?? []).map((item) => {
-        const active = events.some(
-          (event) => event.type === "skill.started" && event.payload.skill === item.name,
-        );
-        const completed = events.some(
-          (event) => event.type === "skill.completed" && event.payload.skill === item.name,
-        );
-        return {
-          id: item.name,
-          name: item.name,
-          detail: "Skill locale",
-          status: active && !completed ? "active" : "ready",
-          meta: completed ? "usata" : active ? "in uso" : "pronta",
-        };
-      }),
-    [events, runtime?.skills],
-  );
+  // Il pannello mostra ciò che la sessione ha davvero usato: entrambe le liste derivano
+  // dalle invocazioni registrate, non dal catalogo di ciò che sarebbe disponibile.
+  const toolSteps = useMemo(() => deriveToolSteps(events), [events]);
+  const toolItems = useMemo(() => deriveToolActivity(toolSteps), [toolSteps]);
+  const skillItems = useMemo(() => deriveSkillActivity(toolSteps), [toolSteps]);
 
   const { latestLiveUsage, latestSnapshot } = useMemo(() => {
     let live: Record<string, unknown> | undefined;
@@ -422,6 +393,16 @@ export function useHarnessSession() {
     }
   };
 
+  const resolveAction = async (body: { response?: string; cancel?: boolean }) => {
+    if (!run) return;
+    try {
+      await submitAction(run.id, body);
+      setActionRequest(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Invio azione fallito");
+    }
+  };
+
   const selectSession = (id: string) => {
     loadSession(id).catch((reason: unknown) =>
       setError(reason instanceof Error ? reason.message : "Caricamento fallito"),
@@ -438,6 +419,7 @@ export function useHarnessSession() {
     events,
     traceEvents,
     approval,
+    actionRequest,
     pending,
     view,
     search,
@@ -462,6 +444,7 @@ export function useHarnessSession() {
     handleStop,
     handleStopSandbox,
     resolveApproval,
+    resolveAction,
     selectSession,
   };
 }

@@ -1,14 +1,15 @@
 import { BrainCircuit, Clock3, MessageSquareText, Sparkles, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import type { Run, RunEvent, RuntimeStatus, SessionDetail, SessionFile } from "../../types";
+import type { Run, RunEvent, SessionDetail, SessionFile } from "../../types";
+import { deriveToolSteps } from "../../lib/sessionActivity";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessage } from "./ChatMessage";
 import { MarkdownContent } from "./MarkdownContent";
 import { ThinkingTrace } from "./ThinkingTrace";
+import { ToolSteps } from "./ToolSteps";
 
 export function ChatPanel({
   session,
-  runtime,
   run,
   events,
   pending,
@@ -21,7 +22,6 @@ export function ChatPanel({
   className = "",
 }: {
   session: SessionDetail;
-  runtime: RuntimeStatus;
   run: Run | null;
   events: RunEvent[];
   pending: SessionFile[];
@@ -78,20 +78,29 @@ export function ChatPanel({
   };
 
   const active = Boolean(run && !["completed", "failed", "cancelled"].includes(run.status));
-  const liveText = useMemo(
-    () =>
-      events
-        .filter((event) => event.type === "assistant.delta")
-        .map((event) => String(event.payload.text ?? ""))
-        .join(""),
-    [events],
-  );
+  // Ogni continuazione produce un nuovo flusso di delta: senza ripartire dall'ultimo
+  // confine, la bolla in streaming concatenerebbe tutte le iterazioni del run.
+  const liveText = useMemo(() => {
+    let start = 0;
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      if (events[index]?.type === "assistant.iteration") {
+        start = index + 1;
+        break;
+      }
+    }
+    return events
+      .slice(start)
+      .filter((event) => event.type === "assistant.delta")
+      .map((event) => String(event.payload.text ?? ""))
+      .join("");
+  }, [events]);
 
   useEffect(() => {
     if (!stickToBottom.current) return;
     endRef.current?.scrollIntoView({ block: "end", behavior: active ? "auto" : "smooth" });
   }, [session.messages, events.length, active, liveText]);
 
+  const steps = useMemo(() => deriveToolSteps(events), [events]);
   const visibleMessages = session.messages.filter((message) => message.role !== "system");
   const lastUserIndex = (() => {
     for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
@@ -150,12 +159,7 @@ export function ChatPanel({
         <div className="space-y-5">
         {visibleMessages.length ? (
           visibleMessages.map((message) => (
-            <ChatMessage
-              key={message.id}
-              message={message}
-              model={runtime.model}
-              sessionId={session.id}
-            />
+            <ChatMessage key={message.id} message={message} sessionId={session.id} />
           ))
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
@@ -164,6 +168,7 @@ export function ChatPanel({
             <span className="text-sm text-muted">Carica file o assegna un obiettivo.</span>
           </div>
         )}
+        <ToolSteps steps={steps} />
         {showStreaming || active ? (
           <article className="flex gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">

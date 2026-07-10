@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from collections.abc import AsyncIterator
@@ -8,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import aiosqlite
 from deepagents import HarnessProfile, create_deep_agent, register_harness_profile
 from deepagents.backends import FilesystemBackend
 from deepagents.middleware.filesystem import FilesystemPermission
@@ -95,6 +97,57 @@ async def _load_mcp_tools(settings: Settings, backend_root: Path) -> list[BaseTo
         }
     )
     return list(await client.get_tools())
+
+
+def _describe(tool: BaseTool, origin: str) -> dict[str, str]:
+    description = (tool.description or "").strip().split("\n", 1)[0]
+    return {
+        "name": tool.name,
+        "status": "ready",
+        "origin": origin,
+        "description": description[:200],
+    }
+
+
+_TOOL_CATALOG: list[dict[str, str]] | None = None
+_TOOL_CATALOG_LOCK = asyncio.Lock()
+
+
+async def tool_catalog(settings: Settings) -> list[dict[str, str]]:
+    """Nomi e descrizioni dei tool realmente costruiti per un run.
+
+    Costruisce gli stessi oggetti tool di `build_harness` — sandbox compresa, il cui
+    costruttore non tocca Docker — usando una workspace fittizia: nessun run viene avviato.
+    Il catalogo dipende solo dalla configurazione, quindi si calcola una volta sola; i tool
+    MCP richiedono di far partire il server stdio, che non va rifatto a ogni polling.
+    """
+    global _TOOL_CATALOG
+    if _TOOL_CATALOG is not None:
+        return _TOOL_CATALOG
+    async with _TOOL_CATALOG_LOCK:
+        if _TOOL_CATALOG is not None:
+            return _TOOL_CATALOG
+        probe_root = settings.state_dir / "_catalog"
+        local = build_tools(
+            probe_root / "workspace",
+            session_id="catalog",
+            enable_web_search=settings.harness_enable_web_search,
+            enable_browser=settings.harness_enable_browser,
+            output_limit=settings.harness_tool_output_limit,
+            sandbox_image=settings.harness_sandbox_image,
+            sandbox_network=settings.harness_sandbox_network,
+            project_root=settings.project_root,
+        )
+        catalog = [_describe(tool, "built-in") for tool in local]
+        try:
+            mcp = await _load_mcp_tools(settings, probe_root)
+        except Exception:
+            # Il catalogo è informativo: un server MCP che non parte non deve far fallire
+            # l'endpoint di stato. Si riproverà alla prossima chiamata.
+            return catalog
+        catalog.extend(_describe(tool, "mcp:local_harness") for tool in mcp)
+        _TOOL_CATALOG = catalog
+        return catalog
 
 
 def build_strong_model(settings: Settings) -> ChatOpenAI:
@@ -196,22 +249,26 @@ async def build_harness(
         enable_browser=settings.harness_enable_browser,
         output_limit=settings.harness_tool_output_limit,
         sandbox_image=settings.harness_sandbox_image,
+        sandbox_network=settings.harness_sandbox_network,
         project_root=settings.project_root,
     )
     tools.extend(await _load_mcp_tools(settings, active_backend_root))
 
     backend = FilesystemBackend(root_dir=active_backend_root, virtual_mode=True)
     permissions = build_workspace_permissions()
-    interrupt_on: dict[str, bool | InterruptOnConfig] | None = (
-        {
-            "docker_exec": {
-                "allowed_decisions": ["approve", "reject"],
-                "description": "Esecuzione comando nel sandbox Docker",
-            }
+    # L'interrupt su docker_exec è SEMPRE attivo: quando l'approvazione globale è
+    # disattivata si interrompe comunque sui comandi con accesso rete (with_network),
+    # così la concessione di rete richiede sempre conferma dell'utente. Il predicato
+    # `when` decide caso per caso in base agli argomenti della tool call.
+    require_approval = settings.harness_require_approval
+    interrupt_on: dict[str, bool | InterruptOnConfig] = {
+        "docker_exec": {
+            "allowed_decisions": ["approve", "reject"],
+            "description": "Esecuzione comando nel sandbox Docker",
+            "when": lambda req: require_approval
+            or bool(req.tool_call["args"].get("with_network")),
         }
-        if settings.harness_require_approval
-        else None
-    )
+    }
     subagents: list[SubAgent] = [
         {
             "name": "researcher",
@@ -260,7 +317,12 @@ async def build_harness(
     ]
 
     checkpoint_path = settings.state_dir / "checkpoints.sqlite"
-    async with AsyncSqliteSaver.from_conn_string(str(checkpoint_path)) as checkpointer:
+    # from_conn_string() non permette di impostare i PRAGMA: apriamo noi la connessione così
+    # due run concorrenti (una sessione ciascuno) non si bloccano a vicenda sul checkpointer.
+    async with aiosqlite.connect(str(checkpoint_path)) as connection:
+        await connection.execute("PRAGMA journal_mode = WAL")
+        await connection.execute("PRAGMA busy_timeout = 5000")
+        checkpointer = AsyncSqliteSaver(connection)
         await checkpointer.setup()
         for model_name in {settings.openai_model, settings.openai_strong_model}:
             register_harness_profile(

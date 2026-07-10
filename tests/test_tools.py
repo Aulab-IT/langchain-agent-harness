@@ -14,7 +14,7 @@ def test_tools_can_disable_web_search(tmp_path: Path) -> None:
             output_limit=2_000,
         )
     }
-    assert names == {"current_utc_time", "docker_exec"}
+    assert names == {"current_utc_time", "docker_exec", "request_user_action"}
 
 
 def test_time_tool_returns_iso_timestamp() -> None:

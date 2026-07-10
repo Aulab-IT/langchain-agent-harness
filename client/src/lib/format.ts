@@ -20,7 +20,7 @@ export function relativeLabel(value: string): string {
 
 export function runToAgentStatus(run: Run | null): AgentStatus {
   if (!run) return "idle";
-  if (run.status === "waiting_approval") return "approval";
+  if (run.status === "waiting_approval" || run.status === "waiting_action") return "approval";
   if (run.status === "running" || run.status === "queued") return "thinking";
   if (run.status === "failed") return "error";
   return "idle";

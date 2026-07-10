@@ -15,6 +15,8 @@ from agent_harness.usage import compute_usage
 from agent_harness.verification import GradeResult
 
 ApprovalCallback = Callable[[dict[str, Any]], Awaitable[bool]]
+# Ritorna la risposta dell'utente all'azione richiesta: {"response": str} o {"cancelled": True}.
+InteractionCallback = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 RunEventCallback = Callable[[dict[str, Any]], None]
 
 
@@ -66,10 +68,12 @@ class GoalRunner:
         harness: Harness,
         approval_callback: ApprovalCallback | None = None,
         event_callback: RunEventCallback | None = None,
+        interaction_callback: InteractionCallback | None = None,
     ) -> None:
         self.harness = harness
         self.approval_callback = approval_callback
         self.event_callback = event_callback
+        self.interaction_callback = interaction_callback
         self.last_messages: list[Any] = []
         self._last_snapshot: tuple[int, int] | None = None
         self._started = time.monotonic()
@@ -109,10 +113,19 @@ class GoalRunner:
     ) -> dict[str, Any]:
         result = await self._invoke_graph(value, config)
         while "__interrupt__" in result:
-            if self.approval_callback is None:
-                raise RuntimeError("Esecuzione sospesa: manca un callback di approvazione.")
             interrupts = result["__interrupt__"]
             payload = interrupts[0].value if interrupts else {}
+            # Richiesta di azione umana sbloccante (generica: OAuth, upload, codice, ...):
+            # il tool ha chiamato interrupt() e attende la risposta dell'utente da inoltrare
+            # con Command(resume=...). È distinta dall'approvazione di un tool sensibile.
+            if isinstance(payload, dict) and payload.get("type") == "user_action":
+                if self.interaction_callback is None:
+                    raise RuntimeError("Azione utente richiesta ma manca il callback.")
+                response = await self.interaction_callback(payload)
+                result = await self._invoke_graph(Command(resume=response), config)
+                continue
+            if self.approval_callback is None:
+                raise RuntimeError("Esecuzione sospesa: manca un callback di approvazione.")
             approved = await self.approval_callback(payload)
             decision = {"type": "approve"} if approved else {
                 "type": "reject",
@@ -182,6 +195,12 @@ class GoalRunner:
                     goal=clean_goal,
                     iteration=iteration + 1,
                     maximum=maximum,
+                )
+            # Confine tra iterazioni: la UI accumula i delta di streaming e senza questo
+            # marcatore concatenerebbe la risposta di ogni continuazione a quella precedente.
+            if self.event_callback is not None:
+                self.event_callback(
+                    {"type": "assistant.iteration", "iteration": iteration + 1}
                 )
             result = await self._invoke_with_approval(
                 {"messages": [{"role": "user", "content": continuation}]},

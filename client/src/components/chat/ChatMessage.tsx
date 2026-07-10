@@ -5,13 +5,13 @@ import type { Message } from "../../types";
 import { FileIcon } from "../shared/FileIcon";
 import { MarkdownContent } from "./MarkdownContent";
 
+// Nessun badge modello finché il backend non emette `model.selected`: il router può
+// scegliere il modello forte a metà run, e mostrare qui il modello di default mentirebbe.
 export const ChatMessage = memo(function ChatMessage({
   message,
-  model,
   sessionId,
 }: {
   message: Message;
-  model: string;
   sessionId: string;
 }) {
   const isAgent = message.role === "assistant";
@@ -31,11 +31,6 @@ export const ChatMessage = memo(function ChatMessage({
           className={`mb-1.5 flex flex-wrap items-center gap-2 ${isAgent ? "" : "justify-end"}`}
         >
           <strong className="text-sm">{isAgent ? "Agente" : "Tu"}</strong>
-          {isAgent ? (
-            <span className="rounded-full border border-border px-2 py-0.5 font-mono text-xs text-muted">
-              {model}
-            </span>
-          ) : null}
           <time className="text-xs text-muted">{timeLabel(message.created_at)}</time>
         </div>
         <div

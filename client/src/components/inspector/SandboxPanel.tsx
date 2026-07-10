@@ -45,7 +45,7 @@ export function SandboxPanel({
     : containerRunning
       ? "Attiva"
       : "On-demand";
-  const busy = Boolean(run && ["queued", "running", "waiting_approval"].includes(run.status));
+  const busy = Boolean(run && ["queued", "running", "waiting_approval", "waiting_action"].includes(run.status));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">

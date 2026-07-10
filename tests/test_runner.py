@@ -178,7 +178,10 @@ async def test_runner_matches_decisions_to_parallel_hanging_tool_calls() -> None
                         value={
                             "action_requests": [
                                 {"name": "docker_exec", "args": {"command": "npm install"}},
-                                {"name": "docker_exec", "args": {"command": "apt-get install -y chromium"}},
+                                {
+                                    "name": "docker_exec",
+                                    "args": {"command": "apt-get install -y chromium"},
+                                },
                             ]
                         },
                         id="1",
@@ -199,6 +202,58 @@ async def test_runner_matches_decisions_to_parallel_hanging_tool_calls() -> None
     assert result.completed is True
     resumed_command = graph.inputs[1]
     assert resumed_command.resume["decisions"] == [{"type": "approve"}, {"type": "approve"}]
+
+
+@pytest.mark.asyncio
+async def test_user_action_interrupt_routes_to_interaction_callback() -> None:
+    """Un interrupt di tipo user_action va al callback di interazione e riprende con la
+    risposta dell'utente, non con il formato decisioni dell'approvazione."""
+    graph = FakeGraph(
+        [
+            {
+                "__interrupt__": [
+                    Interrupt(
+                        value={
+                            "type": "user_action",
+                            "title": "Autorizza",
+                            "instructions": "Apri il link e incolla il codice",
+                            "response_kind": "value",
+                        },
+                        id="1",
+                    )
+                ]
+            },
+            {"messages": [AIMessage(content="Fatto. [GOAL_COMPLETE]")]},
+        ]
+    )
+    seen: dict[str, Any] = {}
+
+    async def interaction(payload: dict[str, Any]) -> dict[str, Any]:
+        seen.update(payload)
+        return {"response": "code-xyz"}
+
+    async def approve(_: dict[str, Any]) -> bool:  # non deve essere usato
+        raise AssertionError("approval non deve gestire user_action")
+
+    result = await GoalRunner(
+        fake_harness(graph),
+        approval_callback=approve,
+        interaction_callback=interaction,
+    ).run("Collega un account esterno", thread_id="t-action")
+
+    assert result.completed is True
+    assert seen["type"] == "user_action"
+    # Riprende con la risposta grezza dell'utente, non con {"decisions": ...}.
+    assert graph.inputs[1].resume == {"response": "code-xyz"}
+
+
+@pytest.mark.asyncio
+async def test_user_action_without_interaction_callback_raises() -> None:
+    graph = FakeGraph(
+        [{"__interrupt__": [Interrupt(value={"type": "user_action"}, id="1")]}]
+    )
+    with pytest.raises(RuntimeError, match="callback"):
+        await GoalRunner(fake_harness(graph)).run("Azione utente", thread_id="t-a2")
 
 
 @pytest.mark.asyncio

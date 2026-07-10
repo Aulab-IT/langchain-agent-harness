@@ -38,6 +38,7 @@ export type Run = {
     | "queued"
     | "running"
     | "waiting_approval"
+    | "waiting_action"
     | "completed"
     | "failed"
     | "cancelled";
@@ -82,13 +83,6 @@ export type RunEvent = {
   created_at: string;
 };
 
-export type ActivityItem = {
-  id: string;
-  name: string;
-  detail: string;
-  status: "active" | "ready" | "error";
-  meta?: string;
-};
 
 export type RuntimeStatus = {
   backend: "online";

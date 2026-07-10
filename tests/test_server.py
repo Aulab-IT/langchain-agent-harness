@@ -91,6 +91,50 @@ def test_auto_approve_missing_session_is_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_status_reports_on_demand_network(client: TestClient) -> None:
+    payload = client.get("/api/status").json()
+    assert payload["sandbox"]["network"] != "disabled"
+    assert "on-demand" in payload["sandbox"]["network"]
+
+
+def test_submit_action_without_pending_is_409(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={}).json()
+    run = server.store.create_run(session["id"])
+    response = client.post(f"/api/runs/{run['id']}/action", json={"response": "x"})
+    assert response.status_code == 409
+
+
+def test_select_attachments_prefers_output_dir() -> None:
+    changed = ["scripts/fetch.py", "output/report.md", "notes.txt", "output/data.csv"]
+    assert server._select_attachments(changed) == ["output/report.md", "output/data.csv"]
+
+
+def test_select_attachments_falls_back_and_caps() -> None:
+    changed = [f"file_{i}.txt" for i in range(30)]
+    selected = server._select_attachments(changed)
+    assert selected == changed[:20]
+
+
+def test_pending_with_network_detects_flag_in_action_requests() -> None:
+    # Forma reale del payload di interrupt: with_network annidato negli args.
+    payload = {
+        "action_requests": [
+            {"action": "docker_exec", "args": {"command": "pip install x", "with_network": True}}
+        ]
+    }
+    assert server._pending_with_network(payload) is True
+
+
+def test_pending_with_network_false_for_plain_exec() -> None:
+    payload = {
+        "action_requests": [
+            {"action": "docker_exec", "args": {"command": "pytest", "with_network": False}}
+        ]
+    }
+    assert server._pending_with_network(payload) is False
+    assert server._pending_with_network({}) is False
+
+
 def test_chat_rejects_empty_message(client: TestClient) -> None:
     session = client.post("/api/sessions", json={}).json()
     response = client.post(

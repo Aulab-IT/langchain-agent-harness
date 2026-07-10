@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { ApprovalDialog } from "./components/shared/ApprovalDialog";
+import { UserActionDialog } from "./components/shared/UserActionDialog";
 import { ChatPanel } from "./components/chat/ChatPanel";
 import { AppShell } from "./components/layout/AppShell";
 import { InspectorDock } from "./components/layout/InspectorDock";
@@ -31,6 +32,7 @@ export default function App() {
     events,
     traceEvents,
     approval,
+    actionRequest,
     pending,
     view,
     search,
@@ -55,6 +57,7 @@ export default function App() {
     handleStop,
     handleStopSandbox,
     resolveApproval,
+    resolveAction,
     selectSession,
   } = harness;
 
@@ -154,7 +157,6 @@ export default function App() {
             <ChatPanel
               className="min-h-0 flex-1"
             session={session}
-            runtime={runtime}
             run={run}
             events={events}
             pending={pending}
@@ -207,6 +209,16 @@ export default function App() {
           onApprove={() => resolveApproval(true)}
           onReject={() => resolveApproval(false)}
           onCancel={handleStop}
+        />
+      ) : null}
+
+      {actionRequest && run && session ? (
+        <UserActionDialog
+          runId={run.id}
+          sessionId={session.id}
+          payload={actionRequest}
+          onSubmit={resolveAction}
+          onCancel={() => resolveAction({ cancel: true })}
         />
       ) : null}
     </AppShell>

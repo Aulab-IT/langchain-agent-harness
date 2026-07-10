@@ -107,3 +107,28 @@ def test_improvement_window_is_bounded_by_terminal_runs(tmp_path: Path) -> None:
     assert {event["type"] for event in events} == {"grader.completed"}
     assert [run["usage"]["total_tokens"] for run in runs] == [2, 3]
     store.close()
+
+
+def test_list_files_hides_dependencies_and_cache(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    session = store.create_session()
+    ws = store.workspace_dir(session["id"])
+    # Deliverable e artefatti reali.
+    (ws / "output").mkdir()
+    (ws / "output" / "report.md").write_text("ok")
+    (ws / "scripts").mkdir()
+    (ws / "scripts" / "fetch.py").write_text("print(1)")
+    # Rumore: dipendenze installate + cache.
+    (ws / ".pylib" / "cffi").mkdir(parents=True)
+    (ws / ".pylib" / "cffi" / "api.py").write_text("x")
+    (ws / "scripts" / "__pycache__").mkdir()
+    (ws / "scripts" / "__pycache__" / "fetch.cpython-312.pyc").write_text("x")
+    # Rumore da pycache-prefix: cartella non nascosta "pycache" con mirror di .pyc.
+    (ws / "work" / "pycache" / "usr" / "lib").mkdir(parents=True)
+    (ws / "work" / "pycache" / "usr" / "lib" / "os.cpython-312.pyc").write_text("x")
+    # Bytecode sparso fuori da qualsiasi cartella cache: escluso per estensione.
+    (ws / "scripts" / "fetch.cpython-312.pyc").write_text("x")
+
+    names = {item["name"] for item in store.list_files(session["id"])}
+    assert names == {"output/report.md", "scripts/fetch.py"}
+    store.close()

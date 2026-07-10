@@ -115,7 +115,10 @@ const RUN_EVENT_TYPES = [
   "approval.requested",
   "approval.resolved",
   "approval.auto",
+  "action.requested",
+  "action.resolved",
   "assistant.delta",
+  "assistant.iteration",
   "usage.live",
   "usage.snapshot",
   "usage.updated",
@@ -164,6 +167,13 @@ export function rejectRun(runId: string): Promise<{ status: string }> {
 
 export function cancelRun(runId: string): Promise<{ status: string }> {
   return request(`/api/runs/${runId}/cancel`, { method: "POST" });
+}
+
+export function submitAction(
+  runId: string,
+  body: { response?: string; cancel?: boolean },
+): Promise<{ status: string }> {
+  return request(`/api/runs/${runId}/action`, jsonOptions("POST", body));
 }
 
 export async function uploadContextFile(
