@@ -28,11 +28,33 @@ import type {
 
 const API_URL = (import.meta.env.VITE_HARNESS_API_URL as string | undefined) ?? "";
 
+type ValidationIssue = { loc?: unknown[]; msg?: string };
+
+/**
+ * FastAPI usa `detail` per due cose diverse: una stringa per gli errori che solleviamo noi
+ * (`HTTPException`), e una lista di oggetti per gli errori di validazione dello schema (422).
+ * Concatenarla in un messaggio d'errore produce `[object Object]`, che non aiuta nessuno.
+ */
+function errorMessage(payload: unknown, status: number): string {
+  const detail = (payload as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string" && detail) return detail;
+  if (Array.isArray(detail)) {
+    const issues = (detail as ValidationIssue[])
+      .map((issue) => {
+        const field = Array.isArray(issue.loc) ? issue.loc.slice(1).join(".") : "";
+        return field ? `${field}: ${issue.msg ?? ""}` : (issue.msg ?? "");
+      })
+      .filter(Boolean);
+    if (issues.length) return issues.join(" · ");
+  }
+  return `Errore API ${status}`;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, options);
   if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(payload?.detail ?? `Errore API ${response.status}`);
+    const payload: unknown = await response.json().catch(() => null);
+    throw new Error(errorMessage(payload, response.status));
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -276,10 +298,7 @@ export function setSessionModelOverride(
   sessionId: string,
   override: ModelOverride,
 ): Promise<SessionSummary> {
-  return request(`/api/sessions/${sessionId}/model`, {
-    method: "PATCH",
-    body: JSON.stringify({ override }),
-  });
+  return request(`/api/sessions/${sessionId}/model`, jsonOptions("PATCH", { override }));
 }
 
 export function getTemplateMemory(): Promise<{ content: string }> {
@@ -287,7 +306,7 @@ export function getTemplateMemory(): Promise<{ content: string }> {
 }
 
 export function putTemplateMemory(content: string): Promise<{ content: string }> {
-  return request("/api/memory", { method: "PUT", body: JSON.stringify({ content }) });
+  return request("/api/memory", jsonOptions("PUT", { content }));
 }
 
 export function getSessionMemory(sessionId: string): Promise<{ content: string }> {
@@ -298,10 +317,7 @@ export function putSessionMemory(
   sessionId: string,
   content: string,
 ): Promise<{ content: string }> {
-  return request(`/api/sessions/${sessionId}/memory`, {
-    method: "PUT",
-    body: JSON.stringify({ content }),
-  });
+  return request(`/api/sessions/${sessionId}/memory`, jsonOptions("PUT", { content }));
 }
 
 export function promoteSessionMemory(sessionId: string): Promise<{ content: string }> {

@@ -3,7 +3,8 @@ import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "rea
 import { ACCEPTED_FILES } from "../../lib/constants";
 import {
   SESSION_OVERRIDE_LABELS,
-  modelMarker,
+  messageModelLabel,
+  messageModelTitle,
   withModelMarker,
   type MessageModel,
 } from "../../lib/modelOverride";
@@ -18,11 +19,6 @@ import { FileIcon } from "../shared/FileIcon";
 import { SkillMenu } from "./SkillMenu";
 
 const MESSAGE_MODEL_CYCLE: MessageModel[] = ["auto", "strong", "default"];
-const MESSAGE_MODEL_LABELS: Record<MessageModel, string> = {
-  auto: "Modello: automatico",
-  strong: "Modello: forte",
-  default: "Modello: base",
-};
 
 export function ChatComposer({
   disabled,
@@ -242,14 +238,10 @@ export function ChatComposer({
                     ],
                 )
               }
-              title={
-                messageModel === "auto"
-                  ? "Il router sceglie il modello dal contenuto della richiesta. Clicca per forzarlo su questo messaggio."
-                  : `Aggiunge ${modelMarker(messageModel)} in fondo al messaggio, in chiaro. Vale solo per questo invio.`
-              }
+              title={messageModelTitle(messageModel, sessionModel)}
             >
               <Cpu size={14} />
-              {MESSAGE_MODEL_LABELS[messageModel]}
+              {messageModelLabel(messageModel, sessionModel)}
             </button>
           </div>
           <div className="flex items-center gap-3">
