@@ -119,6 +119,22 @@ export function deriveSkillActivity(steps: ToolStep[]): ActivityEntry[] {
   return aggregate(steps, (step) => step.skill);
 }
 
+/**
+ * Il modello dichiarato dall'ultimo evento `model.selected`, o `null` se il router non si è
+ * ancora pronunciato. Mostrare al suo posto `runtime.model` — il default configurato —
+ * significherebbe dire all'utente che ha risposto un modello che potrebbe non aver risposto.
+ */
+export function latestSelectedModel(events: RunEvent[]): string | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === "model.selected") {
+      const model = text(event.payload.model);
+      if (model) return model;
+    }
+  }
+  return null;
+}
+
 export function formatElapsed(ms: number | null): string {
   if (ms === null) return "—";
   if (ms < 1000) return `${ms} ms`;

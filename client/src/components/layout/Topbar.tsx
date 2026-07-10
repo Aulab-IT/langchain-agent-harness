@@ -1,6 +1,7 @@
 import { Menu, Pencil, Trash2 } from "lucide-react";
 import { runElapsedSeconds, runToAgentStatus } from "../../lib/format";
-import type { AgentStatus, Run, RuntimeStatus, SessionDetail, Usage } from "../../types";
+import { latestSelectedModel } from "../../lib/sessionActivity";
+import type { AgentStatus, Run, RunEvent, RuntimeStatus, SessionDetail, Usage } from "../../types";
 import { StatusDot } from "../shared/StatusDot";
 
 function statusLabel(status: AgentStatus, runtime: RuntimeStatus | null): string {
@@ -15,6 +16,7 @@ export function Topbar({
   session,
   runtime,
   run,
+  events,
   usage,
   onMenu,
   onRename,
@@ -23,6 +25,7 @@ export function Topbar({
   session: SessionDetail | null;
   runtime: RuntimeStatus | null;
   run: Run | null;
+  events: RunEvent[];
   usage: Usage;
   onMenu: () => void;
   onRename: () => void;
@@ -65,7 +68,8 @@ export function Topbar({
             </span>
           </div>
           <p className="truncate font-mono text-[11px] text-muted">
-            {runtime?.model ?? "—"} · {run?.status ?? "idle"}
+            {latestSelectedModel(events) ?? `${runtime?.model ?? "—"} (default)`} ·{" "}
+            {run?.status ?? "idle"}
             {elapsed !== null ? ` · ${elapsed.toFixed(1)}s` : ""}
             {active && usage.output_tokens_per_second
               ? ` · ~${usage.output_tokens_per_second} tok/s`

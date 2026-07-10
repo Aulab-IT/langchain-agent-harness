@@ -8,7 +8,7 @@ import type {
   SessionDetail,
   SessionFile,
 } from "../../types";
-import { deriveToolSteps } from "../../lib/sessionActivity";
+import { deriveToolSteps, latestSelectedModel } from "../../lib/sessionActivity";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessage } from "./ChatMessage";
 import { MarkdownContent } from "./MarkdownContent";
@@ -112,14 +112,7 @@ export function ChatPanel({
   }, [session.messages, events.length, active, liveText]);
 
   const steps = useMemo(() => deriveToolSteps(events), [events]);
-  // Il router dichiara la scelta con `model.selected`; finché non lo fa, non inventiamo nulla.
-  const liveModel = useMemo(() => {
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-      const event = events[index];
-      if (event?.type === "model.selected") return String(event.payload.model ?? "");
-    }
-    return "";
-  }, [events]);
+  const liveModel = useMemo(() => latestSelectedModel(events), [events]);
   const visibleMessages = session.messages.filter((message) => message.role !== "system");
   const lastUserIndex = (() => {
     for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {

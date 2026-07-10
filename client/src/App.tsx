@@ -108,6 +108,7 @@ export default function App() {
         session={session}
         runtime={runtime}
         run={run}
+        events={events}
         usage={usage}
         onMenu={() => setSidebarOpen(true)}
         onRename={handleRename}
