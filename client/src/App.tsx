@@ -167,6 +167,7 @@ export default function App() {
             session={session}
             run={run}
             skills={runtime.skills}
+            models={runtime.models}
             events={events}
             pending={pending}
             onSend={handleSend}

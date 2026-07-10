@@ -4,6 +4,7 @@ import type {
   ModelOverride,
   Run,
   RunEvent,
+  RuntimeModel,
   RuntimeSkill,
   SessionDetail,
   SessionFile,
@@ -21,6 +22,7 @@ export function ChatPanel({
   events,
   pending,
   skills,
+  models,
   onSend,
   onUpload,
   onRemovePending,
@@ -33,6 +35,7 @@ export function ChatPanel({
   session: SessionDetail;
   run: Run | null;
   skills: RuntimeSkill[];
+  models: RuntimeModel[];
   events: RunEvent[];
   pending: SessionFile[];
   onSend: (content: string) => void;
@@ -227,6 +230,7 @@ export function ChatPanel({
         disabled={active}
         files={pending}
         skills={skills}
+        models={models}
         autoApprove={session.auto_approve}
         sessionModel={session.model_override}
         onSend={onSend}

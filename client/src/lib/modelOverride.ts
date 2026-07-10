@@ -1,19 +1,14 @@
 import type { ModelOverride, ModelTier, RuntimeModel } from "../types";
 
 /**
- * Forzare il gradino su un singolo messaggio aggiunge un marcatore in chiaro al testo, non un
- * campo nascosto della richiesta. Il router lo riconosce in `middleware.py::_MESSAGE_OVERRIDE`,
- * e l'utente vede in chat esattamente ciò che ha chiesto.
+ * C'è un solo controllo del modello, e vale per la sessione. Cambiarlo ha effetto dal messaggio
+ * successivo e resta finché non lo si cambia di nuovo: è persistito in `sessions.model_override`.
+ *
+ * Il router riconosce ancora un marcatore `[Modello: …]` scritto a mano nel testo (vedi
+ * `middleware.py::_MESSAGE_OVERRIDE`), perché quei marcatori sono già dentro i messaggi salvati.
+ * Ma l'interfaccia non ne genera più: due controlli per la stessa dimensione erano uno di troppo.
  */
-export type MessageModel = "auto" | ModelTier;
-
-export const TIER_ORDER: ModelTier[] = ["low", "mid", "high"];
-
-const MARKERS: Record<ModelTier, string> = {
-  low: "[Modello: basso]",
-  mid: "[Modello: medio]",
-  high: "[Modello: alto]",
-};
+export const OVERRIDE_CYCLE: ModelOverride[] = ["auto", "mid", "high", "low"];
 
 const TIER_NAMES: Record<ModelTier, string> = {
   low: "basso",
@@ -21,13 +16,6 @@ const TIER_NAMES: Record<ModelTier, string> = {
   high: "alto",
 };
 
-export function withModelMarker(message: string, choice: MessageModel): string {
-  const clean = message.trim();
-  if (choice === "auto") return clean;
-  return `${clean} ${MARKERS[choice]}`;
-}
-
-/** Che gradino verrà usato quando nessun run ha ancora dichiarato la sua scelta. */
 export function expectedTier(override: ModelOverride): {
   tier: ModelTier;
   source: "sessione" | "default";
@@ -40,46 +28,28 @@ export function modelOfTier(models: RuntimeModel[], tier: ModelTier): RuntimeMod
   return models.find((model) => model.tier === tier);
 }
 
-export const SESSION_OVERRIDE_LABELS: Record<ModelOverride, string> = {
-  auto: "Sessione: gradino automatico",
-  low: "Sessione: sempre gradino basso",
-  mid: "Sessione: sempre gradino medio",
-  high: "Sessione: sempre gradino alto",
-};
-
-/**
- * Cosa mostrare sul controllo per-messaggio. Quando la sessione è forzata su un gradino e il
- * messaggio non lo scavalca, dire «automatico» sarebbe falso: il router non sta decidendo
- * niente. Il controllo dichiara da chi eredita.
- */
-export function messageModelLabel(
-  messageModel: MessageModel,
-  sessionModel: ModelOverride,
-): string {
-  if (messageModel !== "auto") return `Questo messaggio: ${TIER_NAMES[messageModel]}`;
-  if (sessionModel !== "auto") return `Dalla sessione: ${TIER_NAMES[sessionModel]}`;
-  return "Questo messaggio: automatico";
+export function nextOverride(current: ModelOverride): ModelOverride {
+  const index = OVERRIDE_CYCLE.indexOf(current);
+  return OVERRIDE_CYCLE[(index + 1) % OVERRIDE_CYCLE.length];
 }
 
-export function messageModelTitle(
-  messageModel: MessageModel,
-  sessionModel: ModelOverride,
-): string {
-  if (messageModel !== "auto") {
+export function overrideLabel(override: ModelOverride): string {
+  if (override === "auto") return "Modello: automatico";
+  return `Modello: ${TIER_NAMES[override]}`;
+}
+
+export function overrideTitle(override: ModelOverride, models: RuntimeModel[]): string {
+  if (override === "auto") {
     return (
-      `Aggiunge ${MARKERS[messageModel]} in fondo al messaggio, in chiaro. ` +
-      "Vale solo per questo invio e scavalca l'impostazione di sessione."
+      "Il router sceglie il gradino dal contenuto della richiesta, e resta in basso finché " +
+      "nulla dice di salire. Clicca per fissarlo per questa sessione."
     );
   }
-  if (sessionModel !== "auto") {
-    return (
-      `L'intera sessione è forzata sul gradino ${TIER_NAMES[sessionModel]}. ` +
-      "Clicca per scavalcare la scelta solo su questo messaggio."
-    );
-  }
+  const model = modelOfTier(models, override);
+  const name = model ? ` (${model.name}, reasoning ${model.effort})` : "";
   return (
-    "Il router sceglie il gradino dal contenuto della richiesta, e resta in basso " +
-    "finché nulla dice di salire. Clicca per forzarlo su questo messaggio."
+    `Questa sessione usa il gradino ${TIER_NAMES[override]}${name} dal prossimo messaggio, ` +
+    "finché non lo cambi. Clicca per passare al gradino successivo."
   );
 }
 

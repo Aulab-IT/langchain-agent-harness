@@ -1,26 +1,16 @@
 import { ArrowUp, Cpu, Paperclip, ShieldCheck, Sparkles, Square, X, Zap } from "lucide-react";
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ACCEPTED_FILES } from "../../lib/constants";
-import {
-  SESSION_OVERRIDE_LABELS,
-  messageModelLabel,
-  messageModelTitle,
-  withModelMarker,
-  type MessageModel,
-} from "../../lib/modelOverride";
+import { nextOverride, overrideLabel, overrideTitle } from "../../lib/modelOverride";
 import {
   activeSkillQuery,
   buildSkillConstraint,
   replaceSkillQuery,
   withSkillConstraint,
 } from "../../lib/skillConstraint";
-import type { ModelOverride, RuntimeSkill, SessionFile } from "../../types";
+import type { ModelOverride, RuntimeModel, RuntimeSkill, SessionFile } from "../../types";
 import { FileIcon } from "../shared/FileIcon";
 import { SkillMenu } from "./SkillMenu";
-
-// Il ciclo parte da automatico e sale: il gradino basso è l'ultimo perché forzarlo è la scelta
-// più rara, e il costo di sbagliare click è di pagare meno, non di più.
-const MESSAGE_MODEL_CYCLE: MessageModel[] = ["auto", "mid", "high", "low"];
 
 export function ChatComposer({
   disabled,
@@ -28,6 +18,7 @@ export function ChatComposer({
   skills,
   autoApprove,
   sessionModel,
+  models,
   onSend,
   onUpload,
   onDeleteFile,
@@ -40,6 +31,7 @@ export function ChatComposer({
   skills: RuntimeSkill[];
   autoApprove: boolean;
   sessionModel: ModelOverride;
+  models: RuntimeModel[];
   onSend: (content: string) => void;
   onUpload: (files: FileList | null) => void;
   onDeleteFile: (name: string) => void;
@@ -47,7 +39,6 @@ export function ChatComposer({
   onToggleAutoApprove: (enabled: boolean) => void;
   onSessionModel: (override: ModelOverride) => void;
 }) {
-  const [messageModel, setMessageModel] = useState<MessageModel>("auto");
   const [value, setValue] = useState("");
   const [query, setQuery] = useState<string | null>(null);
   const [highlighted, setHighlighted] = useState(0);
@@ -80,11 +71,9 @@ export function ChatComposer({
     event.preventDefault();
     const clean = value.trim();
     if (!clean || disabled) return;
-    // Il marcatore del modello resta accanto al testo dell'utente; il vincolo skill va in fondo.
-    onSend(withSkillConstraint(withModelMarker(clean, messageModel), selectedSkill));
+    onSend(withSkillConstraint(clean, selectedSkill));
     setValue("");
     setSelectedSkill(null);
-    setMessageModel("auto");
     closeMenu();
     if (inputRef.current) inputRef.current.style.height = "auto";
   };
@@ -227,41 +216,19 @@ export function ChatComposer({
             </button>
             <button
               type="button"
-              className={`hidden items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs transition-colors sm:inline-flex ${
-                messageModel === "auto"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs transition-colors ${
+                sessionModel === "auto"
                   ? "text-muted hover:bg-surface-raised hover:text-foreground"
                   : "text-accent hover:bg-accent/10"
               }`}
-              onClick={() =>
-                setMessageModel(
-                  (current) =>
-                    MESSAGE_MODEL_CYCLE[
-                      (MESSAGE_MODEL_CYCLE.indexOf(current) + 1) % MESSAGE_MODEL_CYCLE.length
-                    ],
-                )
-              }
-              title={messageModelTitle(messageModel, sessionModel)}
+              onClick={() => onSessionModel(nextOverride(sessionModel))}
+              title={overrideTitle(sessionModel, models)}
             >
               <Cpu size={14} />
-              {messageModelLabel(messageModel, sessionModel)}
+              {overrideLabel(sessionModel)}
             </button>
           </div>
           <div className="flex items-center gap-3">
-            <label className="hidden text-xs text-muted lg:inline">
-              <span className="sr-only">Modello per questa sessione</span>
-              <select
-                className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-muted hover:text-foreground"
-                value={sessionModel}
-                onChange={(event) => onSessionModel(event.target.value as ModelOverride)}
-                title="Vale per tutti i messaggi della sessione. Un marcatore sul singolo messaggio lo scavalca."
-              >
-                {(Object.keys(SESSION_OVERRIDE_LABELS) as ModelOverride[]).map((key) => (
-                  <option key={key} value={key}>
-                    {SESSION_OVERRIDE_LABELS[key]}
-                  </option>
-                ))}
-              </select>
-            </label>
             <span className="hidden text-xs text-muted md:inline">Invio ↵ · A capo ⇧↵</span>
             {disabled ? (
               <button
