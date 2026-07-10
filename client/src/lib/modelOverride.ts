@@ -8,7 +8,8 @@ import type { ModelOverride, ModelTier, RuntimeModel } from "../types";
  * `middleware.py::_MESSAGE_OVERRIDE`), perché quei marcatori sono già dentro i messaggi salvati.
  * Ma l'interfaccia non ne genera più: due controlli per la stessa dimensione erano uno di troppo.
  */
-export const OVERRIDE_CYCLE: ModelOverride[] = ["auto", "mid", "high", "low"];
+// L'ordine segue i colori, che seguono il costo: verde, giallo, rosso, poi si torna al router.
+export const OVERRIDE_CYCLE: ModelOverride[] = ["low", "mid", "high", "auto"];
 
 const TIER_NAMES: Record<ModelTier, string> = {
   low: "basso",
