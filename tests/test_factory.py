@@ -128,3 +128,27 @@ def test_anthropic_tier_without_key_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(RuntimeError):
         build_tier_models(settings)
+
+
+@pytest.mark.asyncio
+async def test_build_harness_with_ollama_colon_model(tmp_path: Path) -> None:
+    # Regression: un tag Ollama con ':' (es. ornith:9b) rompeva la chiave profilo
+    # 'openai:ornith:9b' (due ':'). Il profilo ora è per-provider (chiave bare).
+    (tmp_path / "memories").mkdir()
+    (tmp_path / "memories" / "AGENTS.md").write_text("# Memoria\n", encoding="utf-8")
+    (tmp_path / "skills").mkdir()
+    settings = Settings(
+        _env_file=None,
+        project_root=tmp_path,
+        harness_provider_low="ollama",
+        harness_provider_mid="ollama",
+        harness_provider_high="ollama",
+        ollama_model_low="ornith:9b",
+        ollama_model_mid="ornith:9b",
+        ollama_model_high="ornith:9b",
+        harness_enable_mcp=False,
+        harness_enable_web_search=False,
+        harness_require_approval=False,
+    )
+    async with build_harness(settings) as harness:
+        assert harness.graph is not None

@@ -464,11 +464,15 @@ async def build_harness(
         await connection.execute("PRAGMA busy_timeout = 5000")
         checkpointer = AsyncSqliteSaver(connection)
         await checkpointer.setup()
-        for spec in tiers.values():
-            register_harness_profile(
-                f"openai:{spec.name}",
-                HarnessProfile(excluded_tools=frozenset({"execute"})),
-            )
+        # Profilo per-provider (chiave bare, non `provider:model`): esclude il tool `execute`.
+        # Chiave solo-provider perché il nome del modello può contenere `:` (i tag Ollama, es.
+        # `ornith:9b`), che romperebbe il formato `provider:model` atteso da deepagents. La
+        # chiave è il provider *runtime* del modello LangChain: OpenAI/Ollama/MLX usano tutti
+        # ChatOpenAI → "openai"; Claude → "anthropic". deepagents applica il profilo di provider
+        # come default quando non c'è un override per-modello.
+        harness_profile = HarnessProfile(excluded_tools=frozenset({"execute"}))
+        for provider_key in ("openai", "anthropic"):
+            register_harness_profile(provider_key, harness_profile)
         ladder = TierLadder()
         middleware: list[AgentMiddleware[Any, Any, Any]] = [
             build_model_router(
