@@ -61,6 +61,11 @@ export type ProviderSettings = {
   suggested_models: Record<ProviderName, string[]>;
 };
 
+export type ProviderModels = {
+  running: boolean;
+  models: string[];
+};
+
 export type ProviderSettingsUpdate = {
   openai_api_key?: string | null;
   anthropic_api_key?: string | null;

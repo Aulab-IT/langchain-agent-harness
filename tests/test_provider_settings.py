@@ -77,3 +77,27 @@ def test_overrides_roundtrip_and_whitelist(tmp_path: Path) -> None:
     pc.save_overrides(state, overrides)
     loaded = pc.load_overrides(state)
     assert loaded == {"anthropic_api_key": "ak", "harness_provider_high": "anthropic"}
+
+
+def test_parse_model_ids_from_openai_shape() -> None:
+    data = {"object": "list", "data": [
+        {"id": "qwen3:8b", "object": "model"},
+        {"id": "gemma3:4b"},
+        {"nope": "x"},  # senza id → scartato
+    ]}
+    assert pc._parse_model_ids(data) == ["gemma3:4b", "qwen3:8b"]
+    assert pc._parse_model_ids({}) == []
+    assert pc._parse_model_ids("junk") == []
+
+
+async def test_list_local_models_ignores_non_local(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    result = await pc.list_local_models(settings, "openai")
+    assert result == {"running": False, "models": []}
+
+
+async def test_list_local_models_offline_port(tmp_path: Path) -> None:
+    # Porta quasi certamente chiusa → running False, nessun errore.
+    settings = _settings(tmp_path, ollama_base_url="http://127.0.0.1:1/v1")
+    result = await pc.list_local_models(settings, "ollama")
+    assert result == {"running": False, "models": []}

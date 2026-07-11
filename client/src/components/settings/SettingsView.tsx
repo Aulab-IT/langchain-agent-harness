@@ -1,9 +1,17 @@
-import { KeyRound, Layers, Save, Settings2 } from "lucide-react";
+import { KeyRound, Layers, RefreshCw, Save, Settings2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getProviderSettings, updateProviderSettings } from "../../api";
-import type { ModelTier, ProviderName, ProviderSettings, RuntimeStatus } from "../../types";
+import { getProviderModels, getProviderSettings, updateProviderSettings } from "../../api";
+import type {
+  ModelTier,
+  ProviderModels,
+  ProviderName,
+  ProviderSettings,
+  RuntimeStatus,
+} from "../../types";
 
 type TierRow = { tier: ModelTier; provider: ProviderName; model: string };
+
+const LOCAL_PROVIDERS: ProviderName[] = ["ollama", "mlx"];
 
 export function SettingsView({
   runtime,
@@ -19,25 +27,46 @@ export function SettingsView({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [local, setLocal] = useState<Record<string, ProviderModels>>({});
+  const [probing, setProbing] = useState(false);
 
   function adopt(next: ProviderSettings) {
     setConfig(next);
     setTiers(next.tiers.map((t) => ({ tier: t.tier, provider: t.provider, model: t.model })));
   }
 
+  function probeLocal() {
+    setProbing(true);
+    Promise.all(
+      LOCAL_PROVIDERS.map((p) =>
+        getProviderModels(p)
+          .then((r) => [p, r] as const)
+          .catch(() => [p, { running: false, models: [] }] as const),
+      ),
+    )
+      .then((entries) => setLocal(Object.fromEntries(entries)))
+      .finally(() => setProbing(false));
+  }
+
   useEffect(() => {
     getProviderSettings()
       .then(adopt)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    probeLocal();
   }, []);
+
+  function modelOptions(provider: ProviderName): string[] {
+    const live = local[provider]?.models ?? [];
+    if (live.length) return live;
+    return config?.suggested_models[provider] ?? [];
+  }
 
   function changeProvider(tier: ModelTier, provider: ProviderName) {
     setSaved(false);
+    const options = modelOptions(provider);
     setTiers((prev) =>
       prev.map((row) =>
-        row.tier === tier
-          ? { ...row, provider, model: config?.suggested_models[provider]?.[0] ?? "" }
-          : row,
+        row.tier === tier ? { ...row, provider, model: options[0] ?? "" } : row,
       ),
     );
   }
@@ -123,40 +152,79 @@ export function SettingsView({
         </div>
 
         <div className="px-6 py-5">
-          <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-            <Layers size={15} className="text-muted" /> Gradini della scala
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Layers size={15} className="text-muted" /> Gradini della scala
+            </div>
+            <button
+              type="button"
+              onClick={probeLocal}
+              disabled={probing}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-muted transition hover:text-foreground disabled:opacity-50"
+              title="Rileva i modelli dei provider locali (ollama list)"
+            >
+              <RefreshCw size={13} className={probing ? "animate-spin" : ""} /> Rileva locali
+            </button>
           </div>
           <div className="flex flex-col gap-3">
-            {tiers.map((row) => (
-              <div key={row.tier} className="grid items-center gap-3 sm:grid-cols-[80px_1fr_1fr]">
-                <span className="text-sm font-medium capitalize">{row.tier}</span>
-                <select
-                  value={row.provider}
-                  onChange={(e) => changeProvider(row.tier, e.target.value as ProviderName)}
-                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-warning/40"
-                >
-                  {config?.providers.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex flex-col">
-                  <input
-                    list={`models-${row.tier}`}
-                    value={row.model}
-                    onChange={(e) => changeModel(row.tier, e.target.value)}
-                    placeholder="nome modello"
-                    className="rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:border-warning/40"
-                  />
-                  <datalist id={`models-${row.tier}`}>
-                    {(config?.suggested_models[row.provider] ?? []).map((m) => (
-                      <option key={m} value={m} />
+            {tiers.map((row) => {
+              const isLocal = LOCAL_PROVIDERS.includes(row.provider);
+              const probe = local[row.provider];
+              return (
+                <div key={row.tier} className="grid items-start gap-3 sm:grid-cols-[80px_1fr_1fr]">
+                  <span className="pt-2 text-sm font-medium capitalize">{row.tier}</span>
+                  <select
+                    value={row.provider}
+                    onChange={(e) => changeProvider(row.tier, e.target.value as ProviderName)}
+                    className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-warning/40"
+                  >
+                    {config?.providers.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.label}
+                      </option>
                     ))}
-                  </datalist>
+                  </select>
+                  <div className="flex flex-col gap-1">
+                    {isLocal && probe?.running && probe.models.length ? (
+                      <select
+                        value={row.model}
+                        onChange={(e) => changeModel(row.tier, e.target.value)}
+                        className="rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:border-warning/40"
+                      >
+                        {!probe.models.includes(row.model) && row.model ? (
+                          <option value={row.model}>{row.model} (non installato)</option>
+                        ) : null}
+                        {probe.models.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        list={`models-${row.tier}`}
+                        value={row.model}
+                        onChange={(e) => changeModel(row.tier, e.target.value)}
+                        placeholder="nome modello"
+                        className="rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:border-warning/40"
+                      />
+                    )}
+                    <datalist id={`models-${row.tier}`}>
+                      {modelOptions(row.provider).map((m) => (
+                        <option key={m} value={m} />
+                      ))}
+                    </datalist>
+                    {isLocal ? (
+                      <span className="text-xs text-muted">
+                        {probe?.running
+                          ? `in esecuzione · ${probe.models.length} modelli`
+                          : "non in esecuzione — avvia con `ollama serve`"}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

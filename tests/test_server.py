@@ -630,3 +630,18 @@ def test_provider_settings_cloud_tier_without_key_is_rejected(client: TestClient
     )
     assert resp.status_code == 400
     assert "chiave" in resp.json()["detail"].lower()
+
+
+def test_local_models_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_list(_settings: object, provider: str) -> dict[str, object]:
+        if provider == "ollama":
+            return {"running": True, "models": ["qwen3:8b", "gemma3:4b"]}
+        return {"running": False, "models": []}
+
+    monkeypatch.setattr(server.provider_cfg, "list_local_models", fake_list)
+    body = client.get("/api/settings/providers/ollama/models").json()
+    assert body["running"] is True
+    assert "qwen3:8b" in body["models"]
+    # Provider non locale → non in esecuzione, lista vuota.
+    off = client.get("/api/settings/providers/mlx/models").json()
+    assert off == {"running": False, "models": []}

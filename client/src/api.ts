@@ -11,6 +11,8 @@ import type {
   Run,
   RunEvent,
   PromotionResult,
+  ProviderModels,
+  ProviderName,
   ProviderSettings,
   ProviderSettingsUpdate,
   RuntimeStatus,
@@ -80,6 +82,10 @@ export function getProviderSettings(): Promise<ProviderSettings> {
 
 export function updateProviderSettings(body: ProviderSettingsUpdate): Promise<ProviderSettings> {
   return request("/api/settings/providers", jsonOptions("PUT", body));
+}
+
+export function getProviderModels(provider: ProviderName): Promise<ProviderModels> {
+  return request(`/api/settings/providers/${provider}/models`);
 }
 
 export function listSessions(search = ""): Promise<SessionSummary[]> {

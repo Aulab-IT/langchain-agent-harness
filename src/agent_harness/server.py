@@ -982,6 +982,12 @@ async def get_provider_settings() -> dict[str, Any]:
     return provider_cfg.snapshot(settings)
 
 
+@app.get("/api/settings/providers/{provider}/models")
+async def get_local_provider_models(provider: str) -> dict[str, Any]:
+    """Modelli disponibili su un provider locale se è in esecuzione (stile ``ollama list``)."""
+    return await provider_cfg.list_local_models(settings, provider)
+
+
 @app.put("/api/settings/providers")
 async def update_provider_settings(payload: ProviderSettingsUpdate) -> dict[str, Any]:
     """Salva chiavi API e assegnazione provider/modello per gradino.

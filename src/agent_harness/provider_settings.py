@@ -159,6 +159,54 @@ def snapshot(settings: Settings) -> dict[str, Any]:
     }
 
 
+LOCAL_PROVIDERS: tuple[str, ...] = ("ollama", "mlx")
+
+
+def _parse_model_ids(data: Any) -> list[str]:
+    """Estrae gli id modello dalla risposta OpenAI-compat ``/v1/models`` (``data[].id``).
+
+    Ollama e MLX espongono entrambi questo shape; separato dalla fetch così la logica di
+    parsing è testabile senza rete.
+    """
+    if not isinstance(data, dict):
+        return []
+    entries = data.get("data")
+    if not isinstance(entries, list):
+        return []
+    ids = {
+        str(entry["id"])
+        for entry in entries
+        if isinstance(entry, dict) and entry.get("id")
+    }
+    return sorted(ids)
+
+
+async def list_local_models(settings: Settings, provider: str) -> dict[str, Any]:
+    """Rileva se un provider locale è in esecuzione e ne elenca i modelli (come ``ollama list``).
+
+    Interroga l'endpoint OpenAI-compatibile ``{base_url}/models`` con timeout breve. Se il
+    provider non risponde (non avviato) → ``running=False`` e lista vuota, senza errore: la UI
+    tratta l'assenza come "non in esecuzione", non come guasto. ``base_url`` viene solo dalla
+    configurazione (non dall'utente), e i provider ammessi sono i due locali: nessun SSRF.
+    """
+    if provider not in LOCAL_PROVIDERS:
+        return {"running": False, "models": []}
+    base_url = str(getattr(settings, f"{provider}_base_url", "") or "")
+    if not base_url:
+        return {"running": False, "models": []}
+    import httpx
+
+    url = base_url.rstrip("/") + "/models"
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            payload = response.json()
+    except Exception:
+        return {"running": False, "models": []}
+    return {"running": True, "models": _parse_model_ids(payload)}
+
+
 def merge_key_change(overrides: dict[str, Any], field: str, value: str | None) -> None:
     """Applica una modifica a un campo chiave nel dizionario override, in place.
 
