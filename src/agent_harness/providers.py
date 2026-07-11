@@ -83,6 +83,22 @@ OPENAI_CAPABILITIES = ModelCapabilities(
     supports_model_listing=True,
 )
 
+# Profilo di capacità dei modelli Claude (Anthropic). Finestra ampia, tool calling e
+# structured output nativi, reasoning adattivo; niente reasoning cifrato in stile OpenAI
+# Responses. Prezzi e id modello stanno in Settings (Fase 0), qui solo le capacità.
+ANTHROPIC_CAPABILITIES = ModelCapabilities(
+    context_window=200_000,
+    max_output_tokens=8_192,
+    supports_tools=True,
+    supports_parallel_tools=True,
+    supports_structured_output=True,
+    supports_reasoning=True,
+    supports_prompt_caching=True,
+    supports_encrypted_reasoning=False,
+    supports_usage_reporting=True,
+    supports_model_listing=True,
+)
+
 # I provider locali (Ollama, MLX) partono da capacità conservative: reasoning cifrato e
 # prompt caching assenti, structured output/usage da verificare per endpoint e modello.
 # Deny-by-default: si abilita una capacità solo dopo che il probe l'ha confermata.
@@ -127,6 +143,9 @@ class BuildOptions:
     base_url: str | None = None
     timeout: int = 120
     max_retries: int = 3
+    # Cap di output per i provider che lo richiedono esplicito (Anthropic): tetto per
+    # risposta, non finestra del modello. 8192 è un default prudente per l'harness.
+    max_output_tokens: int = 8192
 
 
 class ProviderError(Exception):
@@ -238,6 +257,39 @@ class OpenAIProviderAdapter(_BaseAdapter):
             include=["reasoning.encrypted_content"],
             max_retries=options.max_retries,
             timeout=options.timeout,
+        )
+
+
+class AnthropicProviderAdapter(_BaseAdapter):
+    """Adattatore Claude (Anthropic) tramite ``langchain_anthropic.ChatAnthropic``.
+
+    Resta nel pattern degli altri adapter: costruisce un ``BaseChatModel`` che il grafo e i
+    middleware consumano senza sapere quale vendor c'è dietro. Non passa ``temperature``
+    (rimossa sui modelli Claude correnti come Opus 4.8) né un ``thinking`` esplicito: il
+    reasoning adattivo dei modelli recenti si attiva da sé e passarlo cablato rischierebbe un
+    400 su versioni diverse di langchain_anthropic. ``max_tokens`` è un tetto per risposta,
+    non la finestra del modello.
+    """
+
+    name = "anthropic"
+    execution_kind = "cloud"
+
+    def build_chat_model(
+        self, descriptor: ModelDescriptor, options: BuildOptions
+    ) -> BaseChatModel:
+        from langchain_anthropic import ChatAnthropic
+        from pydantic import SecretStr
+
+        if not options.api_key:
+            raise ProviderError("auth", "ANTHROPIC_API_KEY non configurata.", retryable=False)
+        # `model`/`max_tokens` sono i nomi campo accettati a runtime (populate_by_name); il
+        # plugin mypy di pydantic vede solo i loro alias, da qui l'ignore mirato.
+        return ChatAnthropic(  # type: ignore[call-arg]
+            model=descriptor.model,
+            api_key=SecretStr(options.api_key),
+            max_tokens=options.max_output_tokens,
+            timeout=float(options.timeout),
+            max_retries=options.max_retries,
         )
 
 
@@ -356,9 +408,10 @@ class ProviderRegistry:
 
 
 def default_registry() -> ProviderRegistry:
-    """Registry con gli adattatori standard: OpenAI più i due locali."""
+    """Registry con gli adattatori standard: OpenAI, Anthropic (Claude) e i due locali."""
     registry = ProviderRegistry()
     registry.register(OpenAIProviderAdapter())
+    registry.register(AnthropicProviderAdapter())
     registry.register(OllamaProviderAdapter())
     registry.register(MLXProviderAdapter())
     return registry
@@ -373,6 +426,29 @@ def openai_descriptor(model: str, *, reasoning_effort: str = "low") -> ModelDesc
         execution_kind="cloud",
         pricing_key=model,
         reasoning_effort=reasoning_effort,
+    )
+
+
+def anthropic_descriptor(model: str, *, reasoning_effort: str = "low") -> ModelDescriptor:
+    """Descriptor per un modello Claude, con il profilo di capacità Anthropic."""
+    return ModelDescriptor(
+        provider="anthropic",
+        model=model,
+        capabilities=ANTHROPIC_CAPABILITIES,
+        execution_kind="cloud",
+        pricing_key=model,
+        reasoning_effort=reasoning_effort,
+    )
+
+
+def local_descriptor(provider: str, model: str) -> ModelDescriptor:
+    """Descriptor per un modello locale (Ollama o MLX): esecuzione locale, capacità prudenti."""
+    return ModelDescriptor(
+        provider=provider,
+        model=model,
+        capabilities=LOCAL_CAPABILITIES,
+        execution_kind="local",
+        pricing_key=model,
     )
 
 

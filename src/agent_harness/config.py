@@ -48,6 +48,38 @@ class Settings(BaseSettings):
     openai_price_out_mid: float = Field(default=15.0, ge=0)
     openai_price_in_high: float = Field(default=5.0, ge=0)
     openai_price_out_high: float = Field(default=30.0, ge=0)
+
+    # Provider per gradino. Ogni gradino sceglie il vendor: openai (default), anthropic
+    # (Claude), oppure un provider locale (ollama, mlx). Così si può, per esempio, tenere il
+    # gradino basso in locale e i due alti su Claude/OpenAI, senza toccare il codice.
+    harness_provider_low: Literal["openai", "anthropic", "ollama", "mlx"] = "openai"
+    harness_provider_mid: Literal["openai", "anthropic", "ollama", "mlx"] = "openai"
+    harness_provider_high: Literal["openai", "anthropic", "ollama", "mlx"] = "openai"
+
+    # Claude (Anthropic). Chiave separata da OpenAI; id modello e prezzi per gradino, come
+    # per OpenAI il prezzo sta accanto al modello perché vanno cambiati insieme.
+    anthropic_api_key: str | None = Field(default=None, repr=False)
+    anthropic_model_low: str = "claude-haiku-4-5"
+    anthropic_model_mid: str = "claude-sonnet-5"
+    anthropic_model_high: str = "claude-opus-4-8"
+    anthropic_price_in_low: float = Field(default=1.0, ge=0)
+    anthropic_price_out_low: float = Field(default=5.0, ge=0)
+    anthropic_price_in_mid: float = Field(default=3.0, ge=0)
+    anthropic_price_out_mid: float = Field(default=15.0, ge=0)
+    anthropic_price_in_high: float = Field(default=5.0, ge=0)
+    anthropic_price_out_high: float = Field(default=25.0, ge=0)
+
+    # Provider locali. Nessuna fattura API (prezzo zero); l'endpoint è OpenAI-compatibile.
+    # Un modello vuoto significa "gradino non mappato su questo provider".
+    ollama_base_url: str = "http://127.0.0.1:11434/v1"
+    ollama_model_low: str = "qwen3:8b"
+    ollama_model_mid: str = "qwen3:14b"
+    ollama_model_high: str = "qwen3:14b"
+    mlx_base_url: str = "http://127.0.0.1:8080/v1"
+    mlx_model_low: str = ""
+    mlx_model_mid: str = ""
+    mlx_model_high: str = ""
+
     harness_context_window: int = Field(default=128_000, ge=1_000)
     # Budget di contesto realmente applicato (Fase 1): la finestra utile è
     # `harness_context_window - harness_reserved_output_tokens`; oltre `warning` si segnala,
@@ -115,3 +147,18 @@ class Settings(BaseSettings):
                 "OPENAI_API_KEY non configurata. Copia .env.example in .env e aggiungi la chiave."
             )
         return self.openai_api_key
+
+    def require_anthropic_key(self) -> str:
+        if not self.anthropic_api_key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY non configurata. Serve per i gradini su provider 'anthropic'."
+            )
+        return self.anthropic_api_key
+
+    def uses_provider(self, provider: str) -> bool:
+        """True se almeno un gradino è mappato su questo provider."""
+        return provider in {
+            self.harness_provider_low,
+            self.harness_provider_mid,
+            self.harness_provider_high,
+        }

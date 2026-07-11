@@ -7,8 +7,10 @@ from langchain_core.language_models.chat_models import BaseChatModel
 
 from agent_harness.pricing import PriceEntry, PricingCatalog
 from agent_harness.providers import (
+    ANTHROPIC_CAPABILITIES,
     LOCAL_CAPABILITIES,
     OPENAI_CAPABILITIES,
+    AnthropicProviderAdapter,
     BuildOptions,
     ConformanceProviderAdapter,
     ModelDescriptor,
@@ -16,6 +18,7 @@ from agent_harness.providers import (
     OpenAIProviderAdapter,
     ProviderError,
     ProviderRegistry,
+    anthropic_descriptor,
     declared_probe,
     default_registry,
     openai_descriptor,
@@ -49,6 +52,50 @@ def test_openai_build_requires_key() -> None:
     with pytest.raises(ProviderError) as excinfo:
         adapter.build_chat_model(descriptor, BuildOptions(api_key=None))
     assert excinfo.value.kind == "auth"
+
+
+def test_registry_builds_anthropic_claude_without_network() -> None:
+    registry = default_registry()
+    assert "anthropic" in registry.names()
+    descriptor = anthropic_descriptor("claude-opus-4-8")
+    model = registry.build(descriptor, BuildOptions(api_key="test-key"))
+    assert isinstance(model, BaseChatModel)
+
+
+def test_anthropic_build_requires_key() -> None:
+    adapter = AnthropicProviderAdapter()
+    descriptor = anthropic_descriptor("claude-opus-4-8")
+    with pytest.raises(ProviderError) as excinfo:
+        adapter.build_chat_model(descriptor, BuildOptions(api_key=None))
+    assert excinfo.value.kind == "auth"
+
+
+def test_anthropic_normalizes_usage_with_catalog() -> None:
+    adapter = AnthropicProviderAdapter()
+    descriptor = anthropic_descriptor("claude-opus-4-8")
+    catalog = PricingCatalog(
+        [
+            PriceEntry(
+                provider="anthropic",
+                model="claude-opus-4-8",
+                input_price=Decimal("5.0"),
+                output_price=Decimal("25.0"),
+                version="v1",
+            )
+        ]
+    )
+    usage = adapter.normalize_usage(
+        descriptor,
+        {"input_tokens": 1_000_000, "output_tokens": 1_000_000, "total_tokens": 2_000_000},
+        catalog,
+    )
+    assert usage.execution_kind == "cloud"
+    assert usage.total_cost == Decimal("30.0")
+
+
+def test_anthropic_capabilities_no_encrypted_reasoning() -> None:
+    assert ANTHROPIC_CAPABILITIES.supports_reasoning is True
+    assert ANTHROPIC_CAPABILITIES.supports_encrypted_reasoning is False
 
 
 def test_unregistered_provider_raises() -> None:

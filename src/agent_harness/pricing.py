@@ -355,20 +355,31 @@ def catalog_from_settings(settings: Any, *, version: str = "config") -> PricingC
     il costo mostrato e il resto del sistema può migrare a ``PricingCatalog`` in modo
     incrementale.
     """
-    tiers = (
-        (settings.openai_model_low, settings.openai_price_in_low, settings.openai_price_out_low),
-        (settings.openai_model_mid, settings.openai_price_in_mid, settings.openai_price_out_mid),
-        (settings.openai_model_high, settings.openai_price_in_high, settings.openai_price_out_high),
-    )
-    seen: set[str] = set()
+    # (provider, model, price_in, price_out) per ogni gradino di ogni provider cloud a listino.
+    rows = [
+        ("openai", settings.openai_model_low, settings.openai_price_in_low,
+         settings.openai_price_out_low),
+        ("openai", settings.openai_model_mid, settings.openai_price_in_mid,
+         settings.openai_price_out_mid),
+        ("openai", settings.openai_model_high, settings.openai_price_in_high,
+         settings.openai_price_out_high),
+        ("anthropic", settings.anthropic_model_low, settings.anthropic_price_in_low,
+         settings.anthropic_price_out_low),
+        ("anthropic", settings.anthropic_model_mid, settings.anthropic_price_in_mid,
+         settings.anthropic_price_out_mid),
+        ("anthropic", settings.anthropic_model_high, settings.anthropic_price_in_high,
+         settings.anthropic_price_out_high),
+    ]
+    seen: set[tuple[str, str]] = set()
     entries: list[PriceEntry] = []
-    for model, price_in, price_out in tiers:
-        if model in seen:
+    for provider, model, price_in, price_out in rows:
+        key = (provider, model)
+        if key in seen:
             continue
-        seen.add(model)
+        seen.add(key)
         entries.append(
             PriceEntry(
-                provider="openai",
+                provider=provider,
                 model=model,
                 input_price=_money(price_in),
                 output_price=_money(price_out),

@@ -41,8 +41,11 @@ from agent_harness.middleware import (
 from agent_harness.prompts import SYSTEM_PROMPT
 from agent_harness.providers import (
     BuildOptions,
+    ModelDescriptor,
     ProviderRegistry,
+    anthropic_descriptor,
     default_registry,
+    local_descriptor,
     openai_descriptor,
 )
 from agent_harness.tools import build_tools
@@ -204,42 +207,84 @@ async def tool_catalog(settings: Settings) -> list[dict[str, Any]]:
 
 @dataclass(frozen=True)
 class TierSpec:
-    """Cosa sappiamo di un gradino senza costruire il modello: nome, effort, listino."""
+    """Cosa sappiamo di un gradino senza costruire il modello: provider, nome, effort, listino.
+
+    L'effort resta l'etichetta della scala (low/mid/high) anche per i provider che non hanno un
+    reasoning-effort in stile OpenAI: serve alla UI e resta monotono lungo i gradini.
+    """
 
     tier: Tier
+    provider: str
     name: str
     effort: str
     price_in: float
     price_out: float
 
 
+# Per ogni provider: come leggere da Settings il nome modello e il listino di un gradino.
+# I locali (ollama/mlx) non hanno fattura API, quindi prezzo zero.
+def _provider_model_and_price(
+    settings: Settings, provider: str, tier: Tier
+) -> tuple[str, float, float]:
+    if provider == "openai":
+        model = getattr(settings, f"openai_model_{tier}")
+        return model, getattr(settings, f"openai_price_in_{tier}"), getattr(
+            settings, f"openai_price_out_{tier}"
+        )
+    if provider == "anthropic":
+        model = getattr(settings, f"anthropic_model_{tier}")
+        return model, getattr(settings, f"anthropic_price_in_{tier}"), getattr(
+            settings, f"anthropic_price_out_{tier}"
+        )
+    # Provider locale: modello dal proprio blocco, prezzo API nullo.
+    model = getattr(settings, f"{provider}_model_{tier}")
+    return model, 0.0, 0.0
+
+
 def tier_spec(settings: Settings, tier: Tier) -> TierSpec:
-    names = {
-        "low": (settings.openai_model_low, settings.openai_effort_low),
-        "mid": (settings.openai_model_mid, settings.openai_effort_mid),
-        "high": (settings.openai_model_high, settings.openai_effort_high),
-    }
-    prices = {
-        "low": (settings.openai_price_in_low, settings.openai_price_out_low),
-        "mid": (settings.openai_price_in_mid, settings.openai_price_out_mid),
-        "high": (settings.openai_price_in_high, settings.openai_price_out_high),
-    }
-    name, effort = names[tier]
-    price_in, price_out = prices[tier]
-    return TierSpec(tier=tier, name=name, effort=effort, price_in=price_in, price_out=price_out)
+    provider = getattr(settings, f"harness_provider_{tier}")
+    effort = getattr(settings, f"openai_effort_{tier}")
+    name, price_in, price_out = _provider_model_and_price(settings, provider, tier)
+    return TierSpec(
+        tier=tier,
+        provider=provider,
+        name=name,
+        effort=effort,
+        price_in=price_in,
+        price_out=price_out,
+    )
 
 
-def _build_options(settings: Settings) -> BuildOptions:
-    return BuildOptions(api_key=settings.openai_api_key, timeout=120, max_retries=3)
+def _descriptor_and_options(
+    settings: Settings, spec: TierSpec
+) -> tuple[ModelDescriptor, BuildOptions]:
+    """Traduce un gradino nel descriptor del suo provider e nelle opzioni di costruzione.
+
+    OpenAI e Anthropic portano la propria chiave; i locali portano il proprio ``base_url`` e
+    non richiedono chiave. È qui che il vendor smette di essere una stringa e diventa un
+    modello costruibile.
+    """
+    if spec.provider == "openai":
+        descriptor = openai_descriptor(spec.name, reasoning_effort=spec.effort)
+        return descriptor, BuildOptions(api_key=settings.require_openai_key())
+    if spec.provider == "anthropic":
+        descriptor = anthropic_descriptor(spec.name, reasoning_effort=spec.effort)
+        return descriptor, BuildOptions(api_key=settings.require_anthropic_key())
+    if not spec.name:
+        raise RuntimeError(
+            f"Gradino {spec.tier} mappato su '{spec.provider}' ma nessun modello configurato "
+            f"({spec.provider}_model_{spec.tier} è vuoto)."
+        )
+    base_url = getattr(settings, f"{spec.provider}_base_url")
+    descriptor = local_descriptor(spec.provider, spec.name)
+    return descriptor, BuildOptions(base_url=base_url)
 
 
 def build_tier_models(settings: Settings) -> dict[Tier, TierModel]:
-    settings.require_openai_key()
-    options = _build_options(settings)
     built: dict[Tier, TierModel] = {}
     for tier in TIERS:
         spec = tier_spec(settings, tier)
-        descriptor = openai_descriptor(spec.name, reasoning_effort=spec.effort)
+        descriptor, options = _descriptor_and_options(settings, spec)
         built[tier] = TierModel(
             name=spec.name,
             effort=spec.effort,
@@ -252,12 +297,12 @@ def build_judge_model(settings: Settings) -> BaseChatModel:
     """Giudice del loop hill-climbing: gira di rado e le sue conclusioni promuovono config.
 
     È l'unico posto in cui si paga il gradino alto senza che l'utente lo abbia chiesto: una
-    proposta di configurazione sbagliata costa più di qualche dollaro di reasoning.
+    proposta di configurazione sbagliata costa più di qualche dollaro di reasoning. Segue il
+    provider configurato per il gradino alto.
     """
-    settings.require_openai_key()
     spec = tier_spec(settings, "high")
-    descriptor = openai_descriptor(spec.name, reasoning_effort=spec.effort)
-    return _REGISTRY.build(descriptor, _build_options(settings))
+    descriptor, options = _descriptor_and_options(settings, spec)
+    return _REGISTRY.build(descriptor, options)
 
 
 @asynccontextmanager
@@ -276,7 +321,8 @@ async def build_harness(
     """Costruisce graph e risorse persistenti, chiudendole in modo deterministico."""
     settings = settings or Settings()
     settings.ensure_directories()
-    settings.require_openai_key()
+    # Le chiavi si richiedono per-provider in build_tier_models (OpenAI e/o Anthropic solo se
+    # un gradino li usa): una config tutta locale non deve pretendere una chiave cloud.
     active_workspace = settings.workspace_dir if workspace_dir is None else workspace_dir
     active_backend_root = settings.project_root if backend_root is None else backend_root
 

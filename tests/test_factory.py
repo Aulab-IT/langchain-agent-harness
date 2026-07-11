@@ -4,7 +4,12 @@ from pathlib import Path
 import pytest
 
 from agent_harness.config import Settings
-from agent_harness.factory import build_harness, build_workspace_permissions
+from agent_harness.factory import (
+    build_harness,
+    build_tier_models,
+    build_workspace_permissions,
+    tier_spec,
+)
 from agent_harness.improve import overrides_fingerprint
 
 
@@ -78,3 +83,48 @@ async def test_factory_exposes_canary_attribution(tmp_path: Path) -> None:
     selected = next(event for event in events if event["type"] == "config.selected")
     assert selected["arm"] == "canary"
     assert selected["source"] == "proposal.md"
+
+
+def test_tier_can_target_claude_and_local(tmp_path: Path) -> None:
+    # Gradino basso in locale (Ollama, nessuna chiave), alto su Claude.
+    settings = Settings(
+        _env_file=None,
+        project_root=tmp_path,
+        openai_api_key="test-openai",
+        anthropic_api_key="test-anthropic",
+        harness_provider_low="ollama",
+        harness_provider_mid="openai",
+        harness_provider_high="anthropic",
+    )
+    assert tier_spec(settings, "low").provider == "ollama"
+    assert tier_spec(settings, "high").name == settings.anthropic_model_high
+    # Locale non ha prezzo API.
+    assert tier_spec(settings, "low").price_in == 0.0
+
+    models = build_tier_models(settings)
+    assert set(models) == {"low", "mid", "high"}
+    assert models["high"].name == "claude-opus-4-8"
+
+
+def test_all_local_config_needs_no_cloud_key(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        project_root=tmp_path,
+        harness_provider_low="ollama",
+        harness_provider_mid="ollama",
+        harness_provider_high="ollama",
+    )
+    # Nessuna OPENAI/ANTHROPIC key, ma tutti i gradini locali: deve costruire lo stesso.
+    models = build_tier_models(settings)
+    assert models["low"].model is not None
+
+
+def test_anthropic_tier_without_key_raises(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        project_root=tmp_path,
+        harness_provider_high="anthropic",
+        openai_api_key="test-openai",
+    )
+    with pytest.raises(RuntimeError):
+        build_tier_models(settings)
