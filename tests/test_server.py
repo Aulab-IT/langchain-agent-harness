@@ -645,3 +645,26 @@ def test_local_models_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPat
     # Provider non locale → non in esecuzione, lista vuota.
     off = client.get("/api/settings/providers/mlx/models").json()
     assert off == {"running": False, "models": []}
+
+
+def test_provider_settings_toggle_lean_flags(client: TestClient) -> None:
+    # Base valida (gradini locali, nessuna chiave richiesta), poi snellisce i flag.
+    resp = client.put(
+        "/api/settings/providers",
+        json={
+            "tiers": [
+                {"tier": "low", "provider": "ollama", "model": "qwen3:8b"},
+                {"tier": "mid", "provider": "ollama", "model": "qwen3:8b"},
+                {"tier": "high", "provider": "ollama", "model": "qwen3:8b"},
+            ],
+            "flags": {"web_search": False, "browser": False, "mcp": False, "rubric": False},
+        },
+    )
+    assert resp.status_code == 200
+    flags = resp.json()["flags"]
+    assert flags == {"web_search": False, "browser": False, "mcp": False, "rubric": False}
+    # Persistito: riletto resta spento.
+    again = client.get("/api/settings/providers").json()["flags"]
+    assert again["rubric"] is False
+    # Lo status runtime riflette il grader spento.
+    assert client.get("/api/status").json()["verification"]["enabled"] is False

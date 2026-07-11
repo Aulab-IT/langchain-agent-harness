@@ -153,11 +153,20 @@ class TierAssignment(BaseModel):
     model: Annotated[str, Field(default="", max_length=200)]
 
 
+class RuntimeFlagsUpdate(BaseModel):
+    # None = lascia invariato. Spegnerli snellisce prompt e chiamate (utile sui locali).
+    web_search: bool | None = None
+    browser: bool | None = None
+    mcp: bool | None = None
+    rubric: bool | None = None
+
+
 class ProviderSettingsUpdate(BaseModel):
     # None = lascia invariata; "" = azzera; valore = imposta.
     openai_api_key: Annotated[str | None, Field(default=None, max_length=400)]
     anthropic_api_key: Annotated[str | None, Field(default=None, max_length=400)]
     tiers: Annotated[list[TierAssignment], Field(default_factory=list, max_length=3)]
+    flags: RuntimeFlagsUpdate | None = None
 
 
 class MemoryUpdate(BaseModel):
@@ -1003,6 +1012,11 @@ async def update_provider_settings(payload: ProviderSettingsUpdate) -> dict[str,
     for assignment in payload.tiers:
         overrides[f"harness_provider_{assignment.tier}"] = assignment.provider
         overrides[f"{assignment.provider}_model_{assignment.tier}"] = assignment.model
+    if payload.flags is not None:
+        for ui_key, field in provider_cfg.FLAG_FIELDS.items():
+            value = getattr(payload.flags, ui_key)
+            if value is not None:
+                overrides[field] = value
 
     candidate = provider_cfg.apply_overrides(settings, overrides)
     problems = provider_cfg.validate_overrides(candidate)

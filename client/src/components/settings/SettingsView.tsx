@@ -1,4 +1,4 @@
-import { KeyRound, Layers, RefreshCw, Save, Settings2 } from "lucide-react";
+import { Gauge, KeyRound, Layers, RefreshCw, Save, Settings2, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getProviderModels, getProviderSettings, updateProviderSettings } from "../../api";
 import type {
@@ -6,8 +6,17 @@ import type {
   ProviderModels,
   ProviderName,
   ProviderSettings,
+  RuntimeFlagKey,
+  RuntimeFlags,
   RuntimeStatus,
 } from "../../types";
+
+const FLAG_LABELS: Array<{ key: RuntimeFlagKey; label: string; hint: string }> = [
+  { key: "web_search", label: "Web search", hint: "ricerca web" },
+  { key: "browser", label: "Browser", hint: "lettura pagine" },
+  { key: "mcp", label: "Tool MCP", hint: "skill e tool MCP locali" },
+  { key: "rubric", label: "Grader a rubric", hint: "verifica di qualità (una chiamata extra)" },
+];
 
 type TierRow = { tier: ModelTier; provider: ProviderName; model: string };
 
@@ -29,10 +38,27 @@ export function SettingsView({
   const [saved, setSaved] = useState(false);
   const [local, setLocal] = useState<Record<string, ProviderModels>>({});
   const [probing, setProbing] = useState(false);
+  const [flags, setFlags] = useState<RuntimeFlags>({
+    web_search: true,
+    browser: true,
+    mcp: true,
+    rubric: true,
+  });
 
   function adopt(next: ProviderSettings) {
     setConfig(next);
     setTiers(next.tiers.map((t) => ({ tier: t.tier, provider: t.provider, model: t.model })));
+    setFlags(next.flags);
+  }
+
+  function toggleFlag(key: RuntimeFlagKey) {
+    setSaved(false);
+    setFlags((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function applyLeanPreset() {
+    setSaved(false);
+    setFlags({ web_search: false, browser: false, mcp: false, rubric: false });
   }
 
   function probeLocal() {
@@ -81,9 +107,12 @@ export function SettingsView({
     setError(null);
     setSaved(false);
     try {
-      const body: { openai_api_key?: string; anthropic_api_key?: string; tiers: TierRow[] } = {
-        tiers,
-      };
+      const body: {
+        openai_api_key?: string;
+        anthropic_api_key?: string;
+        tiers: TierRow[];
+        flags: RuntimeFlags;
+      } = { tiers, flags };
       if (openaiKey) body.openai_api_key = openaiKey;
       if (anthropicKey) body.anthropic_api_key = anthropicKey;
       const updated = await updateProviderSettings(body);
@@ -225,6 +254,52 @@ export function SettingsView({
                 </div>
               );
             })}
+          </div>
+        </div>
+
+        <div className="border-t border-border px-6 py-5">
+          <div className="mb-1 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Gauge size={15} className="text-muted" /> Prestazioni · modalità snella
+            </div>
+            <button
+              type="button"
+              onClick={applyLeanPreset}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-warning/20 bg-warning/10 px-2.5 py-1 text-xs text-warning transition hover:bg-warning/20"
+              title="Spegne tutto: prompt più corto e nessuna chiamata extra (ideale sui modelli locali)"
+            >
+              <Zap size={13} /> Snellisci per locale
+            </button>
+          </div>
+          <p className="mb-3 text-xs text-muted">
+            Spegnere queste voci accorcia il prompt dell'agente e riduce le chiamate al modello:
+            fondamentale sui provider locali, dove il prompt-eval è lento.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {FLAG_LABELS.map(({ key, label, hint }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleFlag(key)}
+                className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-left text-sm transition hover:border-warning/30"
+              >
+                <span className="flex flex-col">
+                  <span>{label}</span>
+                  <span className="text-xs text-muted">{hint}</span>
+                </span>
+                <span
+                  className={`ml-3 inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition ${
+                    flags[key] ? "bg-success/70" : "bg-border"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                      flags[key] ? "translate-x-4" : "translate-x-0.5"
+                    }`}
+                  />
+                </span>
+              </button>
+            ))}
           </div>
         </div>
 

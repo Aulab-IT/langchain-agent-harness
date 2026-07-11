@@ -101,3 +101,23 @@ async def test_list_local_models_offline_port(tmp_path: Path) -> None:
     settings = _settings(tmp_path, ollama_base_url="http://127.0.0.1:1/v1")
     result = await pc.list_local_models(settings, "ollama")
     assert result == {"running": False, "models": []}
+
+
+def test_snapshot_includes_runtime_flags(tmp_path: Path) -> None:
+    settings = _settings(tmp_path, harness_enable_rubric=False, harness_enable_web_search=True)
+    flags = pc.snapshot(settings)["flags"]
+    assert flags["rubric"] is False
+    assert flags["web_search"] is True
+    assert set(flags) == {"web_search", "browser", "mcp", "rubric"}
+
+
+def test_flag_fields_are_whitelisted(tmp_path: Path) -> None:
+    allowed = pc.allowed_fields()
+    for field in pc.FLAG_FIELDS.values():
+        assert field in allowed
+
+
+def test_apply_flag_override(tmp_path: Path) -> None:
+    settings = _settings(tmp_path, harness_enable_mcp=True)
+    updated = pc.apply_overrides(settings, {"harness_enable_mcp": False})
+    assert updated.harness_enable_mcp is False

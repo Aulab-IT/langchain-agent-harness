@@ -55,10 +55,14 @@ export type ProviderTierAssignment = {
   effort: string;
 };
 
+export type RuntimeFlagKey = "web_search" | "browser" | "mcp" | "rubric";
+export type RuntimeFlags = Record<RuntimeFlagKey, boolean>;
+
 export type ProviderSettings = {
   providers: ProviderInfo[];
   tiers: ProviderTierAssignment[];
   suggested_models: Record<ProviderName, string[]>;
+  flags: RuntimeFlags;
 };
 
 export type ProviderModels = {
@@ -70,6 +74,7 @@ export type ProviderSettingsUpdate = {
   openai_api_key?: string | null;
   anthropic_api_key?: string | null;
   tiers?: Array<{ tier: ModelTier; provider: ProviderName; model: string }>;
+  flags?: Partial<RuntimeFlags>;
 };
 
 export type SessionFile = {

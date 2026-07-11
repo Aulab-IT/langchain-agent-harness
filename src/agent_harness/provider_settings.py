@@ -41,6 +41,16 @@ PROVIDERS: dict[str, ProviderMeta] = {
 
 KEY_FIELDS: tuple[str, ...] = ("openai_api_key", "anthropic_api_key")
 
+# Interruttori "prestazioni / modalità snella": chiave UI → campo Settings. Spegnerli riduce
+# il prompt (meno schemi di tool) e le chiamate al modello (niente grader), il che è decisivo
+# sui provider locali dove il prompt-eval è lento. Vedi analisi MLX: prompt harness ~11k token.
+FLAG_FIELDS: dict[str, str] = {
+    "web_search": "harness_enable_web_search",
+    "browser": "harness_enable_browser",
+    "mcp": "harness_enable_mcp",
+    "rubric": "harness_enable_rubric",
+}
+
 
 def allowed_fields() -> set[str]:
     """I soli campi di ``Settings`` che la UI può sovrascrivere.
@@ -49,6 +59,7 @@ def allowed_fields() -> set[str]:
     payload dell'interfaccia riesca a toccare campi arbitrari della configurazione.
     """
     fields: set[str] = set(KEY_FIELDS)
+    fields.update(FLAG_FIELDS.values())
     for tier in TIERS:
         fields.add(f"harness_provider_{tier}")
         for provider in PROVIDERS:
@@ -156,6 +167,7 @@ def snapshot(settings: Settings) -> dict[str, Any]:
             )
             for provider in PROVIDERS
         },
+        "flags": {ui_key: bool(getattr(settings, field)) for ui_key, field in FLAG_FIELDS.items()},
     }
 
 
