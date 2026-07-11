@@ -11,6 +11,8 @@ import type {
   Run,
   RunEvent,
   PromotionResult,
+  ProviderSettings,
+  ProviderSettingsUpdate,
   RuntimeStatus,
   SessionDetail,
   SessionFile,
@@ -70,6 +72,14 @@ function jsonOptions(method: string, body?: unknown): RequestInit {
 
 export function getRuntimeStatus(): Promise<RuntimeStatus> {
   return request("/api/status");
+}
+
+export function getProviderSettings(): Promise<ProviderSettings> {
+  return request("/api/settings/providers");
+}
+
+export function updateProviderSettings(body: ProviderSettingsUpdate): Promise<ProviderSettings> {
+  return request("/api/settings/providers", jsonOptions("PUT", body));
 }
 
 export function listSessions(search = ""): Promise<SessionSummary[]> {

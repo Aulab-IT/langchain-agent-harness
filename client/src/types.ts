@@ -28,13 +28,43 @@ export type Message = {
 
 export type ModelTier = "low" | "mid" | "high";
 export type ModelOverride = "auto" | ModelTier;
+export type ProviderName = "openai" | "anthropic" | "ollama" | "mlx";
+
 export type RuntimeModel = {
   tier: ModelTier;
+  provider: ProviderName;
   name: string;
   effort: string;
   /** Dollari per milione di token. Il backend è la fonte: vedi `Settings.openai_price_*`. */
   price_in: number;
   price_out: number;
+};
+
+export type ProviderInfo = {
+  name: ProviderName;
+  label: string;
+  kind: "cloud" | "local";
+  needs_key: boolean;
+  key_configured: boolean;
+};
+
+export type ProviderTierAssignment = {
+  tier: ModelTier;
+  provider: ProviderName;
+  model: string;
+  effort: string;
+};
+
+export type ProviderSettings = {
+  providers: ProviderInfo[];
+  tiers: ProviderTierAssignment[];
+  suggested_models: Record<ProviderName, string[]>;
+};
+
+export type ProviderSettingsUpdate = {
+  openai_api_key?: string | null;
+  anthropic_api_key?: string | null;
+  tiers?: Array<{ tier: ModelTier; provider: ProviderName; model: string }>;
 };
 
 export type SessionFile = {

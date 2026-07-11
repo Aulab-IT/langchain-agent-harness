@@ -21,6 +21,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from pydantic import BaseModel, Field
 from starlette.responses import Response
 
+from agent_harness import provider_settings as provider_cfg
 from agent_harness.canary import CANARY_EVENT_TYPES, CanaryAnalysis, analyze_canary
 from agent_harness.command_review import review_command
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
@@ -144,6 +145,19 @@ class AutoApproveUpdate(BaseModel):
 
 class ModelOverrideUpdate(BaseModel):
     override: Literal["auto", "low", "mid", "high"]
+
+
+class TierAssignment(BaseModel):
+    tier: Literal["low", "mid", "high"]
+    provider: Literal["openai", "anthropic", "ollama", "mlx"]
+    model: Annotated[str, Field(default="", max_length=200)]
+
+
+class ProviderSettingsUpdate(BaseModel):
+    # None = lascia invariata; "" = azzera; valore = imposta.
+    openai_api_key: Annotated[str | None, Field(default=None, max_length=400)]
+    anthropic_api_key: Annotated[str | None, Field(default=None, max_length=400)]
+    tiers: Annotated[list[TierAssignment], Field(default_factory=list, max_length=3)]
 
 
 class MemoryUpdate(BaseModel):
@@ -873,7 +887,13 @@ sandbox_reaper = SandboxIdleReaper(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    global settings
     cleanup_orphan_sandboxes(session_sandbox_manager, store.list_all_session_ids())
+    # Applica gli override provider salvati dall'interfaccia (chiavi API, assegnazione dei
+    # gradini) sopra la configurazione da ambiente: valgono dal primo run senza riavviare.
+    provider_overrides = provider_cfg.load_overrides(settings.state_dir)
+    if provider_overrides:
+        settings = provider_cfg.apply_overrides(settings, provider_overrides)
     # Semina il listino prezzi versionato dai valori in Settings (idempotente): dà al
     # ledger dei costi un catalogo da cui risolvere, senza sovrascrivere versioni già presenti.
     store.upsert_pricing_catalog(catalog_from_settings(settings))
@@ -924,6 +944,7 @@ async def runtime_status() -> dict[str, Any]:
         "models": [
             {
                 "tier": spec.tier,
+                "provider": spec.provider,
                 "name": spec.name,
                 "effort": spec.effort,
                 "price_in": spec.price_in,
@@ -953,6 +974,39 @@ async def runtime_status() -> dict[str, Any]:
         "overrides": load_overrides(settings.state_dir / "harness_overrides.toml"),
         "canary": read_canary(settings.state_dir / "canary.json"),
     }
+
+
+@app.get("/api/settings/providers")
+async def get_provider_settings() -> dict[str, Any]:
+    """Configurazione provider corrente per la UI. Nessuna chiave in chiaro."""
+    return provider_cfg.snapshot(settings)
+
+
+@app.put("/api/settings/providers")
+async def update_provider_settings(payload: ProviderSettingsUpdate) -> dict[str, Any]:
+    """Salva chiavi API e assegnazione provider/modello per gradino.
+
+    Applica gli override sopra la configurazione corrente, li valida (un gradino cloud senza
+    chiave, o senza modello, viene rifiutato), poi li rende attivi per i run successivi
+    riassegnando la ``settings`` di processo e riseminando il listino prezzi.
+    """
+    global settings
+    overrides = provider_cfg.load_overrides(settings.state_dir)
+    provider_cfg.merge_key_change(overrides, "openai_api_key", payload.openai_api_key)
+    provider_cfg.merge_key_change(overrides, "anthropic_api_key", payload.anthropic_api_key)
+    for assignment in payload.tiers:
+        overrides[f"harness_provider_{assignment.tier}"] = assignment.provider
+        overrides[f"{assignment.provider}_model_{assignment.tier}"] = assignment.model
+
+    candidate = provider_cfg.apply_overrides(settings, overrides)
+    problems = provider_cfg.validate_overrides(candidate)
+    if problems:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=" ".join(problems))
+
+    provider_cfg.save_overrides(settings.state_dir, overrides)
+    settings = candidate
+    store.upsert_pricing_catalog(catalog_from_settings(settings))
+    return provider_cfg.snapshot(settings)
 
 
 @app.post("/api/sessions", status_code=status.HTTP_201_CREATED)

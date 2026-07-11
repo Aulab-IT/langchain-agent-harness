@@ -582,3 +582,51 @@ def test_delete_session_removes_scoped_workspace(client: TestClient) -> None:
 
     assert response.status_code == 204
     assert not workspace.exists()
+
+
+def test_provider_settings_get_hides_keys(client: TestClient) -> None:
+    body = client.get("/api/settings/providers").json()
+    assert {p["name"] for p in body["providers"]} == {"openai", "anthropic", "ollama", "mlx"}
+    assert [t["tier"] for t in body["tiers"]] == ["low", "mid", "high"]
+    openai = next(p for p in body["providers"] if p["name"] == "openai")
+    assert openai["key_configured"] is False  # fixture: openai_api_key=None
+    assert "sk-" not in str(body)
+
+
+def test_provider_settings_set_key_and_status_reflects(client: TestClient) -> None:
+    resp = client.put("/api/settings/providers", json={"openai_api_key": "sk-live"})
+    assert resp.status_code == 200
+    openai = next(p for p in resp.json()["providers"] if p["name"] == "openai")
+    assert openai["key_configured"] is True
+    # Persistito e riletto: la chiave resta configurata.
+    again = client.get("/api/settings/providers").json()
+    assert next(p for p in again["providers"] if p["name"] == "openai")["key_configured"] is True
+
+
+def test_provider_settings_assign_local_tiers_without_key(client: TestClient) -> None:
+    resp = client.put(
+        "/api/settings/providers",
+        json={
+            "tiers": [
+                {"tier": "low", "provider": "ollama", "model": "qwen3:8b"},
+                {"tier": "mid", "provider": "ollama", "model": "qwen3:14b"},
+                {"tier": "high", "provider": "ollama", "model": "qwen3:14b"},
+            ]
+        },
+    )
+    assert resp.status_code == 200
+    tiers = {t["tier"]: t for t in resp.json()["tiers"]}
+    assert tiers["low"]["provider"] == "ollama"
+    assert tiers["low"]["model"] == "qwen3:8b"
+    # Lo status runtime riflette il provider del gradino.
+    models = {m["tier"]: m for m in client.get("/api/status").json()["models"]}
+    assert models["low"]["provider"] == "ollama"
+
+
+def test_provider_settings_cloud_tier_without_key_is_rejected(client: TestClient) -> None:
+    resp = client.put(
+        "/api/settings/providers",
+        json={"tiers": [{"tier": "high", "provider": "anthropic", "model": "claude-opus-4-8"}]},
+    )
+    assert resp.status_code == 400
+    assert "chiave" in resp.json()["detail"].lower()

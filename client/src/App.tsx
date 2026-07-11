@@ -157,7 +157,7 @@ export default function App() {
           </div>
         ) : view === "settings" ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            <SettingsView runtime={runtime} />
+            <SettingsView runtime={runtime} onSaved={harness.refreshRuntime} />
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-hidden">

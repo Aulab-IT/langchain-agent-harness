@@ -426,8 +426,17 @@ export function useHarnessSession() {
     setSidebarOpen(false);
   };
 
+  const refreshRuntime = useCallback(
+    () =>
+      getRuntimeStatus()
+        .then(setRuntime)
+        .catch(() => undefined),
+    [],
+  );
+
   return {
     runtime,
+    refreshRuntime,
     sessions,
     session,
     run,
