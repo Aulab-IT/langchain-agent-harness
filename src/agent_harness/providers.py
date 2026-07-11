@@ -304,6 +304,13 @@ class _OpenAICompatibleLocalAdapter(_BaseAdapter):
     execution_kind = "local"
     default_base_url = "http://127.0.0.1:8080/v1"
 
+    # Timeout tra un chunk di streaming e il successivo. I server locali (MLX in particolare)
+    # elaborano l'intero prompt prima del primo token: su un prompt grande e su hardware
+    # modesto il time-to-first-token può superare abbondantemente il default di 120s di
+    # langchain_openai, che altrimenti abortisce con StreamChunkTimeoutError. 600s copre anche
+    # prompt molto lunghi e intercetta comunque un server locale morto.
+    stream_chunk_timeout = 600.0
+
     def build_chat_model(
         self, descriptor: ModelDescriptor, options: BuildOptions
     ) -> BaseChatModel:
@@ -318,6 +325,7 @@ class _OpenAICompatibleLocalAdapter(_BaseAdapter):
             base_url=base_url,
             max_retries=options.max_retries,
             timeout=options.timeout,
+            stream_chunk_timeout=self.stream_chunk_timeout,
         )
 
 
