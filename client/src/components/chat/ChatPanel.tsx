@@ -9,12 +9,11 @@ import type {
   SessionDetail,
   SessionFile,
 } from "../../types";
-import { deriveToolSteps, latestSelectedModel } from "../../lib/sessionActivity";
+import { latestSelectedModel } from "../../lib/sessionActivity";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessage } from "./ChatMessage";
 import { MarkdownContent } from "./MarkdownContent";
 import { ThinkingTrace } from "./ThinkingTrace";
-import { ToolSteps } from "./ToolSteps";
 
 export function ChatPanel({
   session,
@@ -114,7 +113,6 @@ export function ChatPanel({
     endRef.current?.scrollIntoView({ block: "end", behavior: active ? "auto" : "smooth" });
   }, [session.messages, events.length, active, liveText]);
 
-  const steps = useMemo(() => deriveToolSteps(events), [events]);
   const liveModel = useMemo(() => latestSelectedModel(events), [events]);
   const visibleMessages = session.messages.filter((message) => message.role !== "system");
   const lastUserIndex = (() => {
@@ -183,7 +181,6 @@ export function ChatPanel({
             <span className="text-sm text-muted">Carica file o assegna un obiettivo.</span>
           </div>
         )}
-        <ToolSteps steps={steps} />
         {showStreaming || active ? (
           <article className="flex gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">

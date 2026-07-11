@@ -39,7 +39,7 @@ export function ThinkingTrace({ events, run }: { events: RunEvent[]; run: Run | 
           </span>
         </div>
         <div className="truncate text-xs text-muted">
-          {current.detail ? `${current.detail} · ` : ""}Trace completo nella barra inferiore · tab Trace
+          Apri l'inspector per i dettagli · tab Trace
         </div>
       </div>
       {stale ? (
