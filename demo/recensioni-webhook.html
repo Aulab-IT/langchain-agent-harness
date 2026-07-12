@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nova Store · Moderazione recensioni</title>
+    <style>
+      :root {
+        --bg: #0f1216; --panel: #171b21; --panel-2: #1e242c; --border: #2a313b;
+        --text: #e7ecf2; --muted: #9aa6b2; --accent: #6ea8fe; --accent-2: #4c8dff;
+        --star: #f5b301; --ok: #33c481; --warn: #f5b301; --danger: #ff6b6b;
+        --radius: 14px; --shadow: 0 18px 50px rgba(0,0,0,.4);
+      }
+      @media (prefers-color-scheme: light) {
+        :root { --bg:#eef1f6; --panel:#fff; --panel-2:#f4f6fa; --border:#dce1e9;
+          --text:#1a2029; --muted:#5b6675; --shadow:0 18px 50px rgba(20,30,50,.1); }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        background: radial-gradient(1100px 500px at 50% -220px, rgba(110,168,254,.16), transparent), var(--bg);
+        color: var(--text); min-height: 100vh; padding: 30px 16px 70px;
+      }
+      .wrap { max-width: 720px; margin: 0 auto; }
+
+      header { display: flex; align-items: center; gap: 13px; margin-bottom: 8px; }
+      header .logo {
+        width: 42px; height: 42px; border-radius: 11px; flex: none;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        display: grid; place-items: center; font-weight: 800; color: #fff; font-size: 21px;
+        box-shadow: 0 8px 22px rgba(76,141,255,.4);
+      }
+      header h1 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+      header p { margin: 0; color: var(--muted); font-size: 13px; }
+      .subtitle { color: var(--muted); font-size: 13.5px; margin: 2px 0 20px 55px; }
+
+      details.config {
+        background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+        margin-bottom: 22px; overflow: hidden;
+      }
+      details.config summary {
+        cursor: pointer; padding: 12px 18px; font-size: 13px; color: var(--muted); list-style: none; user-select: none;
+      }
+      details.config summary::-webkit-details-marker { display: none; }
+      details.config .body { padding: 2px 18px 18px; display: flex; flex-direction: column; gap: 12px; }
+      details.config label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+      details.config input {
+        background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+        border-radius: 9px; padding: 10px 12px; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; outline: none;
+      }
+      details.config input:focus { border-color: var(--accent); }
+      .hint { font-size: 12px; color: var(--muted); }
+
+      .feed { display: flex; flex-direction: column; gap: 16px; }
+
+      .review {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+      }
+      .review__top { display: flex; align-items: flex-start; gap: 13px; padding: 16px 18px 4px; }
+      .avatar {
+        width: 40px; height: 40px; border-radius: 50%; flex: none; display: grid; place-items: center;
+        font-weight: 700; color: #fff; font-size: 16px;
+      }
+      .review__who { flex: 1; min-width: 0; }
+      .review__who .name { font-weight: 650; font-size: 14.5px; }
+      .review__who .prod { color: var(--muted); font-size: 12.5px; }
+      .stars { font-size: 15px; letter-spacing: 1px; white-space: nowrap; }
+      .stars .on { color: var(--star); }
+      .stars .off { color: var(--border); }
+
+      .review__text { padding: 4px 18px 14px 71px; font-size: 14.5px; line-height: 1.5; }
+
+      .review__actions {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding: 0 18px 16px 71px;
+      }
+      .analyze {
+        display: inline-flex; align-items: center; gap: 8px;
+        border: none; border-radius: 10px; padding: 9px 15px; font-size: 13.5px; font-weight: 650;
+        color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        cursor: pointer; transition: filter .15s, transform .05s; box-shadow: 0 8px 20px rgba(76,141,255,.3);
+      }
+      .analyze:hover { filter: brightness(1.07); }
+      .analyze:active { transform: translateY(1px); }
+      .analyze:disabled { opacity: .55; cursor: default; box-shadow: none; }
+      .status-tag { font-size: 12px; color: var(--muted); }
+
+      .analysis {
+        margin: 0 18px 16px 71px; padding: 13px 15px; border-radius: 11px;
+        background: var(--panel-2); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+        font-size: 13.5px; line-height: 1.55; white-space: pre-wrap;
+        animation: fade .25s ease;
+      }
+      .analysis.pos { border-left-color: var(--ok); }
+      .analysis.neg { border-left-color: var(--danger); }
+      .analysis.neu { border-left-color: var(--warn); }
+      .analysis.err { border-left-color: var(--danger); }
+      .analysis__head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+      .sentiment {
+        font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+        padding: 2px 8px; border-radius: 999px;
+      }
+      .sentiment.pos { background: rgba(51,196,129,.15); color: var(--ok); }
+      .sentiment.neg { background: rgba(255,107,107,.15); color: var(--danger); }
+      .sentiment.neu { background: rgba(245,179,1,.15); color: var(--warn); }
+      .analysis__head .who { color: var(--muted); font-size: 12px; }
+      .analysis__body { color: var(--text); }
+      @keyframes fade { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+      .spinner {
+        width: 15px; height: 15px; border-radius: 50%;
+        border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; animation: spin .8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="logo">N</div>
+        <div>
+          <h1>Nova Store</h1>
+          <p>Centro moderazione recensioni</p>
+        </div>
+      </header>
+      <p class="subtitle">Recensioni ricevute dai clienti. Analizzale con l'AI per classificarle.</p>
+
+      <details class="config" id="config">
+        <summary>⚙︎ Configurazione webhook</summary>
+        <div class="body">
+          <label>URL del webhook
+            <input type="text" id="cfg-url" placeholder="http://127.0.0.1:8000/api/triggers/&lt;id&gt;/webhook" />
+          </label>
+          <label>Token
+            <input type="text" id="cfg-token" placeholder="incolla il token del trigger" />
+          </label>
+          <p class="hint">Copiali dal pannello <strong>Trigger</strong> dell'harness (trigger webhook). Salvati solo in questo browser.</p>
+        </div>
+      </details>
+
+      <div class="feed" id="feed"></div>
+    </div>
+
+    <script>
+      const LS = "nova_webhook_cfg";
+      const $ = (id) => document.getElementById(id);
+      const escape = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+      // --- config ---
+      const cfg = JSON.parse(localStorage.getItem(LS) || "{}");
+      $("cfg-url").value = cfg.url || "";
+      $("cfg-token").value = cfg.token || "";
+      if (!cfg.url || !cfg.token) $("config").open = true;
+      const saveCfg = () => localStorage.setItem(LS, JSON.stringify({ url: $("cfg-url").value.trim(), token: $("cfg-token").value.trim() }));
+      $("cfg-url").addEventListener("change", saveCfg);
+      $("cfg-token").addEventListener("change", saveCfg);
+
+      // --- recensioni precompilate ---
+      const REVIEWS = [
+        { cliente: "Marco B.", prodotto: "Cuffie Nova Air Pro", rating: 5, testo: "Fantastiche! Suono cristallino e comodissime, le porto tutto il giorno senza fastidio. Cancellazione del rumore top." },
+        { cliente: "Anna R.", prodotto: "Cuffie Nova Air Pro", rating: 2, testo: "Il suono è buono ma la batteria dura pochissimo e l'app si disconnette in continuazione. Deluso dall'autonomia." },
+        { cliente: "Luca V.", prodotto: "Speaker Nova Mini", rating: 4, testo: "Ottimo rapporto qualità/prezzo, compatto e potente. Unico neo: i bassi un po' deboli ad alto volume." },
+        { cliente: "Giulia P.", prodotto: "Smartwatch Nova Fit", rating: 1, testo: "Arrivato con lo schermo graffiato e non si accende nemmeno in carica. Esperienza pessima, voglio il rimborso." },
+        { cliente: "Sara M.", prodotto: "Cuffie Nova Air Pro", rating: 3, testo: "Nella media. Fanno il loro lavoro ma non mi hanno entusiasmato, mi aspettavo qualcosa in più a questo prezzo." },
+        { cliente: "Davide T.", prodotto: "Speaker Nova Mini", rating: 5, testo: "Piccolo ma sorprendente, batteria che non finisce mai e si sente benissimo anche in giardino. Consigliatissimo!" },
+      ];
+
+      const AVATAR_COLORS = ["#4c8dff", "#e0637d", "#3bb08f", "#c78b3c", "#8a6fe0", "#3aa0c7"];
+      const stars = (n) =>
+        Array.from({ length: 5 }, (_, i) =>
+          `<span class="${i < n ? "on" : "off"}">${i < n ? "★" : "☆"}</span>`).join("");
+
+      function sentimentOf(text) {
+        const t = text.toLowerCase();
+        if (/negativ|insoddisf|delus/.test(t)) return "neg";
+        if (/positiv|soddisf/.test(t)) return "pos";
+        if (/neutr|misto|nella media/.test(t)) return "neu";
+        return "neu";
+      }
+      const sentimentLabel = { pos: "Positivo", neg: "Negativo", neu: "Neutro" };
+
+      // --- render feed ---
+      const feed = $("feed");
+      REVIEWS.forEach((r, i) => {
+        const card = document.createElement("div");
+        card.className = "review";
+        card.innerHTML = `
+          <div class="review__top">
+            <div class="avatar" style="background:${AVATAR_COLORS[i % AVATAR_COLORS.length]}">${escape(r.cliente[0])}</div>
+            <div class="review__who">
+              <div class="name">${escape(r.cliente)}</div>
+              <div class="prod">${escape(r.prodotto)}</div>
+            </div>
+            <div class="stars">${stars(r.rating)}</div>
+          </div>
+          <div class="review__text">${escape(r.testo)}</div>
+          <div class="review__actions">
+            <button class="analyze" data-i="${i}">🤖 Analizza con AI</button>
+            <span class="status-tag"></span>
+          </div>`;
+        feed.appendChild(card);
+      });
+
+      // --- analisi on-demand ---
+      feed.addEventListener("click", async (e) => {
+        const btn = e.target.closest(".analyze");
+        if (!btn) return;
+        const url = $("cfg-url").value.trim();
+        const token = $("cfg-token").value.trim();
+        if (!url || !token) { $("config").open = true; return; }
+
+        const review = REVIEWS[Number(btn.dataset.i)];
+        const card = btn.closest(".review");
+        const tag = card.querySelector(".status-tag");
+        card.querySelector(".analysis")?.remove();
+
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner"></span> Analisi…`;
+        tag.textContent = "invio al webhook…";
+
+        const payload = { cliente: review.cliente, prodotto: review.prodotto, rating: review.rating, testo: review.testo };
+        try {
+          const res = await fetch(`${url}?token=${encodeURIComponent(token)}&wait=true&timeout=180`, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=UTF-8" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json().catch(() => ({}));
+          const box = document.createElement("div");
+          box.className = "analysis";
+
+          if (data.status === "completed" && data.response) {
+            const s = sentimentOf(data.response);
+            box.classList.add(s);
+            box.innerHTML = `
+              <div class="analysis__head">
+                <span class="sentiment ${s}">${sentimentLabel[s]}</span>
+                <span class="who">Analisi AI · run ${escape((data.run_id || "").slice(0, 8))}</span>
+              </div>
+              <div class="analysis__body">${escape(data.response)}</div>`;
+            tag.textContent = "";
+          } else if (data.status === "running") {
+            box.innerHTML = `<div class="analysis__body">⏳ Ancora in corso — seguilo nell'harness (run ${escape((data.run_id || "").slice(0, 8))}).</div>`;
+            tag.textContent = "";
+          } else {
+            box.classList.add("err");
+            box.innerHTML = `<div class="analysis__body">⚠️ Analisi non riuscita (${escape(data.status || "sconosciuto")}).</div>`;
+            tag.textContent = "";
+          }
+          card.appendChild(box);
+        } catch (err) {
+          const box = document.createElement("div");
+          box.className = "analysis err";
+          box.innerHTML = `<div class="analysis__body">🔌 Connessione fallita. Controlla harness, URL e token.</div>`;
+          card.appendChild(box);
+          tag.textContent = "";
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = `🤖 Rianalizza`;
+        }
+      });
+    </script>
+  </body>
+</html>
