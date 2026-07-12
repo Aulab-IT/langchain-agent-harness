@@ -25,6 +25,7 @@ from agent_harness.audit import AuditMiddleware, EventCallback
 from agent_harness.builtin_tools import build_builtin_tools
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
 from agent_harness.context_monitor import ContextMonitorMiddleware
+from agent_harness.file_guard import FileBlockGuardMiddleware
 from agent_harness.improve import (
     OVERRIDE_WHITELIST,
     RuntimeOverrideSelection,
@@ -607,6 +608,9 @@ async def build_harness(
             register_harness_profile(provider_key, harness_profile)
         ladder = TierLadder()
         middleware: list[AgentMiddleware[Any, Any, Any]] = [
+            # Guardia file: rimuove i blocchi-file corrotti prima che raggiungano il provider,
+            # così un artefatto malformato non fa fallire (e non avvelena) l'intera conversazione.
+            FileBlockGuardMiddleware(),
             build_model_router(
                 tiers,
                 ladder,

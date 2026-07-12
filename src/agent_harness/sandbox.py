@@ -55,6 +55,11 @@ class SessionSandboxManager:
         self._locks: dict[str, threading.Lock] = {}
         self._registry_lock = threading.Lock()
         self._last_used: dict[str, float] = {}
+        # Cache breve dell'esito «daemon vivo»: evita di ripingare Docker a ogni exec, decisivo
+        # quando più docker_exec partono in parallelo (altrimenti N check concorrenti sovraccaricano
+        # Docker Desktop e uno va in timeout, dando un falso «Docker non attivo»).
+        self._docker_ok_until: float = 0.0
+        self._docker_cache_lock = threading.Lock()
 
     def container_name(self, session_id: str) -> str:
         safe = session_id.replace("-", "")[:20]
@@ -153,18 +158,34 @@ class SessionSandboxManager:
         return [line for line in result.stdout.splitlines() if line.strip()]
 
     def docker_available(self) -> bool:
+        """Vero se il daemon Docker risponde. Cacheato per pochi secondi.
+
+        Usa ``docker version`` (pinga solo l'API del daemon) invece di ``docker info``, che su
+        Docker Desktop è pesante — raccoglie tutto lo stato di sistema — e con un timeout stretto
+        andava sporadicamente in timeout, facendo credere all'agente che Docker non fosse attivo
+        anche quando lo era. Il timeout è generoso e l'esito positivo resta valido brevemente,
+        così più exec ravvicinati (anche in parallelo) non ripingano il daemon a raffica.
+        """
         if not shutil_which("docker"):
             return False
+        now = time.monotonic()
+        with self._docker_cache_lock:
+            if now < self._docker_ok_until:
+                return True
         try:
             result = subprocess.run(
-                ["docker", "info"],
+                ["docker", "version", "--format", "{{.Server.Version}}"],
                 capture_output=True,
                 check=False,
-                timeout=5,
+                timeout=20,
             )
         except (OSError, subprocess.TimeoutExpired):
             return False
-        return result.returncode == 0
+        ok = result.returncode == 0
+        if ok:
+            with self._docker_cache_lock:
+                self._docker_ok_until = time.monotonic() + 15.0
+        return ok
 
     def image_exists(self, image: str) -> bool:
         try:
@@ -305,18 +326,22 @@ class SessionSandboxManager:
             "ALL",
             "--security-opt",
             "no-new-privileges",
+            # Limiti dimensionati per lavoro reale, non solo demo: installare client cloud
+            # (es. google-api-python-client + grpcio), lavorare su PDF/PPTX o dataframe pandas
+            # sfondava i 512 MB di RAM e soprattutto i 64 MB di /tmp — pip usa /tmp per cache e
+            # build, e «No space left on device» era il risultato. Restano limiti fermi.
             "--memory",
-            "512m",
+            "2g",
             "--cpus",
-            "1",
+            "2",
             "--pids-limit",
-            "128",
+            "512",
             "--user",
             f"{user_id}:{group_id}",
             "--env",
             "HOME=/tmp",
             "--tmpfs",
-            "/tmp:rw,noexec,nosuid,size=64m",
+            "/tmp:rw,noexec,nosuid,size=512m",
             "--mount",
             f"type=bind,src={workspace},dst=/workspace",
         ]
@@ -418,10 +443,13 @@ class SessionSandboxManager:
                 # ancora presente (errore ignorato con check=False); il finally la ripulisce.
                 self._connect_network(container, network)
             try:
+                # Niente `text=True`: farebbe una decodifica UTF-8 STRETTA di stdout/stderr, e
+                # un comando che stampa byte non-UTF8 (npx, git, cat di un binario) farebbe
+                # crashare l'intero run con UnicodeDecodeError. Catturiamo i byte e decodifichiamo
+                # noi con `errors="replace"`, così l'output è sempre una stringa valida.
                 result = subprocess.run(
                     ["docker", "exec", container, "sh", "-lc", command],
                     capture_output=True,
-                    text=True,
                     timeout=timeout_seconds,
                     check=False,
                 )
@@ -435,14 +463,26 @@ class SessionSandboxManager:
         except RuntimeError as exc:
             return f"ERRORE: {exc}"
 
-        combined = (
-            f"exit_code={result.returncode}\n"
-            f"STDOUT:\n{result.stdout}\n"
-            f"STDERR:\n{result.stderr}"
-        )
+        stdout = _decode_output(result.stdout)
+        stderr = _decode_output(result.stderr)
+        combined = f"exit_code={result.returncode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
         if len(combined) <= output_limit:
             return combined
         return _offload_or_truncate(combined, workspace, output_limit)
+
+
+def _decode_output(data: bytes | str | None) -> str:
+    """Rende testo l'output di un comando, senza mai sollevare su byte non-UTF8.
+
+    L'exec cattura byte (nessun ``text=True``): un comando che stampa binario o encoding misto
+    non deve far fallire il run. ``errors='replace'`` sostituisce i byte non decodificabili con
+    il carattere di sostituzione invece di lanciare ``UnicodeDecodeError``.
+    """
+    if data is None:
+        return ""
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+    return data
 
 
 def _offload_or_truncate(combined: str, workspace: Path, output_limit: int) -> str:

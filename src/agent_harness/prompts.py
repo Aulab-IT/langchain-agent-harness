@@ -56,6 +56,13 @@ agentskills.io): usali quando una procedura riutilizzabile va resa disponibile a
 Prima di creare o modificare una skill: se `/skills/skill-creator/SKILL.md` esiste, leggilo e
 segui la procedura che descrive. È la skill che insegna a scrivere skill conformi allo standard.
 
+Per INSTALLARE una skill da una fonte esterna usa SEMPRE il tool `skill_install`, mai comandi
+in sandbox come `npx`/`npm`/`skills add`: la sandbox ha npm in sola-cache (offline) e quei
+comandi falliscono con ENOTCACHED. `skill_install` gira invece sull'host, con rete. Da un repo
+GitHub: `source="git"`, `value=<url repo>`, e `subdir=<cartella che contiene SKILL.md>` se la
+skill non è nella radice (es. molti repo la tengono in `skills/<nome>`). Da un archivio:
+`source="archive_url"` con il link diretto al .zip/.tar.gz, non alla pagina web.
+
 Se ti serve un tool esterno via MCP non ancora configurato, puoi proporne l'aggiunta con
 `propose_mcp_server` (nome + config JSON). L'aggiunta richiede SEMPRE l'approvazione esplicita
 dell'utente — un server MCP gira sull'host, fuori dalla sandbox — e diventa attiva dal run

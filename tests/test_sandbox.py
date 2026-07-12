@@ -26,7 +26,8 @@ def test_docker_run_flags_have_security_boundaries(tmp_path: Path) -> None:
     assert "--read-only" in command
     assert "--cap-drop ALL" in joined
     assert "no-new-privileges" in command
-    assert "--pids-limit 128" in joined
+    assert "--pids-limit 512" in joined
+    assert "--memory 2g" in joined
     assert "--user" in command
     assert "HOME=/tmp" in command
     assert "dst=/workspace" in joined
@@ -411,3 +412,18 @@ def test_cleanup_orphan_sandboxes_removes_only_unknown_containers(
 def test_cleanup_orphan_sandboxes_skips_when_docker_unavailable(_docker_available: Mock) -> None:
     manager = SessionSandboxManager()
     assert cleanup_orphan_sandboxes(manager, []) == []
+
+
+@patch("agent_harness.sandbox.subprocess.run")
+def test_non_utf8_command_output_does_not_crash(run: Mock, tmp_path: Path) -> None:
+    manager = SessionSandboxManager()
+    # Le chiamate docker "di gestione" nel reale usano text=True (str); solo l'exec cattura
+    # byte grezzi. Qui l'exec restituisce byte non-UTF8 (0xe1 isolato) che prima crashavano.
+    exec_result = Mock(returncode=0, stdout=b"ciao \xe1\xe1 mondo", stderr=b"")
+    run.side_effect = _exec_stub(exec_result)
+    output = manager.execute(
+        "session1", tmp_path, "img:latest", tmp_path, "cat file.bin", output_limit=10_000
+    )
+    assert "exit_code=0" in output
+    assert "ciao" in output and "mondo" in output
+    assert "�" in output  # i byte non-UTF8 diventano il carattere di sostituzione

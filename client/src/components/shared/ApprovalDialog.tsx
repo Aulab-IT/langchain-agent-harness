@@ -221,7 +221,7 @@ export function ApprovalDialog({
           <p className="pb-2 text-xs text-muted">
             Categorie e percorsi vengono riconosciuti da un'analisi statica del testo del
             comando, non da un modello. Un comando può eludere il riconoscimento: leggilo
-            comunque. La sandbox resta senza rete, con 512 MB, 1 core, e solo /workspace
+            comunque. La sandbox resta senza rete, con 2 GB, 2 core, e solo /workspace
             scrivibile.
           </p>
         </div>

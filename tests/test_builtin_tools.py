@@ -62,3 +62,19 @@ def test_skill_list_reflects_created_skill(tmp_path: Path) -> None:
     )
     names = {item["name"] for item in tools["skill_list"].invoke({})}
     assert "altra-skill" in names
+
+
+def test_skill_install_returns_error_instead_of_crashing(tmp_path: Path) -> None:
+    tools, _, _ = _tools(tmp_path)
+    # Una pagina non-archivio (come skills.sh): install_skill solleva, ma il tool deve
+    # restituire l'errore al modello, non propagarlo e far fallire l'intero run.
+    result = tools["skill_install"].invoke(
+        {"source": "archive_url", "value": "https://example.invalid/pagina"}
+    )
+    assert "error" in result
+
+
+def test_skill_read_missing_returns_error(tmp_path: Path) -> None:
+    tools, _, _ = _tools(tmp_path)
+    result = tools["skill_read"].invoke({"name": "inesistente"})
+    assert "error" in result

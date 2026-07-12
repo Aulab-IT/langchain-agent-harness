@@ -92,7 +92,10 @@ def build_builtin_tools(
     @tool
     def skill_read(name: str) -> dict[str, Any]:
         """Legge il SKILL.md completo di una skill installata."""
-        info = read_skill(skills_dir, name)
+        try:
+            info = read_skill(skills_dir, name)
+        except Exception as exc:
+            return {"error": f"Lettura skill fallita: {exc}"}
         return {**_brief(info), "content": info.get("content")}
 
     @tool
@@ -104,9 +107,12 @@ def build_builtin_tools(
         nel system prompt è caricata a inizio run, quindi per usarla subito leggi il path
         restituito.
         """
-        content = build_skill_md(name, description, body)
-        info = write_skill(skills_dir, name, content)
-        _sync_into_session(name)
+        try:
+            content = build_skill_md(name, description, body)
+            info = write_skill(skills_dir, name, content)
+            _sync_into_session(name)
+        except Exception as exc:
+            return {"error": f"Creazione skill fallita: {exc}"}
         return _brief(info)
 
     @tool
@@ -115,8 +121,11 @@ def build_builtin_tools(
 
         `relpath` è confinato nella cartella della skill (niente `..` o percorsi assoluti).
         """
-        result = write_skill_file(skills_dir, name, relpath, content)
-        _sync_into_session(name)
+        try:
+            result = write_skill_file(skills_dir, name, relpath, content)
+            _sync_into_session(name)
+        except Exception as exc:
+            return {"error": f"Scrittura file skill fallita: {exc}"}
         return {
             "name": name,
             "path": f"/skills/{name}/{relpath}",
@@ -134,22 +143,27 @@ def build_builtin_tools(
     ) -> dict[str, Any]:
         """Installa una skill da una fonte esterna e la rende usabile in questo run.
 
-        `source`: "archive_url" (URL a .zip/.tar.gz), "git" (URL repo http/https, con
-        `ref`/`subdir` opzionali) o "registry" (nome skill nel registry agentskills.io).
-        L'archivio/repo viene estratto in modo blindato (no traversal/symlink/size-bomb) e
-        validato contro lo standard. Ogni install è registrata nell'audit come fatta dall'agente.
+        `source`: "archive_url" (URL diretta a un file .zip/.tar.gz), "git" (URL repo http/https,
+        con `ref`/`subdir` opzionali) o "registry" (nome skill nel registry agentskills.io — NON
+        una URL). Una pagina di un sito di skill (es. skills.sh) non è un archivio: usa "git" sul
+        repo sorgente, oppure "archive_url" sul link diretto al .zip/.tar.gz, non sull'URL della
+        pagina. L'archivio/repo è estratto in modo blindato (no traversal/symlink/size-bomb) e
+        validato. Ogni install è registrata nell'audit come fatta dall'agente.
         """
-        info = install_skill(
-            skills_dir,
-            source,
-            value,
-            ref=ref,
-            subdir=subdir,
-            registry_url=registry_url,
-            by="agent",
-            force=force,
-        )
-        _sync_into_session(info["name"])
+        try:
+            info = install_skill(
+                skills_dir,
+                source,
+                value,
+                ref=ref,
+                subdir=subdir,
+                registry_url=registry_url,
+                by="agent",
+                force=force,
+            )
+            _sync_into_session(info["name"])
+        except Exception as exc:
+            return {"error": f"Installazione skill fallita: {exc}"}
         return _brief(info)
 
     return [
