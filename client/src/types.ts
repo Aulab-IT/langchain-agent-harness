@@ -70,6 +70,21 @@ export type ProviderModels = {
   models: string[];
 };
 
+export type McpServerStatus = {
+  name: string;
+  transport: string;
+  builtin: boolean;
+  connected: boolean;
+  tool_count: number;
+  tools: string[];
+  error?: string;
+};
+
+export type McpStatus = {
+  enabled: boolean;
+  servers: McpServerStatus[];
+};
+
 export type ProviderSettingsUpdate = {
   openai_api_key?: string | null;
   anthropic_api_key?: string | null;

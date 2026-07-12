@@ -251,6 +251,58 @@ class DurableStore:
             )
         return self._require(item_id)
 
+    def claim_once(
+        self,
+        key: str,
+        *,
+        kind: str = "fire",
+        payload: dict[str, Any] | None = None,
+        run_id: str | None = None,
+        session_id: str | None = None,
+        now: datetime | None = None,
+    ) -> bool:
+        """Reclama una chiave una sola volta, in modo durevole e atomico.
+
+        Restituisce ``True`` se la chiave è nuova (il chiamante procede col side effect),
+        ``False`` se era già stata reclamata — anche in un'esecuzione precedente del backend.
+        È la garanzia «una volta sola» che sopravvive al riavvio: due tick nello stesso minuto,
+        o un riavvio dentro quel minuto, non fanno scattare due volte lo stesso trigger.
+
+        Il controllo e l'inserimento avvengono sotto lo stesso lock, quindi non c'è finestra fra
+        «esiste?» e «inserisci» in cui due chiamate possano entrambe vedere la chiave assente.
+        """
+        stamp = _iso(now or _now())
+        with self._lock, self._connection:
+            existing = self._connection.execute(
+                "SELECT 1 FROM work_items WHERE idempotency_key = ?", (key,)
+            ).fetchone()
+            if existing is not None:
+                return False
+            self._connection.execute(
+                """
+                INSERT INTO work_items(
+                    id, kind, state, version, payload_json, run_id, session_id,
+                    idempotency_key, attempts, max_attempts, available_at,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, 0, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+                """,
+                (
+                    str(uuid.uuid4()),
+                    kind,
+                    # Marcatore già consumato: uno stato terminale non viene mai reclamato.
+                    RunState.COMPLETED.value,
+                    json.dumps(payload or {}, ensure_ascii=False),
+                    run_id,
+                    session_id,
+                    key,
+                    stamp,
+                    stamp,
+                    stamp,
+                ),
+            )
+        return True
+
     def claim(
         self, *, owner: str, lease_seconds: int = 60, now: datetime | None = None
     ) -> WorkItem | None:
@@ -531,6 +583,15 @@ class DurableStore:
         resolved = self.get_interrupt(interrupt_id)
         assert resolved is not None
         return resolved
+
+    def all_pending_interrupts(self) -> list[Interrupt]:
+        """Tutti gli interrupt ancora pendenti, su ogni run. Dopo un riavvio mostra cosa era in
+        attesa dell'utente e non è mai stato risolto — la prova che la persistenza sopravvive."""
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM interrupts WHERE status = 'pending' ORDER BY created_at"
+            ).fetchall()
+        return [self._to_interrupt(row) for row in rows]
 
     def pending_interrupts(self, run_id: str) -> list[Interrupt]:
         with self._lock:

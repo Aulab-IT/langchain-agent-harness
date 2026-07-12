@@ -195,11 +195,29 @@ export function ChatPanel({
                   </span>
                 ) : null}
                 <span className="rounded-full border border-border px-2 py-0.5 font-mono text-xs text-muted">
-                  {showStreaming ? "streaming" : "thinking"}
+                  {active ? "in corso" : "streaming"}
                 </span>
               </div>
               <div className="overflow-hidden rounded-xl border border-border bg-surface-raised">
-                {showStreaming ? (
+                {active ? (
+                  // Durante il run: stato pulito. L'azione corrente sta in evidenza; il flusso
+                  // grezzo del modello (riassunti, note intermedie) è ripiegato di default, così
+                  // l'attesa non è un muro di testo. La risposta finale appare come messaggio
+                  // normale quando il run termina.
+                  <>
+                    <ThinkingTrace events={events} run={run} />
+                    {liveText ? (
+                      <details className="border-t border-border px-4 py-2">
+                        <summary className="cursor-pointer select-none text-xs text-muted hover:text-foreground">
+                          Output in tempo reale
+                        </summary>
+                        <div className="mt-2 max-h-48 overflow-y-auto text-sm text-muted">
+                          <MarkdownContent content={liveText} sessionId={session.id} />
+                        </div>
+                      </details>
+                    ) : null}
+                  </>
+                ) : showStreaming ? (
                   <div className="px-4 py-3 text-base leading-relaxed">
                     <MarkdownContent content={liveText} sessionId={session.id} />
                   </div>
@@ -209,7 +227,6 @@ export function ChatPanel({
                     Elaborazione in corso…
                   </div>
                 )}
-                {active ? <ThinkingTrace events={events} run={run} /> : null}
               </div>
             </div>
           </article>

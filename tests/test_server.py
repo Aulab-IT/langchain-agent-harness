@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 import agent_harness.server as server
 from agent_harness.config import Settings
 from agent_harness.control_store import ControlStore
+from agent_harness.durable import DurableStore
 from agent_harness.improve import Proposal, write_proposal
 from agent_harness.usage import context_categories
 
@@ -22,12 +23,17 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
     (tmp_path / "memories" / "AGENTS.md").write_text("# Test\n", encoding="utf-8")
     settings = Settings(_env_file=None, project_root=tmp_path, openai_api_key=None)
     isolated_store = ControlStore(settings)
+    # Storage durevole isolato per il test: senza, gli interrupt/trigger finirebbero nel
+    # durable.sqlite reale creato all'import del modulo.
+    isolated_durable = DurableStore(tmp_path / "durable.sqlite")
     monkeypatch.setattr(server, "settings", settings)
     monkeypatch.setattr(server, "store", isolated_store)
+    monkeypatch.setattr(server, "durable_store", isolated_durable)
     monkeypatch.setattr(server, "run_manager", server.RunManager())
     with TestClient(server.app) as test_client:
         yield test_client
     isolated_store.close()
+    isolated_durable.close()
 
 
 def test_status_exposes_runtime_without_secrets(client: TestClient) -> None:
@@ -400,6 +406,122 @@ def test_status_exposes_loop_features(client: TestClient) -> None:
     assert "verification" in payload and "enabled" in payload["verification"]
     assert "triggers" in payload and "enabled" in payload["triggers"]
     assert "overrides" in payload
+
+
+def test_scheduler_toggle_persists_and_reports_state(client: TestClient) -> None:
+    enabled = client.put("/api/settings/triggers", json={"enabled": True})
+    assert enabled.status_code == 200
+    assert enabled.json()["enabled"] is True
+    # Persistito negli override: si ritrova alla lettura successiva della configurazione.
+    assert server.settings.harness_enable_triggers is True
+
+    disabled = client.put("/api/settings/triggers", json={"enabled": False})
+    assert disabled.status_code == 200
+    assert disabled.json()["enabled"] is False
+    assert server.settings.harness_enable_triggers is False
+
+
+def test_notifications_lifecycle(client: TestClient) -> None:
+    assert client.get("/api/notifications").json()["unread_count"] == 0
+    # Simula ciò che fa RunManager quando un run termina.
+    server.store.add_notification(type="run_completed", title="«Demo» — completato")
+    server.store.add_notification(type="needs_approval", title="«Demo» — serve approvazione")
+    body = client.get("/api/notifications").json()
+    assert body["unread_count"] == 2
+    assert len(body["notifications"]) == 2
+    # Solo non lette.
+    assert len(client.get("/api/notifications?unread=true").json()["notifications"]) == 2
+    # Segna tutte lette.
+    resp = client.post("/api/notifications/read", json={"ids": None})
+    assert resp.json()["unread_count"] == 0
+    assert client.get("/api/notifications?unread=true").json()["notifications"] == []
+
+
+def test_pending_interrupts_endpoint_reflects_durable_store(client: TestClient) -> None:
+    # Vuoto all'inizio.
+    assert client.get("/api/durable/interrupts").json() == {"count": 0, "interrupts": []}
+    # Un interrupt persistito (come farebbe RunManager) compare, e sopravvive a una rilettura.
+    server.durable_store.record_interrupt(
+        run_id="run-x", kind="approval", payload={"description": "Esecuzione comando sandbox"}
+    )
+    body = client.get("/api/durable/interrupts").json()
+    assert body["count"] == 1
+    assert body["interrupts"][0]["run_id"] == "run-x"
+    assert body["interrupts"][0]["kind"] == "approval"
+    assert "comando" in body["interrupts"][0]["description"]
+
+
+def test_pdf_preview_has_no_blocking_csp_images_do(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={"title": "Preview"}).json()
+    workspace = server.store.workspace_dir(session["id"])
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "doc.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
+    (workspace / "img.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    pdf = client.get(f"/api/sessions/{session['id']}/preview/doc.pdf")
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.headers["x-content-type-options"] == "nosniff"
+    # La CSP restrittiva farebbe rifiutare il visualizzatore PDF del browser: niente CSP sul PDF.
+    assert "content-security-policy" not in {k.lower() for k in pdf.headers}
+
+    png = client.get(f"/api/sessions/{session['id']}/preview/img.png")
+    assert png.status_code == 200
+    # Le immagini mantengono la CSP di difesa in profondità.
+    assert "content-security-policy" in {k.lower() for k in png.headers}
+
+
+def test_text_preview_returns_content_and_kind(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={"title": "Text"}).json()
+    workspace = server.store.workspace_dir(session["id"])
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "note.md").write_text("# Titolo\ntesto", encoding="utf-8")
+    (workspace / "data.csv").write_text("a,b\n1,2", encoding="utf-8")
+    (workspace / "script.py").write_text("print('ok')", encoding="utf-8")
+
+    md = client.get(f"/api/sessions/{session['id']}/preview-text/note.md").json()
+    assert md["kind"] == "markdown"
+    assert "# Titolo" in md["content"]
+    assert md["truncated"] is False
+
+    csv = client.get(f"/api/sessions/{session['id']}/preview-text/data.csv").json()
+    assert csv["kind"] == "csv"
+
+    py = client.get(f"/api/sessions/{session['id']}/preview-text/script.py").json()
+    assert py["kind"] == "text"
+
+    # I documenti attivi restano esclusi dall'anteprima testuale.
+    (workspace / "page.html").write_text("<script>alert(1)</script>", encoding="utf-8")
+    blocked = client.get(f"/api/sessions/{session['id']}/preview-text/page.html")
+    assert blocked.status_code == 415
+
+
+def test_compact_context_requires_valid_config(client: TestClient) -> None:
+    # La fixture non ha chiave OpenAI: il run parte ma fallisce alla validazione provider,
+    # quindi qui verifichiamo che l'endpoint esista e restituisca un run_id (202), non 404/405.
+    session = client.post("/api/sessions", json={"title": "Compact"}).json()
+    resp = client.post(f"/api/sessions/{session['id']}/context/compact")
+    assert resp.status_code == 202
+    assert "run_id" in resp.json()
+
+
+def test_mcp_config_roundtrip_and_validation(client: TestClient) -> None:
+    # Un JSON valido con un server stdio viene salvato e riletto.
+    valid = client.put(
+        "/api/settings/mcp",
+        json={"content": '{"mcpServers": {"echo": {"command": "python"}}}'},
+    )
+    assert valid.status_code == 200
+    assert "echo" in valid.json()["servers"]
+    assert "echo" in client.get("/api/settings/mcp").json()["content"]
+
+    # Un server senza command/url viene rifiutato con 422 e non sovrascrive quello valido.
+    broken = client.put(
+        "/api/settings/mcp",
+        json={"content": '{"mcpServers": {"bad": {}}}'},
+    )
+    assert broken.status_code == 422
+    assert "echo" in client.get("/api/settings/mcp").json()["content"]
 
 
 def test_improvements_list_empty_and_run_requires_key(client: TestClient) -> None:

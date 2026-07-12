@@ -134,7 +134,12 @@ export function InspectorRail({
         ) : null}
         {tab === "memory" ? <MemoryPanel sessionId={sessionId} /> : null}
         {tab === "context" ? (
-          <ContextPanel usage={usage} contextWindow={contextWindow} sessionId={sessionId} />
+          <ContextPanel
+            usage={usage}
+            contextWindow={contextWindow}
+            sessionId={sessionId}
+            busy={!!run && !["completed", "failed", "cancelled"].includes(run.status)}
+          />
         ) : null}
         {tab === "sandbox" ? (
           <SandboxPanel

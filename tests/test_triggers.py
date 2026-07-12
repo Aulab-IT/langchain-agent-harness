@@ -131,3 +131,34 @@ async def test_scheduler_skips_disabled_and_unmatched(tmp_path: Path) -> None:
 
     assert fired == []
     store.close()
+
+
+@pytest.mark.asyncio
+async def test_durable_claim_prevents_double_fire_across_restart(tmp_path: Path) -> None:
+    from agent_harness.durable import DurableStore, idempotency_key
+
+    store = make_store(tmp_path)
+    trigger = store.create_trigger(
+        kind="cron", name="orario", goal_template="fai", cron_expr="* * * * *"
+    )
+    durable = DurableStore(tmp_path / "durable.sqlite")
+
+    def claim(tid: str, minute: str) -> bool:
+        return durable.claim_once(idempotency_key("trigger", tid, minute), kind="trigger_fire")
+
+    fired: list[str] = []
+
+    async def on_fire(item: dict[str, object]) -> None:
+        fired.append(str(item["id"]))
+
+    # Primo scheduler (prima del "riavvio"): scatta una volta.
+    s1 = TriggerScheduler(store, on_fire, clock=lambda: _dt(0, 9), claim_fire=claim)
+    await s1.tick()
+    # Riavvio: un nuovo scheduler con cache in memoria vuota, stesso minuto. Senza claim
+    # durevole rifire; con il claim durevole (stesso durable.sqlite) NON rifire.
+    s2 = TriggerScheduler(store, on_fire, clock=lambda: _dt(0, 9), claim_fire=claim)
+    await s2.tick()
+
+    assert fired == [trigger["id"]]
+    durable.close()
+    store.close()

@@ -25,7 +25,15 @@ quando lo è, nessuno leggerà il comando prima che venga eseguito. La responsab
 Un obiettivo che chiede una distruzione non è un'autorizzazione a distruggere: è il momento in
 cui devi accertarti che chi lo ha scritto sapesse cosa c'era dentro.
 
+Quando devi compiere più azioni **indipendenti** tra loro (leggere più file, fare più ricerche,
+ispezionare più percorsi), emettile come tool call nello **stesso turno**: vengono eseguite in
+parallelo, e il lavoro finisce prima. Metti in sequenza solo ciò che dipende dal risultato del
+passo precedente.
+
 Il filesystem è memoria operativa: sposta nei file risultati lunghi, note e output intermedi.
+Se un output di docker_exec è molto lungo, viene salvato per intero in
+`/workspace/.tool_output/<checksum>.txt` e in risposta ricevi solo un estratto con il marcatore
+`[tool-output-offloaded]` e il percorso: rileggi quel file con docker_exec se ti serve il resto.
 
 Organizzazione del workspace (importante per non intasare la chat):
 - Metti i deliverable FINALI richiesti dall'utente nella cartella `output/`. Solo i file in
@@ -47,6 +55,11 @@ Puoi creare o installare skill con i tool skill_create/skill_write_file/skill_in
 agentskills.io): usali quando una procedura riutilizzabile va resa disponibile a run futuri.
 Prima di creare o modificare una skill: se `/skills/skill-creator/SKILL.md` esiste, leggilo e
 segui la procedura che descrive. È la skill che insegna a scrivere skill conformi allo standard.
+
+Se ti serve un tool esterno via MCP non ancora configurato, puoi proporne l'aggiunta con
+`propose_mcp_server` (nome + config JSON). L'aggiunta richiede SEMPRE l'approvazione esplicita
+dell'utente — un server MCP gira sull'host, fuori dalla sandbox — e diventa attiva dal run
+successivo. Proponi solo server di cui conosci la provenienza; non inventare comandi o URL.
 """
 
 CONTINUATION_PROMPT = """
@@ -58,6 +71,13 @@ Iterazione {iteration}/{maximum}. Riprendi dai file e dal piano persistente. Con
 manca, esegui la prossima parte utile e verifica. Non ripetere lavoro già completato.
 Usa [GOAL_COMPLETE] solo dopo prova concreta.
 """
+
+COMPACT_INSTRUCTION = (
+    "Compatta ora la conversazione: chiama il tool compact_conversation per riassumere la "
+    "storia più vecchia e liberare spazio nella finestra di contesto, preservando obiettivo, "
+    "decisioni, file prodotti e verifiche. Dopo la compaction rispondi solo con "
+    "«Contesto compattato.» senza altro."
+)
 
 VERIFICATION_FEEDBACK_PROMPT = """
 La tua risposta non ha superato la verifica di qualità per questo obiettivo:

@@ -17,7 +17,9 @@ export type CurrentAction = {
   event: RunEvent | null;
 };
 
-const TRACE_NOISE = new Set(["assistant.delta", "usage.live"]);
+// context.snapshot scatta a ogni chiamata al modello: alimenta la barra del contesto, non la
+// timeline. La compaction rilevata, invece, è un evento raro e importante — resta nel trace.
+const TRACE_NOISE = new Set(["assistant.delta", "usage.live", "context.snapshot"]);
 
 export function asTraceText(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) return value.trim();
@@ -30,6 +32,15 @@ export function formatTraceDuration(seconds: number): string {
   const minutes = Math.floor(total / 60);
   const secs = total % 60;
   return minutes ? `${minutes}m ${secs.toString().padStart(2, "0")}s` : `${secs}s`;
+}
+
+// Formato cronometro min:sec (es. 0:45, 9:26) per il timer generale del run: mostra sempre i
+// minuti, così il tempo totale si legge come un orologio invece che come un mucchio di secondi.
+export function formatClock(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
 
 export function compactTraceValue(value: unknown, limit = 180): string | null {
@@ -286,6 +297,36 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         detail: tokenDetail(payload),
         subject,
         tone: "muted",
+      };
+    case "context.compaction.detected":
+      return {
+        title: "Contesto compattato",
+        detail: `${asTraceText(payload.tokens_before) ?? "?"} → ${
+          asTraceText(payload.tokens_after) ?? "?"
+        } token (${asTraceText(payload.tokens_reclaimed) ?? "0"} liberati)`,
+        subject,
+        tone: "info",
+      };
+    case "memory.truncated":
+      return {
+        title: "Memoria troncata",
+        detail: `Superato il limite di ${asTraceText(payload.max_chars) ?? "?"} caratteri.`,
+        subject,
+        tone: "warning",
+      };
+    case "trigger.skipped":
+      return {
+        title: "Trigger saltato",
+        detail: `${asTraceText(payload.name) ?? "trigger"}: sessione già in esecuzione`,
+        subject: asTraceText(payload.name),
+        tone: "warning",
+      };
+    case "mcp.server.failed":
+      return {
+        title: `Server MCP non raggiungibile: ${asTraceText(payload.server) ?? "?"}`,
+        detail: compactTraceValue(payload.error, 180),
+        subject: asTraceText(payload.server),
+        tone: "danger",
       };
     case "file.created":
       return {

@@ -320,3 +320,21 @@ def test_pricing_catalog_persist_is_idempotent(tmp_path: Path) -> None:
     loaded = store.load_pricing_catalog()
     assert len(loaded.entries()) == len(catalog.entries())
     store.close()
+
+
+def test_cap_session_memory_truncates_only_when_over_limit(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    session = store.create_session()
+    store.prepare_session_root(session["id"])
+    memory_file = store.session_root(session["id"]) / "memories" / "AGENTS.md"
+
+    memory_file.write_text("breve", encoding="utf-8")
+    assert store.cap_session_memory(session["id"], 1000) is False
+    assert memory_file.read_text(encoding="utf-8") == "breve"
+
+    memory_file.write_text("x" * 5000, encoding="utf-8")
+    assert store.cap_session_memory(session["id"], 1000) is True
+    capped = memory_file.read_text(encoding="utf-8")
+    assert len(capped) <= 1000
+    assert "troncata" in capped
+    store.close()

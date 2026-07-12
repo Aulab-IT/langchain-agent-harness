@@ -1,6 +1,7 @@
 import { Gauge, KeyRound, Layers, RefreshCw, Save, Settings2, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getProviderModels, getProviderSettings, updateProviderSettings } from "../../api";
+import { McpServersPanel } from "./McpServersPanel";
 import type {
   ModelTier,
   ProviderModels,
@@ -325,6 +326,8 @@ export function SettingsView({
           </button>
         </div>
       </div>
+
+      <McpServersPanel onSaved={onSaved} />
 
       <div className="rounded-xl border border-border bg-surface">
         <div className="border-b border-border px-6 py-4 text-sm font-medium">Runtime</div>

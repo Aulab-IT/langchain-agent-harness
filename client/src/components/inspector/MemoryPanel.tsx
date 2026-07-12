@@ -8,12 +8,16 @@ export function MemoryPanel({ sessionId }: { sessionId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [tokens, setTokens] = useState(0);
+  const [maxChars, setMaxChars] = useState(0);
 
   const load = useCallback(async () => {
     try {
       const memory = await getSessionMemory(sessionId);
       setContent(memory.content);
       setSaved(memory.content);
+      setTokens(memory.tokens);
+      setMaxChars(memory.max_chars);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Lettura memoria fallita");
@@ -29,8 +33,9 @@ export function MemoryPanel({ sessionId }: { sessionId: string }) {
     setBusy(true);
     setNotice("");
     try {
-      await putSessionMemory(sessionId, content);
+      const memory = await putSessionMemory(sessionId, content);
       setSaved(content);
+      setTokens(memory.tokens);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Salvataggio fallito");
@@ -64,10 +69,20 @@ export function MemoryPanel({ sessionId }: { sessionId: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-border px-5 py-4">
-        <h3 className="text-sm font-semibold">Memoria di sessione</h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold">Memoria di sessione</h3>
+          <span
+            className={`rounded-lg border border-border bg-surface-raised px-2 py-0.5 font-mono text-[11px] ${
+              maxChars > 0 && content.length > maxChars * 0.9 ? "text-warning" : "text-muted"
+            }`}
+            title={`Entra nel prompt a ogni run. Cap: ${maxChars.toLocaleString("it-IT")} caratteri.`}
+          >
+            ~{tokens.toLocaleString("it-IT")} token
+          </span>
+        </div>
         <p className="text-xs text-muted">
           <code className="font-mono">memories/AGENTS.md</code> — seminata una volta dal template
-          globale, poi vive solo in questa conversazione.
+          globale, poi vive solo in questa conversazione. Entra nel prompt a ogni run.
         </p>
       </div>
 

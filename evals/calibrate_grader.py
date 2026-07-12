@@ -33,7 +33,7 @@ from pathlib import Path
 warnings.filterwarnings("ignore", message="Pydantic serializer warnings", category=UserWarning)
 
 from agent_harness.config import Settings  # noqa: E402
-from agent_harness.factory import _openai_model, tier_spec  # noqa: E402
+from agent_harness.factory import build_tier_models, tier_spec  # noqa: E402
 from agent_harness.verification import RubricGrader  # noqa: E402
 
 CORPUS = Path(__file__).parent / "grader_calibration.json"
@@ -41,9 +41,11 @@ CORPUS = Path(__file__).parent / "grader_calibration.json"
 
 async def main(repeat: int) -> int:
     settings = Settings()
-    # Lo stesso gradino che usa il grader in produzione (vedi `factory.build_harness`).
+    # Lo stesso gradino che usa il grader in produzione (`factory.build_harness`: grader_model =
+    # tiers["mid"].model). Passa dal registry dei provider, quindi vale per OpenAI, Claude o un
+    # provider locale — non più cablato su OpenAI come quando importava `_openai_model` (rimosso).
     spec = tier_spec(settings, "mid")
-    model = _openai_model(spec.name, settings.require_openai_key(), reasoning_effort=spec.effort)
+    model = build_tier_models(settings)["mid"].model
     grader = RubricGrader.from_chat_model(model, threshold=settings.harness_rubric_threshold)
 
     campioni = json.loads(CORPUS.read_text(encoding="utf-8"))

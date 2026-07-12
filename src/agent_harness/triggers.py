@@ -145,11 +145,16 @@ class TriggerScheduler:
         *,
         tick_seconds: int = 30,
         clock: Callable[[], datetime] | None = None,
+        claim_fire: Callable[[str, str], bool] | None = None,
     ) -> None:
         self.store = store
         self.on_fire = on_fire
         self.tick_seconds = tick_seconds
         self.clock = clock or (lambda: datetime.now(UTC))
+        # Reclamo durevole del fire: dato (trigger_id, minuto) ritorna True se è nuovo. La cache
+        # in memoria è la prima linea (veloce); questo è la garanzia «una volta sola» che
+        # sopravvive al riavvio — senza, un restart dentro lo stesso minuto rifà scattare il cron.
+        self.claim_fire = claim_fire
         self._task: asyncio.Task[None] | None = None
         self._fired_minutes: dict[str, str] = {}
 
@@ -182,6 +187,12 @@ class TriggerScheduler:
                 )
                 continue
             if self._fired_minutes.get(trigger["id"]) == minute_key:
+                continue
+            # Guardia durevole: se questo (trigger, minuto) è già stato reclamato — anche prima
+            # di un riavvio — non si rifà scattare. Marca comunque la cache in memoria per non
+            # riconsultare lo storage a ogni tick dello stesso minuto.
+            if self.claim_fire is not None and not self.claim_fire(trigger["id"], minute_key):
+                self._fired_minutes[trigger["id"]] = minute_key
                 continue
             self._fired_minutes[trigger["id"]] = minute_key
             try:

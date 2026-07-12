@@ -140,3 +140,35 @@ def test_restart_survives_pending_approval(tmp_path: Path) -> None:
     pending = reopened.pending_interrupts("run-1")
     assert len(pending) == 1
     reopened.close()
+
+
+def test_claim_once_is_idempotent_across_restart(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    key = idempotency_key("trigger", "t1", "2026-07-12T09:00")
+    assert store.claim_once(key, kind="trigger_fire") is True
+    assert store.claim_once(key, kind="trigger_fire") is False
+    store.close()
+    # Nuovo store sullo stesso file = simula un riavvio del backend.
+    reopened = DurableStore(tmp_path / "durable.sqlite")
+    assert reopened.claim_once(key, kind="trigger_fire") is False
+    reopened.close()
+
+
+def test_claim_once_marker_is_never_claimed_by_a_worker(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.claim_once(idempotency_key("trigger", "t1", "min"), kind="trigger_fire")
+    # Il marcatore idempotente è terminale: un worker non deve mai reclamarlo come lavoro.
+    assert store.claim(owner="w1") is None
+    store.close()
+
+
+def test_all_pending_interrupts_survives_reopen(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.record_interrupt(run_id="r1", kind="approval", payload={"description": "comando X"})
+    store.record_interrupt(run_id="r2", kind="user_action", payload={"description": "login"})
+    assert len(store.all_pending_interrupts()) == 2
+    store.close()
+    reopened = DurableStore(tmp_path / "durable.sqlite")
+    pending = reopened.all_pending_interrupts()
+    assert {i.run_id for i in pending} == {"r1", "r2"}
+    reopened.close()

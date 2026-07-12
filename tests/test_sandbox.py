@@ -101,8 +101,40 @@ def test_output_is_limited(run: Mock, tmp_path: Path) -> None:
         "echo ok",
         output_limit=100,
     )
+    # Output oltre il limite: l'integrale finisce su file, nel contesto entra un estratto
+    # compatto più il riferimento recuperabile (non più un troncamento con perdita).
+    assert "[tool-output-offloaded]" in output
+    assert "/workspace/.tool_output/" in output
+    assert len(output) < 700
+    saved = list((tmp_path / ".tool_output").glob("*.txt"))
+    assert len(saved) == 1 and saved[0].stat().st_size > 100
+
+
+@patch("agent_harness.sandbox.subprocess.run")
+def test_output_offload_falls_back_to_truncation_when_unwritable(
+    run: Mock, tmp_path: Path
+) -> None:
+    manager = SessionSandboxManager()
+
+    def side_effect(cmd, **kwargs):
+        if cmd[1] == "exec":
+            return Mock(returncode=0, stdout="x" * 500, stderr="")
+        return Mock(returncode=0, stdout="true" if cmd[1] == "inspect" else "", stderr="")
+
+    run.side_effect = side_effect
+    # Workspace inesistente e non creabile (un file al posto della cartella): l'offload fallisce
+    # e si ricade sul troncamento, così l'output non va perso del tutto.
+    blocked = tmp_path / "afile"
+    blocked.write_text("x")
+    output = manager.execute(
+        "session-2",
+        blocked / "ws",
+        "langchain-harness-sandbox:latest",
+        tmp_path,
+        "echo ok",
+        output_limit=100,
+    )
     assert "OUTPUT TRONCATO" in output
-    assert len(output) < 200
 
 
 def _exec_stub(exec_result: Mock | None = None):

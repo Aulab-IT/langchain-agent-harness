@@ -161,6 +161,17 @@ class ControlStore:
                     valid_to TEXT NOT NULL DEFAULT '',
                     PRIMARY KEY (provider, model, version, valid_from)
                 );
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT,
+                    run_id TEXT,
+                    type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    read INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_notifications_unread
+                    ON notifications(read, id);
                 CREATE INDEX IF NOT EXISTS idx_messages_session
                     ON messages(session_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_runs_session
@@ -631,6 +642,78 @@ class ControlStore:
             "created_at": now,
         }
 
+    def add_notification(
+        self,
+        *,
+        type: str,
+        title: str,
+        session_id: str | None = None,
+        run_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Registra una notifica persistente: ciò che l'utente deve vedere quando torna.
+
+        È il cuore del pattern «cowork»: lanci un run, ti allontani, e al ritorno trovi qui cosa
+        è successo mentre non guardavi (completato, fallito, in attesa di te).
+        """
+        now = utc_now()
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                """
+                INSERT INTO notifications(session_id, run_id, type, title, read, created_at)
+                VALUES (?, ?, ?, ?, 0, ?)
+                """,
+                (session_id, run_id, type, title[:200], now),
+            )
+        return {
+            "id": cursor.lastrowid,
+            "session_id": session_id,
+            "run_id": run_id,
+            "type": type,
+            "title": title[:200],
+            "read": False,
+            "created_at": now,
+        }
+
+    def list_notifications(
+        self, *, unread_only: bool = False, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        query = "SELECT * FROM notifications"
+        if unread_only:
+            query += " WHERE read = 0"
+        query += " ORDER BY id DESC LIMIT ?"
+        with self._lock:
+            rows = self._connection.execute(query, (limit,)).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["read"] = bool(item["read"])
+            result.append(item)
+        return result
+
+    def unread_notification_count(self) -> int:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT COUNT(*) AS n FROM notifications WHERE read = 0"
+            ).fetchone()
+        return int(row["n"])
+
+    def mark_notifications_read(self, ids: list[int] | None = None) -> int:
+        """Segna come lette le notifiche indicate, o tutte se ``ids`` è None. Ritorna quante."""
+        with self._lock, self._connection:
+            if ids is None:
+                cursor = self._connection.execute(
+                    "UPDATE notifications SET read = 1 WHERE read = 0"
+                )
+            elif ids:
+                placeholders = ",".join("?" for _ in ids)
+                cursor = self._connection.execute(
+                    f"UPDATE notifications SET read = 1 WHERE id IN ({placeholders})",
+                    tuple(ids),
+                )
+            else:
+                return 0
+        return cursor.rowcount
+
     def list_events(
         self,
         run_id: str,
@@ -746,6 +829,25 @@ class ControlStore:
             else:
                 memory_file.write_text("# Memoria sessione\n", encoding="utf-8")
         return root
+
+    def cap_session_memory(self, session_id: str, max_chars: int) -> bool:
+        """Tronca ``memories/AGENTS.md`` se supera ``max_chars``. Ritorna True se ha troncato.
+
+        L'agente può scrivere nella propria memoria, e una memoria che cresce senza limite è un
+        prompt che cresce a ogni run. Quando il file sfora, si tiene la testa (le sezioni curate
+        e gli apprendimenti più vecchi e consolidati) e si sostituisce la coda con un marcatore,
+        così il taglio è esplicito invece che silenzioso. Il chiamante emette l'evento visibile.
+        """
+        memory_file = self.session_root(session_id) / "memories" / "AGENTS.md"
+        if not memory_file.is_file():
+            return False
+        content = memory_file.read_text(encoding="utf-8")
+        if len(content) <= max_chars:
+            return False
+        marker = "\n\n<!-- memoria troncata al limite di dimensione -->\n"
+        head = content[: max(0, max_chars - len(marker))]
+        memory_file.write_text(head + marker, encoding="utf-8")
+        return True
 
     def list_files(self, session_id: str) -> list[dict[str, Any]]:
         workspace = self.workspace_dir(session_id)

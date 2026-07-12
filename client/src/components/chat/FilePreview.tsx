@@ -1,12 +1,37 @@
 import { Download, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fileDownloadUrl, filePreviewUrl } from "../../api";
 import { FileIcon } from "../shared/FileIcon";
+import { TextPreview } from "./TextPreview";
 
 // Deve corrispondere a `INLINE_MEDIA_TYPES` in `server.py`. Ciò che non è qui viene servito
 // solo come allegato: `svg` e `html` sono documenti che eseguono script, e renderli inline
 // sull'origine dell'API significherebbe farli girare con i privilegi dell'API stessa.
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
+// Deve corrispondere a `TEXT_PREVIEW_KINDS` in `server.py`. File di testo inerti, resi come
+// testo/markdown/tabella dal contenuto JSON — mai serviti come documento eseguibile.
+const TEXT_EXTENSIONS = new Set([
+  "md",
+  "markdown",
+  "csv",
+  "tsv",
+  "txt",
+  "log",
+  "json",
+  "yaml",
+  "yml",
+  "xml",
+  "toml",
+  "ini",
+  "cfg",
+  "py",
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "sql",
+  "sh",
+]);
 
 function extensionOf(name: string): string {
   return name.split(".").pop()?.toLowerCase() ?? "";
@@ -75,6 +100,7 @@ export function FilePreview({ sessionId, name }: { sessionId: string; name: stri
   const [broken, setBroken] = useState(false);
   const extension = extensionOf(name);
   const source = filePreviewUrl(sessionId, name);
+  const markBroken = useCallback(() => setBroken(true), []);
 
   if (IMAGE_EXTENSIONS.has(extension) && !broken) {
     return (
@@ -109,12 +135,13 @@ export function FilePreview({ sessionId, name }: { sessionId: string; name: stri
   if (extension === "pdf" && !broken) {
     return (
       <figure className="w-full max-w-xl overflow-hidden rounded-lg border border-border bg-surface">
-        {/* sandbox senza allow-scripts: un PDF può contenere JavaScript, e questo documento
-            è servito dalla stessa origine dell'API. */}
+        {/* Niente `sandbox=""`: il sandbox vuoto fa rifiutare il visualizzatore PDF interno di
+            Chromium/Edge, e non serve alla sicurezza — il server invia il file come
+            `application/pdf` con `X-Content-Type-Options: nosniff`, quindi il browser lo rende
+            sempre col proprio viewer (che confina l'eventuale JS del PDF), mai come HTML. */}
         <iframe
           src={source}
           title={name}
-          sandbox=""
           className="h-96 w-full border-0 bg-background"
           onError={() => setBroken(true)}
         />
@@ -133,6 +160,10 @@ export function FilePreview({ sessionId, name }: { sessionId: string; name: stri
         </figcaption>
       </figure>
     );
+  }
+
+  if (TEXT_EXTENSIONS.has(extension) && !broken) {
+    return <TextPreview sessionId={sessionId} name={name} onBroken={markBroken} />;
   }
 
   return <DownloadCard sessionId={sessionId} name={name} />;

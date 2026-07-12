@@ -52,6 +52,11 @@ FLAG_FIELDS: dict[str, str] = {
 }
 
 
+# Scheduler dei trigger cron: persistito come gli altri override, ma non è un flag "snello"
+# (non alleggerisce il prompt); si attiva/disattiva da UI e fa partire/fermare il task a caldo.
+SCHEDULER_FIELD = "harness_enable_triggers"
+
+
 def allowed_fields() -> set[str]:
     """I soli campi di ``Settings`` che la UI può sovrascrivere.
 
@@ -60,6 +65,7 @@ def allowed_fields() -> set[str]:
     """
     fields: set[str] = set(KEY_FIELDS)
     fields.update(FLAG_FIELDS.values())
+    fields.add(SCHEDULER_FIELD)
     for tier in TIERS:
         fields.add(f"harness_provider_{tier}")
         for provider in PROVIDERS:

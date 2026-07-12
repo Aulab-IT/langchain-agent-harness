@@ -17,6 +17,8 @@ import { Spinner } from "./components/shared/PanelEmpty";
 import { TraceView } from "./components/traces/TraceView";
 import { TriggersView } from "./components/triggers/TriggersView";
 import { ImproveView } from "./components/improve/ImproveView";
+import { NotificationsProvider } from "./components/notifications/NotificationsContext";
+import { NotificationToaster } from "./components/notifications/NotificationToaster";
 import { useHarnessSession } from "./hooks/useHarnessSession";
 import { useInspectorSheet, useInspectorTab } from "./hooks/useInspectorTab";
 
@@ -64,6 +66,7 @@ export default function App() {
   } = harness;
 
   return (
+    <NotificationsProvider>
     <AppShell
       sidebar={
         <Sidebar
@@ -149,7 +152,7 @@ export default function App() {
           </div>
         ) : view === "triggers" ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            <TriggersView runtime={runtime} />
+            <TriggersView runtime={runtime} onSchedulerChange={harness.refreshRuntime} />
           </div>
         ) : view === "improve" ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -233,5 +236,7 @@ export default function App() {
         />
       ) : null}
     </AppShell>
+    <NotificationToaster />
+    </NotificationsProvider>
   );
 }

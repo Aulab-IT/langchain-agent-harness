@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -43,6 +44,78 @@ def search_web(query: str, max_results: int = 5) -> str:
 def current_utc_time() -> str:
     """Restituisce data e ora UTC correnti in formato ISO 8601."""
     return datetime.now(UTC).isoformat()
+
+
+def mcp_proposal_tool(state_dir: Path) -> BaseTool:
+    """Tool con cui l'agente PROPONE un nuovo server MCP; l'aggiunta richiede approvazione umana.
+
+    Il confine di sicurezza sta nell'``interrupt_on`` che avvolge questo tool: un server MCP
+    stdio gira sull'host, **fuori dalla sandbox Docker**, quindi la sua aggiunta deve sempre
+    passare da una conferma esplicita dell'utente — anche in modalità autonoma. Il corpo del
+    tool viene eseguito solo dopo l'approvazione, e a quel punto scrive ``state/mcp.json``.
+    """
+
+    @tool
+    def propose_mcp_server(name: str, config_json: str) -> str:
+        """Propone di aggiungere un server MCP alla configurazione (richiede approvazione umana).
+
+        Un server MCP stdio gira SULL'HOST, fuori dalla sandbox Docker: per questo la sua
+        aggiunta va sempre confermata dall'utente. Usa questo tool quando serve un tool esterno
+        via MCP non ancora configurato.
+
+        `name`: nome del server (non `local_harness`, riservato).
+        `config_json`: oggetto JSON del server — `{"command": "...", "args": [...], "env": {...}}`
+        per stdio, oppure `{"url": "https://...", "transport": "sse"|"streamable_http"}` per un
+        server remoto. I segreti si passano come `${VAR}` (espansi dall'ambiente, non salvati).
+
+        L'aggiunta è attiva dal run successivo.
+        """
+        # Import ritardato: mcp_config non dipende da tools, ma tenerlo qui evita che l'import
+        # del modulo tools trascini mcp_config quando il tool non è nemmeno abilitato.
+        from agent_harness.mcp_config import (
+            BUILTIN_SERVER,
+            load_user_config_text,
+            save_user_config,
+            validate_user_config,
+        )
+
+        clean_name = name.strip()
+        if not clean_name or clean_name == BUILTIN_SERVER:
+            return f"Nome non valido o riservato: '{name}'."
+        try:
+            spec = json.loads(config_json)
+        except json.JSONDecodeError as exc:
+            return f"Config non valida (JSON): {exc}"
+
+        try:
+            existing = json.loads(load_user_config_text(state_dir))
+        except json.JSONDecodeError:
+            existing = {"mcpServers": {}}
+        servers = existing.get("mcpServers") if isinstance(existing, dict) else {}
+        if not isinstance(servers, dict):
+            servers = {}
+        servers[clean_name] = spec
+        document = {"mcpServers": servers}
+
+        # Validazione prima della scrittura: un server malformato non deve entrare nel file.
+        if validate_user_config(document).problems:
+            problems = "; ".join(validate_user_config(document).problems)
+            return f"Config rifiutata: {problems}"
+        result = save_user_config(state_dir, json.dumps(document))
+        if result.problems:
+            return "Config rifiutata: " + "; ".join(result.problems)
+
+        # Il catalogo tool in cache va invalidato; import ritardato per non creare un ciclo
+        # con factory (che importa tools).
+        try:
+            from agent_harness.factory import invalidate_tool_catalog
+
+            invalidate_tool_catalog()
+        except Exception:
+            pass
+        return f"Server MCP '{clean_name}' aggiunto alla configurazione. Attivo dal prossimo run."
+
+    return propose_mcp_server
 
 
 def build_tools(

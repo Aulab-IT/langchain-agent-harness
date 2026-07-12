@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import sys
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -14,6 +13,7 @@ from deepagents import HarnessProfile, create_deep_agent, register_harness_profi
 from deepagents.backends import FilesystemBackend
 from deepagents.middleware.filesystem import FilesystemPermission
 from deepagents.middleware.subagents import SubAgent
+from deepagents.middleware.summarization import create_summarization_tool_middleware
 from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 from langchain.agents.middleware.human_in_the_loop import InterruptOnConfig
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -22,7 +22,9 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from agent_harness.audit import AuditMiddleware, EventCallback
+from agent_harness.builtin_tools import build_builtin_tools
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
+from agent_harness.context_monitor import ContextMonitorMiddleware
 from agent_harness.improve import (
     OVERRIDE_WHITELIST,
     RuntimeOverrideSelection,
@@ -30,6 +32,7 @@ from agent_harness.improve import (
     overrides_fingerprint,
     resolve_runtime_overrides,
 )
+from agent_harness.mcp_config import user_connections
 from agent_harness.middleware import (
     TIERS,
     Override,
@@ -48,8 +51,10 @@ from agent_harness.providers import (
     local_descriptor,
     openai_descriptor,
 )
-from agent_harness.tools import build_tools
+from agent_harness.tools import build_tools, mcp_proposal_tool
 from agent_harness.verification import RubricGrader
+
+_LOGGER = logging.getLogger(__name__)
 
 # Registry dei provider: sostituisce il `ChatOpenAI` cablato. Ogni ruolo modello chiede al
 # registry il modello del proprio descriptor, e il vendor resta confinato all'adattatore.
@@ -97,27 +102,112 @@ def build_workspace_permissions() -> list[FilesystemPermission]:
     ]
 
 
-async def _load_mcp_tools(settings: Settings, backend_root: Path) -> list[BaseTool]:
+# Un server MCP che non risponde entro questo tempo viene saltato: non deve tenere in ostaggio
+# l'avvio di un run. Il server interno stdio parte in genere in meno di un secondo.
+_MCP_CONNECT_TIMEOUT = 20.0
+
+
+async def _load_mcp_tools_by_server(
+    settings: Settings,
+    backend_root: Path,
+    *,
+    event_callback: EventCallback | None = None,
+) -> dict[str, list[BaseTool]]:
+    """Tool dai server MCP **esterni**, raggruppati per server, con resilienza per-server.
+
+    Il server interno non compare qui: i suoi tool sono in-process (``build_builtin_tools``),
+    senza il costo di spawn del subprocess. Restano i server configurati dall'utente in
+    ``state/mcp.json``.
+
+    Un server irraggiungibile (processo assente, URL down, timeout) viene saltato con un evento
+    ``mcp.server.failed`` e non fa fallire il run: gli altri server e i tool locali restano.
+    """
+    if not settings.harness_enable_mcp:
+        return {}
+    connections = user_connections(settings.state_dir)
+    if not connections:
+        # Nessun server esterno: non si crea nemmeno il client, così un run senza MCP utente
+        # non paga alcun avvio di processo. È il caso comune, e ora costa zero.
+        return {}
+    client = MultiServerMCPClient(connections)
+    by_server: dict[str, list[BaseTool]] = {}
+    for name in connections:
+        try:
+            server_tools = await asyncio.wait_for(
+                client.get_tools(server_name=name), timeout=_MCP_CONNECT_TIMEOUT
+            )
+        except Exception as exc:
+            _LOGGER.warning("Server MCP '%s' non raggiungibile: %s", name, exc)
+            if event_callback is not None:
+                event_callback(
+                    {"type": "mcp.server.failed", "server": name, "error": str(exc)[:200]}
+                )
+            continue
+        by_server[name] = list(server_tools)
+    return by_server
+
+
+async def _load_mcp_tools(
+    settings: Settings,
+    backend_root: Path,
+    *,
+    event_callback: EventCallback | None = None,
+) -> list[BaseTool]:
+    by_server = await _load_mcp_tools_by_server(
+        settings, backend_root, event_callback=event_callback
+    )
+    return [tool for tools in by_server.values() for tool in tools]
+
+
+async def probe_mcp_servers(settings: Settings) -> list[dict[str, Any]]:
+    """Stato per-server dei server MCP configurati: raggiungibile, numero tool, transport.
+
+    Prova a connettersi a ciascun server con una workspace fittizia (nessun run avviato). Un
+    server down compare con ``connected=False`` e l'errore, non fa saltare l'endpoint. Serve al
+    pannello Impostazioni per dire all'utente quali server rispondono e quanti tool espongono.
+    """
     if not settings.harness_enable_mcp:
         return []
-    # I tool skill_* del server MCP scrivono su host e sincronizzano nella session_root del run
-    # attivo, così una skill creata/installata dall'agente è leggibile subito nello stesso run.
-    env = {
-        **os.environ,
-        "HARNESS_SESSION_ROOT": str(backend_root),
-        "HARNESS_SKILLS_DIR": str(settings.skills_dir),
-    }
-    client = MultiServerMCPClient(
-        {
-            "local_harness": {
-                "transport": "stdio",
-                "command": sys.executable,
-                "args": ["-m", "agent_harness.mcp_server"],
-                "env": env,
-            }
-        }
+    probe_root = settings.state_dir / "_catalog"
+    # Il server interno è in-process: si riporta come «connesso» senza spawnare nulla, elencando
+    # i tool che costruisce davvero. Prima questa riga faceva partire un subprocess a ogni polling.
+    builtin_tools = build_builtin_tools(
+        settings.skills_dir, probe_root, registry_url=settings.skills_registry_url
     )
-    return list(await client.get_tools())
+    status: list[dict[str, Any]] = [
+        {
+            "name": "local_harness",
+            "transport": "in-process",
+            "builtin": True,
+            "connected": True,
+            "tool_count": len(builtin_tools),
+            "tools": sorted(tool.name for tool in builtin_tools),
+        }
+    ]
+    connections = user_connections(settings.state_dir)
+    if not connections:
+        return status
+    client = MultiServerMCPClient(connections)
+    for name, connection in connections.items():
+        entry: dict[str, Any] = {
+            "name": name,
+            "transport": connection.get("transport", "stdio"),
+            "builtin": False,
+        }
+        try:
+            server_tools = await asyncio.wait_for(
+                client.get_tools(server_name=name), timeout=_MCP_CONNECT_TIMEOUT
+            )
+            entry["connected"] = True
+            entry["tool_count"] = len(server_tools)
+            entry["tools"] = sorted(tool.name for tool in server_tools)
+        except Exception as exc:
+            entry["connected"] = False
+            entry["tool_count"] = 0
+            entry["tools"] = []
+            entry["error"] = str(exc)[:200]
+        status.append(entry)
+    return status
 
 
 def _arguments(tool: BaseTool) -> list[dict[str, Any]]:
@@ -168,6 +258,17 @@ _TOOL_CATALOG: list[dict[str, Any]] | None = None
 _TOOL_CATALOG_LOCK = asyncio.Lock()
 
 
+def invalidate_tool_catalog() -> None:
+    """Scarta il catalogo tool in cache: la prossima richiesta lo ricostruisce.
+
+    Il catalogo dipende dai flag (browser, MCP, web_search) e dai server MCP configurati.
+    Cambiando quelli dall'interfaccia, senza questa invalidazione il pannello Tool mostrerebbe
+    lo stato precedente fino al riavvio dell'API.
+    """
+    global _TOOL_CATALOG
+    _TOOL_CATALOG = None
+
+
 async def tool_catalog(settings: Settings) -> list[dict[str, Any]]:
     """Nomi e descrizioni dei tool realmente costruiti per un run.
 
@@ -194,13 +295,19 @@ async def tool_catalog(settings: Settings) -> list[dict[str, Any]]:
             project_root=settings.project_root,
         )
         catalog = [_describe(tool, "built-in") for tool in local]
+        if settings.harness_enable_mcp:
+            builtin = build_builtin_tools(
+                settings.skills_dir, probe_root, registry_url=settings.skills_registry_url
+            )
+            catalog.extend(_describe(tool, "local_harness") for tool in builtin)
         try:
-            mcp = await _load_mcp_tools(settings, probe_root)
+            mcp_by_server = await _load_mcp_tools_by_server(settings, probe_root)
         except Exception:
             # Il catalogo è informativo: un server MCP che non parte non deve far fallire
             # l'endpoint di stato. Si riproverà alla prossima chiamata.
             return catalog
-        catalog.extend(_describe(tool, "mcp:local_harness") for tool in mcp)
+        for server, server_tools in mcp_by_server.items():
+            catalog.extend(_describe(tool, f"mcp:{server}") for tool in server_tools)
         _TOOL_CATALOG = catalog
         return catalog
 
@@ -392,7 +499,24 @@ async def build_harness(
         sandbox_network=settings.harness_sandbox_network,
         project_root=settings.project_root,
     )
-    tools.extend(await _load_mcp_tools(settings, active_backend_root))
+    if settings.harness_enable_mcp:
+        # Tool interni (conta-testo, glossario, gestione skill) in-process: nessun subprocess,
+        # nessun re-import a ogni chiamata. Prima costavano ~3,7 s all'avvio del run e ~1 s a
+        # tool-call, spesi per riavviare un server stdio che eseguiva semplici funzioni locali.
+        tools.extend(
+            build_builtin_tools(
+                settings.skills_dir,
+                active_backend_root,
+                registry_url=settings.skills_registry_url,
+            )
+        )
+        # Solo i server MCP ESTERNI restano fuori processo (isolamento dove serve).
+        tools.extend(
+            await _load_mcp_tools(settings, active_backend_root, event_callback=event_callback)
+        )
+        # L'agente può PROPORRE nuovi server MCP, ma l'aggiunta passa sempre da approvazione
+        # umana (vedi interrupt_on più sotto): un server stdio gira sull'host, fuori dalla sandbox.
+        tools.append(mcp_proposal_tool(settings.state_dir))
 
     backend = FilesystemBackend(root_dir=active_backend_root, virtual_mode=True)
     permissions = build_workspace_permissions()
@@ -407,7 +531,15 @@ async def build_harness(
             "description": "Esecuzione comando nel sandbox Docker",
             "when": lambda req: require_approval
             or bool(req.tool_call["args"].get("with_network")),
-        }
+        },
+        # Aggiungere un server MCP cambia i privilegi dell'host (uno stdio gira fuori dalla
+        # sandbox): richiede SEMPRE conferma esplicita, anche quando l'approvazione automatica
+        # è attiva. Il `when` è costante-True per non lasciare mai passare questa azione da sola.
+        "propose_mcp_server": {
+            "allowed_decisions": ["approve", "reject"],
+            "description": "Aggiunta di un server MCP (gira sull'host, fuori dalla sandbox)",
+            "when": lambda req: True,
+        },
     }
     subagents: list[SubAgent] = [
         {
@@ -491,6 +623,19 @@ async def build_harness(
                 run_limit=max_tool_calls,
                 exit_behavior="end",
             ),
+            # Osservabilità del contesto: emette snapshot a ogni chiamata al modello e rileva le
+            # compaction. Non modifica la richiesta; rende solo visibile ciò che accade.
+            ContextMonitorMiddleware(
+                window_tokens=settings.harness_context_window,
+                event_callback=event_callback,
+                warning_ratio=settings.harness_context_warning_ratio,
+                compaction_ratio=settings.harness_context_compaction_ratio,
+            ),
+            # Compaction manuale: dà all'agente il tool `compact_conversation`, che l'utente può
+            # far scattare a comando. La compaction automatica (a frazione della finestra reale
+            # del modello) resta quella di default di deepagents; questo è il layer on-demand,
+            # e i due condividono lo stato via `_summarization_event`.
+            create_summarization_tool_middleware(tiers["low"].model, backend),
         ]
         graph = create_deep_agent(
             # Il modello del grafo è solo il punto di partenza: il router lo scavalca a ogni

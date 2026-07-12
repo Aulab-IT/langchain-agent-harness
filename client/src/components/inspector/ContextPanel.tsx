@@ -1,5 +1,6 @@
-import { Maximize2 } from "lucide-react";
+import { Maximize2, Shrink } from "lucide-react";
 import { useState } from "react";
+import { compactContext } from "../../api";
 import type { Usage } from "../../types";
 import { ContextModal } from "./ContextModal";
 
@@ -18,14 +19,37 @@ export function ContextPanel({
   usage,
   contextWindow,
   sessionId,
+  busy = false,
 }: {
   usage: Usage;
   contextWindow: number;
   sessionId: string;
+  busy?: boolean;
 }) {
   const percent = Math.min(100, Math.round((usage.input_tokens / contextWindow) * 100));
   const gradient = buildGradient(usage.context_categories);
   const [open, setOpen] = useState(false);
+  const [compacting, setCompacting] = useState(false);
+  const [compactError, setCompactError] = useState<string | null>(null);
+
+  // Colore della barra secondo la pressione sulla finestra: verde sotto il 70%, ambra fino
+  // all'80%, rosso oltre — le stesse soglie con cui il ContextMonitor segnala la pressione.
+  const pressure = percent >= 80 ? "high" : percent >= 70 ? "warning" : "ok";
+  const pressureColor =
+    pressure === "high" ? "text-danger" : pressure === "warning" ? "text-warning" : "text-success";
+
+  async function onCompact() {
+    if (busy || compacting) return;
+    setCompacting(true);
+    setCompactError(null);
+    try {
+      await compactContext(sessionId);
+    } catch (e: unknown) {
+      setCompactError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCompacting(false);
+    }
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -33,13 +57,27 @@ export function ContextPanel({
         <div>
           <h3 className="text-sm font-semibold">Contesto ultimo run</h3>
           <p className="text-xs text-muted">
-            {usage.total_tokens ? `${percent}% finestra modello` : "Nessun dato provider"}
+            {usage.total_tokens ? (
+              <span className={pressureColor}>{percent}% finestra modello</span>
+            ) : (
+              "Nessun dato provider"
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="rounded-lg border border-border bg-surface-raised px-2.5 py-1 font-mono text-xs">
             {usage.input_tokens} / {Math.round(contextWindow / 1_000)}k
           </span>
+          <button
+            type="button"
+            disabled={busy || compacting}
+            onClick={onCompact}
+            title="Compatta il contesto: riassume la storia più vecchia e libera la finestra"
+            className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-foreground disabled:opacity-50"
+          >
+            <Shrink size={13} />
+            {compacting ? "Compatto…" : "Compatta"}
+          </button>
           <button
             type="button"
             className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-foreground"
@@ -84,6 +122,12 @@ export function ContextPanel({
           )}
         </div>
       </div>
+
+      {compactError ? (
+        <div className="mx-5 mb-2 rounded-lg border border-danger/30 bg-danger/5 px-4 py-2 text-xs text-danger">
+          {compactError}
+        </div>
+      ) : null}
 
       <div className="mx-5 mb-5 rounded-lg border border-border bg-surface-raised/40 px-4 py-3 text-xs leading-relaxed text-muted">
         Totale provider esatto: {usage.input_tokens} input + {usage.output_tokens} output.

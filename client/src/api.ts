@@ -7,6 +7,7 @@ import type {
   ImproveResult,
   ImprovementDetail,
   ImprovementSummary,
+  McpStatus,
   ModelOverride,
   Run,
   RunEvent,
@@ -86,6 +87,48 @@ export function updateProviderSettings(body: ProviderSettingsUpdate): Promise<Pr
 
 export function getProviderModels(provider: ProviderName): Promise<ProviderModels> {
   return request(`/api/settings/providers/${provider}/models`);
+}
+
+export function getMcpConfig(): Promise<{ content: string }> {
+  return request("/api/settings/mcp");
+}
+
+export function updateMcpConfig(content: string): Promise<{ content: string; servers: string[] }> {
+  return request("/api/settings/mcp", jsonOptions("PUT", { content }));
+}
+
+export function getMcpStatus(): Promise<McpStatus> {
+  return request("/api/settings/mcp/status");
+}
+
+export function setTriggerScheduler(
+  enabled: boolean,
+): Promise<{ enabled: boolean; tick_seconds: number }> {
+  return request("/api/settings/triggers", jsonOptions("PUT", { enabled }));
+}
+
+export function compactContext(sessionId: string): Promise<{ run_id: string; status: string }> {
+  return request(`/api/sessions/${sessionId}/context/compact`, jsonOptions("POST"));
+}
+
+export type AppNotification = {
+  id: number;
+  session_id: string | null;
+  run_id: string | null;
+  type: string;
+  title: string;
+  read: boolean;
+  created_at: string;
+};
+
+export function getNotifications(
+  unread = false,
+): Promise<{ unread_count: number; notifications: AppNotification[] }> {
+  return request(`/api/notifications${unread ? "?unread=true" : ""}`);
+}
+
+export function markNotificationsRead(ids: number[] | null = null): Promise<{ unread_count: number }> {
+  return request("/api/notifications/read", jsonOptions("POST", { ids }));
 }
 
 export function listSessions(search = ""): Promise<SessionSummary[]> {
@@ -244,6 +287,16 @@ export function filePreviewUrl(sessionId: string, fileName: string): string {
   return `${API_URL}/api/sessions/${sessionId}/preview/${encodeURIComponent(fileName)}`;
 }
 
+export type PreviewText = {
+  content: string;
+  kind: "text" | "markdown" | "csv";
+  truncated: boolean;
+};
+
+export function getPreviewText(sessionId: string, fileName: string): Promise<PreviewText> {
+  return request(`/api/sessions/${sessionId}/preview-text/${encodeURIComponent(fileName)}`);
+}
+
 // --- Loop 3: triggers ---
 
 export function listTriggers(): Promise<Trigger[]> {
@@ -326,14 +379,18 @@ export function putTemplateMemory(content: string): Promise<{ content: string }>
   return request("/api/memory", jsonOptions("PUT", { content }));
 }
 
-export function getSessionMemory(sessionId: string): Promise<{ content: string }> {
+export type SessionMemory = {
+  content: string;
+  chars: number;
+  tokens: number;
+  max_chars: number;
+};
+
+export function getSessionMemory(sessionId: string): Promise<SessionMemory> {
   return request(`/api/sessions/${sessionId}/memory`);
 }
 
-export function putSessionMemory(
-  sessionId: string,
-  content: string,
-): Promise<{ content: string }> {
+export function putSessionMemory(sessionId: string, content: string): Promise<SessionMemory> {
   return request(`/api/sessions/${sessionId}/memory`, jsonOptions("PUT", { content }));
 }
 

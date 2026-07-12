@@ -41,7 +41,28 @@ async def test_factory_builds_graph_without_network_calls(tmp_path: Path) -> Non
     async with build_harness(settings) as harness:
         assert harness.graph is not None
         assert {"docker_exec", "current_utc_time"} <= {tool.name for tool in harness.tools}
+        # MCP disabilitato: niente tool di proposta server MCP.
+        assert "propose_mcp_server" not in {tool.name for tool in harness.tools}
         assert (tmp_path / "state" / "checkpoints.sqlite").exists()
+
+
+@pytest.mark.asyncio
+async def test_mcp_enabled_exposes_guarded_proposal_tool(tmp_path: Path) -> None:
+    (tmp_path / "memories").mkdir()
+    (tmp_path / "memories" / "AGENTS.md").write_text("# Memoria\n", encoding="utf-8")
+    (tmp_path / "skills").mkdir()
+    settings = Settings(
+        _env_file=None,
+        project_root=tmp_path,
+        openai_api_key="test-key",
+        harness_enable_mcp=True,
+        harness_enable_web_search=False,
+        harness_require_approval=False,
+    )
+    async with build_harness(settings) as harness:
+        # Con MCP attivo l'agente ha il tool per PROPORRE un server (l'aggiunta resta
+        # gated da approvazione umana, registrata in interrupt_on nella factory).
+        assert "propose_mcp_server" in {tool.name for tool in harness.tools}
 
 
 @pytest.mark.asyncio

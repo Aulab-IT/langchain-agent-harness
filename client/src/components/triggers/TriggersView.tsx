@@ -5,6 +5,7 @@ import {
   deleteTrigger,
   fireWebhook,
   listTriggers,
+  setTriggerScheduler,
   toggleTrigger,
   webhookUrl,
 } from "../../api";
@@ -13,8 +14,15 @@ import type { RuntimeStatus, Trigger } from "../../types";
 import { browserZone } from "../../lib/timezone";
 import { CronPicker } from "./CronPicker";
 
-export function TriggersView({ runtime }: { runtime: RuntimeStatus }) {
+export function TriggersView({
+  runtime,
+  onSchedulerChange,
+}: {
+  runtime: RuntimeStatus;
+  onSchedulerChange?: () => void;
+}) {
   const [triggers, setTriggers] = useState<Trigger[]>([]);
+  const [schedulerBusy, setSchedulerBusy] = useState(false);
   const [kind, setKind] = useState<"cron" | "webhook">("cron");
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
@@ -57,6 +65,20 @@ export function TriggersView({ runtime }: { runtime: RuntimeStatus }) {
       setError(reason instanceof Error ? reason.message : "Creazione fallita");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onToggleScheduler = async () => {
+    if (schedulerBusy) return;
+    setSchedulerBusy(true);
+    setError("");
+    try {
+      await setTriggerScheduler(!runtime.triggers.enabled);
+      onSchedulerChange?.();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Aggiornamento scheduler fallito");
+    } finally {
+      setSchedulerBusy(false);
     }
   };
 
@@ -106,17 +128,21 @@ export function TriggersView({ runtime }: { runtime: RuntimeStatus }) {
             <h2 className="text-lg font-semibold">Trigger a eventi</h2>
             <p className="text-sm text-muted">Cron e webhook avviano run autonomi</p>
           </div>
-          <span
-            className={`rounded-full px-3 py-1 text-xs ${
+          <button
+            type="button"
+            onClick={onToggleScheduler}
+            disabled={schedulerBusy}
+            title="Accende o spegne lo scheduler cron a caldo, senza riavviare l'API"
+            className={`rounded-full px-3 py-1 text-xs transition disabled:opacity-50 ${
               runtime.triggers.enabled
-                ? "bg-success/10 text-success"
-                : "bg-warning/10 text-warning"
+                ? "bg-success/10 text-success hover:bg-success/20"
+                : "bg-warning/10 text-warning hover:bg-warning/20"
             }`}
           >
             {runtime.triggers.enabled
-              ? `scheduler attivo · ${runtime.triggers.tick_seconds}s`
-              : "scheduler cron spento (HARNESS_ENABLE_TRIGGERS=false)"}
-          </span>
+              ? `scheduler attivo · ${runtime.triggers.tick_seconds}s — spegni`
+              : "scheduler cron spento — accendi"}
+          </button>
         </div>
 
         <div className="space-y-3 p-6">

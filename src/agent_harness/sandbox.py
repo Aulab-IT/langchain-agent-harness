@@ -442,6 +442,39 @@ class SessionSandboxManager:
         )
         if len(combined) <= output_limit:
             return combined
+        return _offload_or_truncate(combined, workspace, output_limit)
+
+
+def _offload_or_truncate(combined: str, workspace: Path, output_limit: int) -> str:
+    """Un output di tool troppo lungo: salva l'integrale su file, tieni in contesto un estratto.
+
+    Prima l'output veniva troncato a testa+coda e la parte centrale andava persa per sempre; a
+    ogni turno successivo restavano comunque ~``output_limit`` caratteri nel contesto. Qui
+    l'integrale finisce in ``/workspace/.tool_output/<checksum>.txt`` (cartella nascosta, non
+    mostrata come allegato) e nel contesto entra solo un estratto breve più il riferimento: il
+    modello sa che il dato esiste e come rileggerlo con ``docker_exec``, pagandone pochi token.
+
+    Se la scrittura fallisce si ricade sull'ex-troncamento, così un problema di filesystem non
+    fa perdere del tutto l'output.
+    """
+    try:
+        from agent_harness.context_budget import offload_tool_output
+
+        offload_dir = workspace / ".tool_output"
+        offload_dir.mkdir(parents=True, exist_ok=True)
+        excerpt_chars = min(1_500, output_limit // 4)
+        # Il checksum dipende solo dal contenuto: lo si ricava una volta per nominare il file,
+        # poi si costruisce il sostituto definitivo col path reale come riferimento.
+        checksum = offload_tool_output(combined, reference="").checksum
+        ref_path = offload_dir / f"{checksum}.txt"
+        ref_path.write_text(combined, encoding="utf-8")
+        offloaded = offload_tool_output(
+            combined,
+            reference=f"/workspace/.tool_output/{checksum}.txt",
+            excerpt_chars=excerpt_chars,
+        )
+        return offloaded.render()
+    except Exception:
         head = combined[: output_limit // 2]
         tail = combined[-output_limit // 2 :]
         return f"{head}\n\n... OUTPUT TRONCATO ...\n\n{tail}"

@@ -1,9 +1,12 @@
 import { Menu, Pencil, Trash2 } from "lucide-react";
-import { runElapsedSeconds, runToAgentStatus } from "../../lib/format";
+import { useEffect, useState } from "react";
+import { runToAgentStatus } from "../../lib/format";
+import { formatClock } from "../../lib/runTrace";
 import { modelLabel as resolveModelLabel } from "../../lib/modelOverride";
 import { latestSelectedModel } from "../../lib/sessionActivity";
 import type { AgentStatus, Run, RunEvent, RuntimeStatus, SessionDetail, Usage } from "../../types";
 import { StatusDot } from "../shared/StatusDot";
+import { NotificationBell } from "./NotificationBell";
 
 function statusLabel(status: AgentStatus, runtime: RuntimeStatus | null): string {
   if (!runtime) return "Offline";
@@ -39,11 +42,24 @@ export function Topbar({
     runtime && session
       ? resolveModelLabel(runtime.models, session.model_override, latestSelectedModel(events))
       : "—";
-  const elapsed = runElapsedSeconds(run);
   const active = Boolean(run && ["queued", "running", "waiting_approval", "waiting_action"].includes(run.status));
+  // Timer generale sincronizzato: ticka ogni secondo mentre il run è attivo, così i secondi
+  // scorrono regolari invece di aggiornarsi solo quando arriva un evento (fermi da idle, a
+  // scatti coi burst). Allineato al timer della card d'attesa (stesso started_at, stesso formato).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [active]);
+  const elapsed = run?.started_at
+    ? ((run.completed_at ? new Date(run.completed_at).getTime() : now) -
+        new Date(run.started_at).getTime()) /
+      1000
+    : null;
 
   return (
-    <header className="shrink-0 border-b border-border bg-surface/80 px-3 py-2.5 backdrop-blur-sm lg:px-4">
+    <header className="relative z-50 shrink-0 border-b border-border bg-surface/80 px-3 py-2.5 backdrop-blur-sm lg:px-4">
       <div className="flex min-w-0 items-center gap-2 lg:gap-3">
         <button
           type="button"
@@ -76,7 +92,7 @@ export function Topbar({
           </div>
           <p className="truncate font-mono text-[11px] text-muted">
             {modelLabel} · {run?.status ?? "idle"}
-            {elapsed !== null ? ` · ${elapsed.toFixed(1)}s` : ""}
+            {elapsed !== null ? ` · ${formatClock(elapsed)}` : ""}
             {active && usage.output_tokens_per_second
               ? ` · ~${usage.output_tokens_per_second} tok/s`
               : ""}
@@ -84,6 +100,7 @@ export function Topbar({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          <NotificationBell />
           <span className="hidden items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted md:inline-flex">
             <span className="h-1.5 w-1.5 rounded-full bg-success" />
             local

@@ -25,7 +25,9 @@ from agent_harness import provider_settings as provider_cfg
 from agent_harness.canary import CANARY_EVENT_TYPES, CanaryAnalysis, analyze_canary
 from agent_harness.command_review import review_command
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
+from agent_harness.context_budget import LiveUsageThrottle
 from agent_harness.control_store import OUTPUT_DIR, ControlStore
+from agent_harness.durable import DurableStore, idempotency_key
 from agent_harness.evaluation import (
     evaluate_candidate,
     execute_eval_case,
@@ -33,7 +35,14 @@ from agent_harness.evaluation import (
     load_proposal_evaluation,
     save_proposal_evaluation,
 )
-from agent_harness.factory import build_harness, build_judge_model, tier_spec, tool_catalog
+from agent_harness.factory import (
+    build_harness,
+    build_judge_model,
+    invalidate_tool_catalog,
+    probe_mcp_servers,
+    tier_spec,
+    tool_catalog,
+)
 from agent_harness.improve import (
     IMPROVEMENT_EVENT_TYPES,
     Proposal,
@@ -45,6 +54,7 @@ from agent_harness.improve import (
     saved_overrides,
     write_proposal,
 )
+from agent_harness.mcp_config import load_user_config_text, save_user_config
 from agent_harness.middleware import TIERS, Override
 from agent_harness.pricing import catalog_from_settings
 from agent_harness.promotion import (
@@ -54,7 +64,7 @@ from agent_harness.promotion import (
     record_config_version,
     restore_config_version,
 )
-from agent_harness.prompts import SYSTEM_PROMPT
+from agent_harness.prompts import COMPACT_INSTRUCTION, SYSTEM_PROMPT
 from agent_harness.runner import GoalRunner
 from agent_harness.sandbox import (
     SandboxIdleReaper,
@@ -124,10 +134,42 @@ INLINE_MEDIA_TYPES = {
     ".webp": "image/webp",
     ".pdf": "application/pdf",
 }
+# Anteprima testuale: il contenuto viene letto e restituito come JSON, poi reso dal client
+# (testo, markdown formattato o tabella CSV). Mai servito come documento eseguibile: `.svg` e
+# `.html` restano ESCLUSI di proposito — mostrarli renderizzati eseguirebbe script sull'origine.
+# La `kind` guida solo la resa; il contenuto è sempre trattato come testo inerte.
+TEXT_PREVIEW_KINDS: dict[str, str] = {
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".csv": "csv",
+    ".tsv": "csv",
+    ".txt": "text",
+    ".log": "text",
+    ".json": "text",
+    ".yaml": "text",
+    ".yml": "text",
+    ".xml": "text",
+    ".toml": "text",
+    ".ini": "text",
+    ".cfg": "text",
+    ".py": "text",
+    ".ts": "text",
+    ".tsx": "text",
+    ".js": "text",
+    ".jsx": "text",
+    ".sql": "text",
+    ".sh": "text",
+}
+# Cap dell'anteprima testuale: oltre questa soglia si tronca. Un file enorme non deve
+# trascinare tutto il suo peso nel browser solo per un'occhiata; per il resto c'è il download.
+_TEXT_PREVIEW_MAX = 512 * 1024
 _ALLOWED_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}
 
 settings = Settings()
 store = ControlStore(settings)
+# Storage durevole (Fase 3): garanzie «una volta sola» che sopravvivono al riavvio. Oggi lo usa
+# lo scheduler per l'idempotenza dei trigger e il RunManager per persistere gli interrupt.
+durable_store = DurableStore(settings.state_dir / "durable.sqlite")
 evaluation_lock = asyncio.Lock()
 
 
@@ -167,6 +209,19 @@ class ProviderSettingsUpdate(BaseModel):
     anthropic_api_key: Annotated[str | None, Field(default=None, max_length=400)]
     tiers: Annotated[list[TierAssignment], Field(default_factory=list, max_length=3)]
     flags: RuntimeFlagsUpdate | None = None
+
+
+class SchedulerToggle(BaseModel):
+    enabled: bool
+
+
+class NotificationsRead(BaseModel):
+    # None = segna tutte come lette; lista = solo quelle indicate.
+    ids: list[int] | None = None
+
+
+class McpConfigUpdate(BaseModel):
+    content: Annotated[str, Field(max_length=100_000)]
 
 
 class MemoryUpdate(BaseModel):
@@ -483,6 +538,28 @@ def _attachment_manifest(session_id: str) -> str:
     )
 
 
+def _extract_mcp_proposal(payload: Any) -> dict[str, str] | None:
+    """Se l'interrupt riguarda `propose_mcp_server`, ne estrae nome e config per la conferma.
+
+    Il payload HITL porta `action_requests`, ognuno con `name` (tool) e `args`. Qui si cerca la
+    proposta di server MCP e si restituisce ciò che l'utente deve vedere prima di approvare.
+    """
+    if not isinstance(payload, dict):
+        return None
+    requests = payload.get("action_requests")
+    if not isinstance(requests, list):
+        return None
+    for request in requests:
+        if not isinstance(request, dict) or request.get("name") != "propose_mcp_server":
+            continue
+        args = request.get("args") if isinstance(request.get("args"), dict) else {}
+        return {
+            "name": str(args.get("name", ""))[:120],
+            "config": str(args.get("config_json", ""))[:4_000],
+        }
+    return None
+
+
 def _extract_command(value: Any) -> str | None:
     if isinstance(value, dict):
         command = value.get("command")
@@ -543,6 +620,48 @@ class RunManager:
     ) -> None:
         store.add_event(run_id, session_id, event_type, payload)
 
+    def _notify(self, type: str, title: str, session_id: str, run_id: str) -> None:
+        """Registra una notifica persistente e la annuncia sul run (per la campanella live)."""
+        try:
+            note = store.add_notification(
+                type=type, title=title, session_id=session_id, run_id=run_id
+            )
+            self._emit(run_id, session_id, "notification.created", note)
+        except Exception:
+            _LOGGER.exception("notifica fallita", extra={"run_id": run_id})
+
+    def _session_label(self, session_id: str) -> str:
+        try:
+            return str(store.get_session(session_id).get("title") or "Sessione")
+        except Exception:
+            return "Sessione"
+
+    def _record_interrupt(self, run_id: str, kind: str, description: str) -> Any | None:
+        """Persiste un interrupt pendente in modo durevole, così sopravvive a un riavvio.
+
+        È additivo: la risoluzione vera resta la ``asyncio.Future`` in memoria. Qui si conserva
+        solo un record ispezionabile — payload minimo (nessun dato sensibile) — perché un crash
+        mentre si attende l'utente non cancelli in silenzio la traccia di ciò che era in sospeso.
+        Un errore dello storage durevole non deve mai far fallire il run: si registra e basta.
+        """
+        try:
+            return durable_store.record_interrupt(
+                run_id=run_id, kind=kind, payload={"description": description}
+            )
+        except Exception:
+            _LOGGER.exception("record_interrupt durevole fallito", extra={"run_id": run_id})
+            return None
+
+    def _resolve_interrupt(self, interrupt: Any | None, resolution: dict[str, Any]) -> None:
+        if interrupt is None:
+            return
+        try:
+            durable_store.resolve_interrupt(
+                interrupt.id, resolution=resolution, resolved_by="user"
+            )
+        except Exception:
+            _LOGGER.exception("resolve_interrupt durevole fallito")
+
     async def start(
         self,
         session_id: str,
@@ -569,6 +688,10 @@ class RunManager:
         loop = asyncio.get_running_loop()
         streamed_tokens = 0
         stream_started = time.monotonic()
+        # Ogni frammento di streaming produrrebbe una scrittura usage.live: ~33k eventi per
+        # run, la principale causa di write amplification sul control DB. La throttle lascia
+        # passare al più un evento al secondo; il valore finale si forza con flush a fine run.
+        live_throttle = LiveUsageThrottle()
         files_before = {item["name"]: item for item in store.list_files(session_id)}
         # Il modello che ha davvero risposto. Resta None finché il router non lo dichiara:
         # meglio nessun badge che un badge sbagliato.
@@ -604,16 +727,16 @@ class RunManager:
                 streamed_tokens += max(1, round(len(text) / 4))
                 elapsed = max(time.monotonic() - stream_started, 0.001)
                 self._emit(run_id, session_id, event_type, {"text": text})
-                self._emit(
-                    run_id,
-                    session_id,
-                    "usage.live",
+                emitted = live_throttle.offer(
                     {
                         "output_tokens": streamed_tokens,
                         "output_tokens_per_second": round(streamed_tokens / elapsed, 1),
                         "estimated": True,
                     },
+                    now=time.monotonic(),
                 )
+                if emitted is not None:
+                    self._emit(run_id, session_id, "usage.live", emitted)
             elif event_type in {
                 "grader.started",
                 "grader.completed",
@@ -624,8 +747,45 @@ class RunManager:
                 self._emit(run_id, session_id, event_type, event)
 
         async def approval(payload: dict[str, Any]) -> bool:
+            mcp_request = _extract_mcp_proposal(payload)
+            if mcp_request is not None:
+                # Aggiunta di un server MCP: gira sull'host, fuori dalla sandbox. Va sempre
+                # confermata a mano, mai auto-approvata, e all'utente si mostra cosa aggiunge.
+                safe_payload = {
+                    "action": "propose_mcp_server",
+                    "description": (
+                        f"Aggiungere il server MCP «{mcp_request['name']}». "
+                        "Gira sull'host, FUORI dalla sandbox Docker."
+                    ),
+                    "mcp_name": mcp_request["name"],
+                    "mcp_config": mcp_request["config"],
+                }
+                future: asyncio.Future[bool] = loop.create_future()
+                self.approvals[run_id] = future
+                store.update_run(run_id, status="waiting_approval")
+                interrupt = self._record_interrupt(
+                    run_id, "approval_mcp", safe_payload["description"]
+                )
+                self._notify(
+                    "needs_approval",
+                    f"«{self._session_label(session_id)}» — serve la tua approvazione (server MCP)",
+                    session_id,
+                    run_id,
+                )
+                self._emit(run_id, session_id, "approval.requested", safe_payload)
+                try:
+                    approved = await asyncio.wait_for(future, timeout=600)
+                except TimeoutError:
+                    approved = False
+                finally:
+                    self.approvals.pop(run_id, None)
+                self._resolve_interrupt(interrupt, {"approved": approved})
+                store.update_run(run_id, status="running")
+                self._emit(run_id, session_id, "approval.resolved", {"approved": approved})
+                return approved
+
             is_network = _pending_with_network(payload)
-            safe_payload: dict[str, Any] = {
+            safe_payload = {
                 "action": str(payload.get("action", "docker_exec")),
                 "description": (
                     "Accesso rete temporaneo alla sandbox Docker (per questo comando)"
@@ -651,6 +811,13 @@ class RunManager:
             future: asyncio.Future[bool] = loop.create_future()
             self.approvals[run_id] = future
             store.update_run(run_id, status="waiting_approval")
+            interrupt = self._record_interrupt(run_id, "approval", safe_payload["description"])
+            self._notify(
+                "needs_approval",
+                f"«{self._session_label(session_id)}» — serve la tua approvazione",
+                session_id,
+                run_id,
+            )
             self._emit(run_id, session_id, "approval.requested", safe_payload)
             try:
                 approved = await asyncio.wait_for(future, timeout=600)
@@ -658,6 +825,7 @@ class RunManager:
                 approved = False
             finally:
                 self.approvals.pop(run_id, None)
+            self._resolve_interrupt(interrupt, {"approved": approved})
             store.update_run(run_id, status="running")
             self._emit(
                 run_id,
@@ -679,6 +847,13 @@ class RunManager:
             future: asyncio.Future[dict[str, Any]] = loop.create_future()
             self.interactions[run_id] = future
             store.update_run(run_id, status="waiting_action")
+            interrupt = self._record_interrupt(run_id, "user_action", safe_payload["title"])
+            self._notify(
+                "needs_action",
+                f"«{self._session_label(session_id)}» — serve un'azione da te",
+                session_id,
+                run_id,
+            )
             self._emit(run_id, session_id, "action.requested", safe_payload)
             try:
                 resolved = await asyncio.wait_for(future, timeout=1_800)
@@ -686,6 +861,7 @@ class RunManager:
                 resolved = {"cancelled": True}
             finally:
                 self.interactions.pop(run_id, None)
+            self._resolve_interrupt(interrupt, {"cancelled": bool(resolved.get("cancelled"))})
             store.update_run(run_id, status="running")
             self._emit(
                 run_id,
@@ -697,8 +873,11 @@ class RunManager:
 
         goal_runner: GoalRunner | None = None
         try:
-            if not settings.openai_api_key:
-                raise RuntimeError("OPENAI_API_KEY non configurata")
+            # Valida i soli provider realmente assegnati ai gradini: una config tutta locale
+            # (Ollama/MLX) o tutta Claude non deve pretendere una chiave OpenAI.
+            config_problems = provider_cfg.validate_overrides(settings)
+            if config_problems:
+                raise RuntimeError(" ".join(config_problems))
             root = await asyncio.to_thread(store.prepare_session_root, session_id)
             async with build_harness(
                 settings,
@@ -717,6 +896,15 @@ class RunManager:
             elapsed = time.monotonic() - started
             usage = compute_usage(result.messages, elapsed)
             _persist_context(session_id, result.messages)
+            # Frena la crescita incontrollata della memoria scritta dall'agente: se il file ha
+            # sforato il limite, lo tronca e lo rende visibile invece di gonfiare ogni prompt.
+            if store.cap_session_memory(session_id, settings.harness_memory_max_chars):
+                self._emit(
+                    run_id,
+                    session_id,
+                    "memory.truncated",
+                    {"max_chars": settings.harness_memory_max_chars},
+                )
             clean_text = result.text.replace("[GOAL_COMPLETE]", "").strip()
             files_after = {item["name"]: item for item in store.list_files(session_id)}
             changed_files: list[str] = []
@@ -758,6 +946,13 @@ class RunManager:
                     "completed": result.completed,
                 },
             )
+            label = self._session_label(session_id)
+            self._notify(
+                "run_completed" if result.completed else "run_incomplete",
+                f"«{label}» — {'completato' if result.completed else 'terminato senza verifica'}",
+                session_id,
+                run_id,
+            )
         except asyncio.CancelledError:
             # Stop richiesto: conserva l'ultimo usage noto invece di azzerarlo, altrimenti
             # il pannello Contesto torna vuoto anche se il run aveva già consumato token.
@@ -781,10 +976,34 @@ class RunManager:
                 "run.failed",
                 {"error": "Esecuzione agente fallita."},
             )
+            self._notify(
+                "run_failed",
+                f"«{self._session_label(session_id)}» — fallito",
+                session_id,
+                run_id,
+            )
         finally:
+            # Emette l'ultimo usage.live trattenuto dalla throttle: chiude il run senza
+            # perdere il valore finale dello streaming, anche in caso di stop o errore.
+            trailing = live_throttle.flush()
+            if trailing is not None:
+                self._emit(run_id, session_id, "usage.live", trailing)
+            # Chiude eventuali interrupt durevoli rimasti pendenti (es. run annullato mentre
+            # attendeva conferma): un run terminato non deve lasciare interrupt orfani. La
+            # risoluzione è idempotente, quindi quelli già risolti restano invariati.
+            self._close_pending_interrupts(run_id)
             self.approvals.pop(run_id, None)
             self.interactions.pop(run_id, None)
             self.tasks.pop(run_id, None)
+
+    def _close_pending_interrupts(self, run_id: str) -> None:
+        try:
+            for interrupt in durable_store.pending_interrupts(run_id):
+                durable_store.resolve_interrupt(
+                    interrupt.id, resolution={"cancelled": True}, resolved_by="system"
+                )
+        except Exception:
+            _LOGGER.exception("chiusura interrupt durevoli fallita", extra={"run_id": run_id})
 
     async def resolve_approval(self, run_id: str, approved: bool) -> None:
         _require_run(run_id)
@@ -867,16 +1086,36 @@ async def fire_trigger(trigger: dict[str, Any], payload: Any = None) -> str | No
     except HTTPException as exc:
         if exc.status_code == 409:
             _LOGGER.info("Trigger %s saltato: sessione occupata", trigger["id"])
+            # Rende visibile lo skip: senza questo evento, un trigger che non parte perché la
+            # sessione è già in esecuzione sparirebbe nel solo log del backend.
+            blocking = store.latest_run(session_id)
+            if blocking is not None:
+                store.add_event(
+                    blocking["id"],
+                    session_id,
+                    "trigger.skipped",
+                    {"trigger_id": trigger["id"], "name": trigger.get("name", "")},
+                )
             return None
         raise
     store.mark_trigger_fired(trigger["id"])
     return str(run["id"])
 
 
+def _claim_trigger_fire(trigger_id: str, minute_key: str) -> bool:
+    """True se questo (trigger, minuto) non è ancora scattato, in modo durevole al riavvio."""
+    return durable_store.claim_once(
+        idempotency_key("trigger", trigger_id, minute_key),
+        kind="trigger_fire",
+        payload={"trigger_id": trigger_id, "minute": minute_key},
+    )
+
+
 trigger_scheduler = TriggerScheduler(
     store,
     fire_trigger,
     tick_seconds=settings.harness_trigger_tick_seconds,
+    claim_fire=_claim_trigger_fire,
 )
 
 
@@ -917,6 +1156,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         # La connessione al control DB va chiusa esplicitamente: senza questa chiamata
         # il file WAL non veniva mai richiuso in modo pulito allo shutdown.
         store.close()
+        durable_store.close()
 
 
 app = FastAPI(
@@ -949,7 +1189,9 @@ async def validate_origin(
 async def runtime_status() -> dict[str, Any]:
     return {
         "backend": "online",
-        "configured": bool(settings.openai_api_key),
+        # Configurato = ogni gradino ha provider valido, modello e (se cloud) chiave.
+        # Non più solo la chiave OpenAI: un setup tutto Claude o tutto locale è valido.
+        "configured": not provider_cfg.validate_overrides(settings),
         "models": [
             {
                 "tier": spec.tier,
@@ -982,6 +1224,48 @@ async def runtime_status() -> dict[str, Any]:
         },
         "overrides": load_overrides(settings.state_dir / "harness_overrides.toml"),
         "canary": read_canary(settings.state_dir / "canary.json"),
+    }
+
+
+@app.get("/api/notifications")
+async def list_notifications(
+    unread: Annotated[bool, Query()] = False,
+) -> dict[str, Any]:
+    """Notifiche persistenti: cosa è successo mentre non guardavi (fine run, o serve te)."""
+    return {
+        "unread_count": store.unread_notification_count(),
+        "notifications": store.list_notifications(unread_only=unread),
+    }
+
+
+@app.post("/api/notifications/read")
+async def mark_notifications_read(payload: NotificationsRead) -> dict[str, Any]:
+    """Segna come lette le notifiche indicate (o tutte). Ritorna il conteggio non letto residuo."""
+    store.mark_notifications_read(payload.ids)
+    return {"unread_count": store.unread_notification_count()}
+
+
+@app.get("/api/durable/interrupts")
+async def get_pending_interrupts() -> dict[str, Any]:
+    """Interrupt di approvazione/azione ancora pendenti, persistiti in modo durevole.
+
+    Dopo un riavvio del backend questo elenco mostra cosa era in attesa dell'utente e non è mai
+    stato risolto: la prova che gli interrupt sopravvivono al restart, invece di sparire con le
+    Future in memoria. Nessun dato sensibile: solo run, tipo e descrizione.
+    """
+    pending = durable_store.all_pending_interrupts()
+    return {
+        "count": len(pending),
+        "interrupts": [
+            {
+                "id": item.id,
+                "run_id": item.run_id,
+                "kind": item.kind,
+                "description": str(item.payload.get("description", "")),
+                "created_at": item.created_at,
+            }
+            for item in pending
+        ],
     }
 
 
@@ -1026,7 +1310,61 @@ async def update_provider_settings(payload: ProviderSettingsUpdate) -> dict[str,
     provider_cfg.save_overrides(settings.state_dir, overrides)
     settings = candidate
     store.upsert_pricing_catalog(catalog_from_settings(settings))
+    # Flag e provider possono cambiare i tool disponibili: scarta il catalogo in cache.
+    invalidate_tool_catalog()
     return provider_cfg.snapshot(settings)
+
+
+@app.get("/api/settings/mcp")
+async def get_mcp_config() -> dict[str, Any]:
+    """Il testo grezzo di state/mcp.json per l'editor. Nessun segreto: i valori usano ${VAR}."""
+    return {"content": load_user_config_text(settings.state_dir)}
+
+
+@app.put("/api/settings/mcp")
+async def update_mcp_config(payload: McpConfigUpdate) -> dict[str, Any]:
+    """Valida e salva state/mcp.json. Una configurazione con errori di forma viene rifiutata.
+
+    Il file NON viene scritto se la validazione trova problemi (JSON rotto, server senza
+    command/url, nome riservato): così una config invalida non arriva mai al prossimo run. Al
+    salvataggio riuscito il catalogo tool in cache viene invalidato.
+    """
+    validation = save_user_config(settings.state_dir, payload.content)
+    if validation.problems:
+        raise HTTPException(status_code=422, detail=" ".join(validation.problems))
+    invalidate_tool_catalog()
+    return {
+        "content": load_user_config_text(settings.state_dir),
+        "servers": sorted(validation.connections),
+    }
+
+
+@app.get("/api/settings/mcp/status")
+async def get_mcp_status() -> dict[str, Any]:
+    """Stato per-server: raggiungibile, transport, numero e nomi dei tool esposti."""
+    if not settings.harness_enable_mcp:
+        return {"enabled": False, "servers": []}
+    return {"enabled": True, "servers": await probe_mcp_servers(settings)}
+
+
+@app.put("/api/settings/triggers")
+async def update_trigger_scheduler(payload: SchedulerToggle) -> dict[str, Any]:
+    """Accende o spegne lo scheduler dei trigger cron, e lo fa partire/fermare a caldo.
+
+    La preferenza è persistita negli override provider (come chiavi e gradini), così sopravvive
+    al riavvio. A differenza di ``.env``, qui il task di scheduling parte o si ferma subito:
+    senza questo, un trigger cron creato da UI non scatterebbe mai finché non si riavvia l'API.
+    """
+    global settings
+    overrides = provider_cfg.load_overrides(settings.state_dir)
+    overrides[provider_cfg.SCHEDULER_FIELD] = payload.enabled
+    provider_cfg.save_overrides(settings.state_dir, overrides)
+    settings = provider_cfg.apply_overrides(settings, overrides)
+    if payload.enabled:
+        trigger_scheduler.start()
+    else:
+        await trigger_scheduler.stop()
+    return {"enabled": payload.enabled, "tick_seconds": settings.harness_trigger_tick_seconds}
 
 
 @app.post("/api/sessions", status_code=status.HTTP_201_CREATED)
@@ -1085,6 +1423,21 @@ async def session_context(session_id: str) -> dict[str, Any]:
     return _build_context(session_id, [])
 
 
+@app.post("/api/sessions/{session_id}/context/compact", status_code=status.HTTP_202_ACCEPTED)
+async def compact_context(session_id: str) -> dict[str, Any]:
+    """Avvia una compaction manuale del contesto della sessione.
+
+    Fa scattare a comando ciò che l'agente farebbe da sé sotto pressione: un run che chiama il
+    tool ``compact_conversation``, riassume la storia vecchia nel backend e libera la finestra.
+    Il ``ContextMonitorMiddleware`` emette ``context.compaction.detected`` durante il run, così
+    il risultato è visibile nel pannello Contesto e nel trace. Se la sessione è già in
+    esecuzione, la richiesta viene rifiutata con 409 come ogni altro avvio di run.
+    """
+    _require_session(session_id)
+    run = await run_manager.start(session_id, COMPACT_INSTRUCTION)
+    return {"run_id": run["id"], "status": run["status"]}
+
+
 @app.patch("/api/sessions/{session_id}")
 async def update_session(session_id: str, payload: SessionUpdate) -> dict[str, Any]:
     _require_session(session_id)
@@ -1125,10 +1478,21 @@ async def put_template_memory(payload: MemoryUpdate) -> dict[str, Any]:
     return {"content": payload.content}
 
 
+def _memory_payload(content: str) -> dict[str, Any]:
+    # La memoria entra nel prompt a ogni run: mostrarne il peso in token rende visibile quanto
+    # costa, e vicino al cap (`harness_memory_max_chars`) fa capire quanto margine resta.
+    return {
+        "content": content,
+        "chars": len(content),
+        "tokens": token_estimate(content),
+        "max_chars": settings.harness_memory_max_chars,
+    }
+
+
 @app.get("/api/sessions/{session_id}/memory")
 async def get_session_memory(session_id: str) -> dict[str, Any]:
     _require_session(session_id)
-    return {"content": _read_memory(_session_memory_path(session_id))}
+    return _memory_payload(_read_memory(_session_memory_path(session_id)))
 
 
 @app.put("/api/sessions/{session_id}/memory")
@@ -1137,7 +1501,7 @@ async def put_session_memory(session_id: str, payload: MemoryUpdate) -> dict[str
     path = _session_memory_path(session_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(payload.content, encoding="utf-8")
-    return {"content": payload.content}
+    return _memory_payload(payload.content)
 
 
 @app.post("/api/sessions/{session_id}/memory/promote")
@@ -1757,17 +2121,44 @@ async def preview_file(session_id: str, file_path: str) -> FileResponse:
             status_code=415,
             detail="Anteprima non disponibile per questo tipo: scarica il file.",
         )
-    return FileResponse(
-        target,
-        media_type=media_type,
-        headers={
-            "Content-Disposition": "inline",
-            "X-Content-Type-Options": "nosniff",
-            # Difesa in profondità: anche se un tipo pericoloso arrivasse qui per errore, il
-            # documento non può caricare nulla né eseguire script.
-            "Content-Security-Policy": "default-src 'none'; img-src 'self'; object-src 'none'",
-        },
-    )
+    headers = {
+        "Content-Disposition": "inline",
+        # La garanzia di sicurezza sta qui: il tipo è deciso da noi dall'estensione e `nosniff`
+        # impedisce al browser di reinterpretarlo. Un file ostile con estensione .pdf resta
+        # `application/pdf`, non può essere eseguito come HTML/JS sull'origine.
+        "X-Content-Type-Options": "nosniff",
+    }
+    if media_type != "application/pdf":
+        # Difesa in profondità per le immagini: nessuna risorsa esterna, nessuno script. Sui PDF
+        # NON si mette questa CSP: `object-src 'none'`/`default-src 'none'` fanno rifiutare il
+        # visualizzatore PDF interno del browser (Edge: «This page has been blocked»), e un PDF
+        # è comunque un documento passivo confinato dal viewer del browser.
+        headers["Content-Security-Policy"] = "default-src 'none'; img-src 'self'; object-src 'none'"
+    return FileResponse(target, media_type=media_type, headers=headers)
+
+
+@app.get("/api/sessions/{session_id}/preview-text/{file_path:path}")
+async def preview_text_file(session_id: str, file_path: str) -> dict[str, Any]:
+    """Contenuto testuale di un file per l'anteprima, con tipo di resa e flag di troncamento.
+
+    Restituisce il testo come dato JSON, mai come documento servito: il browser non lo esegue
+    mai. Il client decide la resa dalla ``kind`` (testo grezzo, markdown formattato, tabella
+    CSV). Solo le estensioni note e inerti sono ammesse; ``.svg`` e ``.html`` restano fuori.
+    """
+    _require_session(session_id)
+    kind = TEXT_PREVIEW_KINDS.get(Path(file_path).suffix.lower())
+    if kind is None:
+        raise HTTPException(
+            status_code=415,
+            detail="Anteprima testuale non disponibile per questo tipo: scarica il file.",
+        )
+    target = _safe_workspace_path(session_id, file_path)
+    if not target.is_file() or target.is_symlink():
+        raise HTTPException(status_code=404, detail="File non trovato.")
+    raw = target.read_bytes()[: _TEXT_PREVIEW_MAX + 1]
+    truncated = len(raw) > _TEXT_PREVIEW_MAX
+    content = raw[:_TEXT_PREVIEW_MAX].decode("utf-8", errors="replace")
+    return {"content": content, "kind": kind, "truncated": truncated}
 
 
 @app.get("/api/sessions/{session_id}/files/{file_path:path}")

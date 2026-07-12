@@ -5,7 +5,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
-from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    BaseMessage,
+    HumanMessage,
+    ToolMessage,
+)
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
@@ -35,20 +41,45 @@ def final_text(messages: list[BaseMessage]) -> str:
     return ""
 
 
+# Verbi che segnalano un compito di produzione/modifica di artefatti, quindi da verificare in
+# sandbox. Coperte le due lingue del progetto: come il router, non privilegia l'italiano —
+# `write a report` e `scrivi un report` devono comportarsi allo stesso modo.
+_VERIFICATION_VERBS: tuple[str, ...] = (
+    "crea",
+    "scrivi",
+    "modifica",
+    "implementa",
+    "correggi",
+    "aggiorna",
+    "genera",
+    "create",
+    "write",
+    "modify",
+    "implement",
+    "fix",
+    "update",
+    "generate",
+    "build",
+    "refactor",
+)
+
+
 def requires_environment_verification(goal: str) -> bool:
     normalized = goal.casefold()
-    return any(
-        verb in normalized
-        for verb in (
-            "crea",
-            "scrivi",
-            "modifica",
-            "implementa",
-            "correggi",
-            "aggiorna",
-            "genera",
-        )
-    )
+    return any(verb in normalized for verb in _VERIFICATION_VERBS)
+
+
+def _current_turn_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """I soli messaggi del turno corrente: quelli dopo l'ultimo messaggio umano.
+
+    Senza questo taglio, un ``docker_exec`` andato a buon fine in un obiettivo precedente
+    dello stesso thread soddisferebbe la verifica dell'obiettivo attuale — l'intera storia
+    del thread è visibile qui.
+    """
+    for index in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[index], HumanMessage):
+            return messages[index + 1 :]
+    return messages
 
 
 def has_successful_verification(messages: list[BaseMessage]) -> bool:
@@ -56,7 +87,7 @@ def has_successful_verification(messages: list[BaseMessage]) -> bool:
         isinstance(message, ToolMessage)
         and message.name == "docker_exec"
         and "exit_code=0" in str(message.content)
-        for message in messages
+        for message in _current_turn_messages(messages)
     )
 
 
