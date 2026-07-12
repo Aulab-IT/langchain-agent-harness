@@ -57,6 +57,102 @@ FLAG_FIELDS: dict[str, str] = {
 SCHEDULER_FIELD = "harness_enable_triggers"
 
 
+@dataclass(frozen=True)
+class RuntimeField:
+    """Un parametro runtime numerico regolabile da UI: campo Settings, range, tipo, etichetta."""
+
+    field: str
+    minimum: float
+    maximum: float
+    is_int: bool
+    label: str
+    hint: str
+
+
+# Parametri di comportamento prima solo in .env (+ riavvio). Qui diventano regolabili da UI e
+# attivi dal run successivo (persistiti come gli altri override). I range coincidono con i
+# vincoli di `Settings`, perché `model_copy` NON rivalida: la validazione la fa `validate_runtime`.
+RUNTIME_FIELDS: dict[str, RuntimeField] = {
+    "rubric_threshold": RuntimeField(
+        "harness_rubric_threshold", 0.0, 1.0, False, "Soglia obiettivo", "sotto → l'agente riprova"
+    ),
+    "escalation_threshold": RuntimeField(
+        "harness_escalation_threshold", 0.0, 1.0, False, "Soglia escalation", "sotto → sale modello"
+    ),
+    "max_continuations": RuntimeField(
+        "harness_max_continuations", 1, 10, True, "Max continuazioni", "iterazioni per obiettivo"
+    ),
+    "max_tool_calls": RuntimeField(
+        "harness_max_tool_calls", 1, 200, True, "Max tool call", "budget chiamate per run"
+    ),
+    "tool_output_limit": RuntimeField(
+        "harness_tool_output_limit",
+        1_000,
+        100_000,
+        True,
+        "Limite output tool",
+        "char prima offload",
+    ),
+    "memory_max_chars": RuntimeField(
+        "harness_memory_max_chars", 1_000, 200_000, True, "Cap memoria", "char max di AGENTS.md"
+    ),
+    "context_window": RuntimeField(
+        "harness_context_window",
+        1_000,
+        2_000_000,
+        True,
+        "Finestra contesto",
+        "token di riferimento",
+    ),
+    "context_warning_ratio": RuntimeField(
+        "harness_context_warning_ratio", 0.1, 1.0, False, "Warning contesto", "frazione finestra"
+    ),
+    "context_compaction_ratio": RuntimeField(
+        "harness_context_compaction_ratio",
+        0.1,
+        1.0,
+        False,
+        "Compaction contesto",
+        "frazione finestra",
+    ),
+}
+
+
+def runtime_snapshot(settings: Settings) -> list[dict[str, Any]]:
+    """Valori runtime correnti per la UI: chiave, valore, range, etichetta."""
+    return [
+        {
+            "key": key,
+            "value": getattr(settings, spec.field),
+            "min": spec.minimum,
+            "max": spec.maximum,
+            "is_int": spec.is_int,
+            "label": spec.label,
+            "hint": spec.hint,
+        }
+        for key, spec in RUNTIME_FIELDS.items()
+    ]
+
+
+def apply_runtime_change(overrides: dict[str, Any], key: str, value: float) -> str | None:
+    """Valida un cambio runtime e lo scrive negli override. Ritorna un problema o None.
+
+    Regge sia il range sia il tipo (int/float). Un valore fuori range non viene scritto: meglio
+    rifiutare qui che lasciare un run partire con una soglia assurda.
+    """
+    spec = RUNTIME_FIELDS.get(key)
+    if spec is None:
+        return f"Parametro sconosciuto: {key}"
+    try:
+        number: float = float(value)
+    except (TypeError, ValueError):
+        return f"{spec.label}: valore non numerico."
+    if number < spec.minimum or number > spec.maximum:
+        return f"{spec.label}: fuori range [{spec.minimum}, {spec.maximum}]."
+    overrides[spec.field] = int(number) if spec.is_int else number
+    return None
+
+
 def allowed_fields() -> set[str]:
     """I soli campi di ``Settings`` che la UI può sovrascrivere.
 
@@ -66,6 +162,7 @@ def allowed_fields() -> set[str]:
     fields: set[str] = set(KEY_FIELDS)
     fields.update(FLAG_FIELDS.values())
     fields.add(SCHEDULER_FIELD)
+    fields.update(spec.field for spec in RUNTIME_FIELDS.values())
     for tier in TIERS:
         fields.add(f"harness_provider_{tier}")
         for provider in PROVIDERS:
@@ -191,11 +288,7 @@ def _parse_model_ids(data: Any) -> list[str]:
     entries = data.get("data")
     if not isinstance(entries, list):
         return []
-    ids = {
-        str(entry["id"])
-        for entry in entries
-        if isinstance(entry, dict) and entry.get("id")
-    }
+    ids = {str(entry["id"]) for entry in entries if isinstance(entry, dict) and entry.get("id")}
     return sorted(ids)
 
 

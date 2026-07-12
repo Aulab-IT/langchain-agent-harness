@@ -421,6 +421,195 @@ def test_scheduler_toggle_persists_and_reports_state(client: TestClient) -> None
     assert server.settings.harness_enable_triggers is False
 
 
+def test_classify_run_error_gives_actionable_messages() -> None:
+    invalid_file = server._classify_run_error(
+        Exception("Error code: 400 - {'message': 'file is badly formatted or corrupted', "
+                   "'code': 'invalid_file'}")
+    )
+    assert "nuova sessione" in invalid_file and "corrotto" in invalid_file
+    assert "frequenza" in server._classify_run_error(Exception("429 rate limit exceeded"))
+    assert "chiave API" in server._classify_run_error(Exception("401 invalid api key"))
+    # Errore ignoto: resta il messaggio generico.
+    assert "fallita" in server._classify_run_error(Exception("qualcosa di strano"))
+
+
+def test_trigger_auto_approve_persisted_and_applied_to_session(client: TestClient) -> None:
+    trigger = client.post(
+        "/api/triggers",
+        json={
+            "kind": "cron",
+            "name": "Autonomo",
+            "goal_template": "fai",
+            "cron_expr": "0 9 * * *",
+            "auto_approve": True,
+        },
+    ).json()
+    assert trigger["auto_approve"] is True
+
+    # Al fire, la sessione del trigger deve ereditare l'auto-approvazione.
+    session_id = server._ensure_trigger_session(server.store.get_trigger(trigger["id"]))
+    assert server.store.get_session(session_id).get("auto_approve") is True
+
+    # Un trigger di default richiede conferma.
+    plain = client.post(
+        "/api/triggers",
+        json={"kind": "cron", "name": "Prudente", "goal_template": "x", "cron_expr": "0 9 * * *"},
+    ).json()
+    assert plain["auto_approve"] is False
+    sid = server._ensure_trigger_session(server.store.get_trigger(plain["id"]))
+    assert server.store.get_session(sid).get("auto_approve") is False
+
+
+def test_webhook_fires_use_a_fresh_session_each_time(client: TestClient) -> None:
+    trigger = client.post(
+        "/api/triggers",
+        json={"kind": "webhook", "name": "recensioni", "goal_template": "analizza"},
+    ).json()
+    t = server.store.get_trigger(trigger["id"])
+    first = server._ensure_trigger_session(t)
+    second = server._ensure_trigger_session(server.store.get_trigger(trigger["id"]))
+    # Ogni evento webhook = sessione nuova: due invii non si accodano (niente skip).
+    assert first != second
+
+
+def test_cron_reuses_its_session(client: TestClient) -> None:
+    trigger = client.post(
+        "/api/triggers",
+        json={"kind": "cron", "name": "orario", "goal_template": "x", "cron_expr": "0 9 * * *"},
+    ).json()
+    first = server._ensure_trigger_session(server.store.get_trigger(trigger["id"]))
+    second = server._ensure_trigger_session(server.store.get_trigger(trigger["id"]))
+    assert first == second
+
+
+def test_text_response_trigger_injects_no_file_directive(client: TestClient) -> None:
+    normal = client.post(
+        "/api/triggers",
+        json={"kind": "webhook", "name": "n", "goal_template": "classifica"},
+    ).json()
+    assert normal["text_response"] is False
+    # Trigger normale: nessuna direttiva "risposta diretta" nel goal.
+    goal_normal = server._trigger_goal(server.store.get_trigger(normal["id"]), {"x": 1})
+    assert "risposta diretta" not in goal_normal.lower()
+
+    direct = client.post(
+        "/api/triggers",
+        json={"kind": "webhook", "name": "d", "goal_template": "classifica", "text_response": True},
+    ).json()
+    assert direct["text_response"] is True
+    goal_direct = server._trigger_goal(server.store.get_trigger(direct["id"]), {"x": 1})
+    assert "risposta diretta" in goal_direct.lower()
+    assert "non creare" in goal_direct.lower() and "docker_exec" in goal_direct.lower()
+
+
+def test_trigger_model_tier_applied_to_session(client: TestClient) -> None:
+    trigger = client.post(
+        "/api/triggers",
+        json={
+            "kind": "cron",
+            "name": "forte",
+            "goal_template": "classifica",
+            "cron_expr": "0 9 * * *",
+            "model_tier": "high",
+        },
+    ).json()
+    assert trigger["model_tier"] == "high"
+    sid = server._ensure_trigger_session(server.store.get_trigger(trigger["id"]))
+    assert server.store.get_session(sid).get("model_override") == "high"
+
+
+def test_trigger_list_reports_running_state(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={"title": "Trig"}).json()
+    trigger = client.post(
+        "/api/triggers",
+        json={"kind": "cron", "name": "Orario", "goal_template": "fai", "cron_expr": "0 9 * * *"},
+    ).json()
+    # Nessun run: non in esecuzione.
+    got = next(t for t in client.get("/api/triggers").json() if t["id"] == trigger["id"])
+    assert got["running"] is False
+
+    # Aggancia la sessione al trigger e apri un run non terminale in quella sessione.
+    server.store.attach_trigger_session(trigger["id"], session["id"])
+    run = server.store.create_run(session["id"])
+    server.store.update_run(run["id"], status="running")
+
+    got = next(t for t in client.get("/api/triggers").json() if t["id"] == trigger["id"])
+    assert got["running"] is True
+    assert got["active_run_id"] == run["id"]
+
+
+def test_costs_endpoint_aggregates_run_costs(client: TestClient) -> None:
+    # Vuoto all'inizio.
+    empty = client.get("/api/costs").json()
+    assert empty["total_usd"] == "0" and empty["sessions"] == []
+
+    # Simula due run con costo, come farebbe RunManager salvando usage con cost_usd.
+    session = client.post("/api/sessions", json={"title": "Costosa"}).json()
+    for cost in ("0.0030", "0.0020"):
+        run = server.store.create_run(session["id"])
+        server.store.update_run(run["id"], status="completed", usage={"cost_usd": cost})
+
+    body = client.get("/api/costs").json()
+    assert body["total_usd"] == "0.0050"
+    assert body["sessions"][0]["session_id"] == session["id"]
+    assert body["sessions"][0]["runs"] == 2
+    assert len(body["recent"]) == 2
+
+
+def test_estimate_cost_usd_uses_catalog() -> None:
+    from agent_harness.pricing import catalog_from_settings, estimate_cost_usd
+
+    settings = Settings(_env_file=None)
+    catalog = catalog_from_settings(settings)
+    # 1M token input + 1M output sul modello basso: costo = price_in + price_out.
+    cost = estimate_cost_usd(
+        input_tokens=1_000_000,
+        output_tokens=1_000_000,
+        reasoning_tokens=0,
+        provider="openai",
+        model=settings.openai_model_low,
+        catalog=catalog,
+    )
+    assert float(cost) > 0
+    # Modello inesistente → nessun listino → costo 0.
+    zero = estimate_cost_usd(
+        input_tokens=1_000_000,
+        output_tokens=0,
+        reasoning_tokens=0,
+        provider="openai",
+        model="modello-che-non-esiste",
+        catalog=catalog,
+    )
+    assert zero == "0"
+
+
+def test_runtime_settings_roundtrip_and_range_validation(client: TestClient) -> None:
+    fields = client.get("/api/settings/runtime").json()["fields"]
+    keys = {f["key"] for f in fields}
+    assert {"rubric_threshold", "max_tool_calls", "memory_max_chars"} <= keys
+
+    # Valore valido: salvato e attivo (settings di processo aggiornato).
+    ok = client.put("/api/settings/runtime", json={"values": {"max_tool_calls": 80}})
+    assert ok.status_code == 200
+    assert server.settings.harness_max_tool_calls == 80
+
+    # Fuori range: rifiutato con 400, il valore non cambia.
+    bad = client.put("/api/settings/runtime", json={"values": {"rubric_threshold": 5}})
+    assert bad.status_code == 400
+    assert server.settings.harness_max_tool_calls == 80
+
+
+def test_rubric_endpoint_exposes_criteria_and_thresholds(client: TestClient) -> None:
+    body = client.get("/api/rubric").json()
+    assert "criteria" in body and len(body["criteria"]) == 4
+    names = {c["name"] for c in body["criteria"]}
+    assert {"completezza", "verifica", "aderenza", "sicurezza"} == names
+    # I pesi sommano a 1 e le soglie ci sono.
+    assert abs(sum(c["weight"] for c in body["criteria"]) - 1.0) < 1e-6
+    assert body["safety_veto_below"] == 0.5
+    assert 0 <= body["rubric_threshold"] <= 1
+
+
 def test_notifications_lifecycle(client: TestClient) -> None:
     assert client.get("/api/notifications").json()["unread_count"] == 0
     # Simula ciò che fa RunManager quando un run termina.
@@ -662,6 +851,46 @@ def test_webhook_trigger_requires_valid_token(client: TestClient) -> None:
     )
     assert ok.status_code == 202
     assert ok.json()["run_id"]
+
+
+def test_webhook_synchronous_wait_returns_final_status(client: TestClient) -> None:
+    trigger = client.post(
+        "/api/triggers",
+        json={"kind": "webhook", "name": "sync", "goal_template": "elabora", "auto_approve": True},
+    ).json()
+    # Senza chiave il run fallisce subito, ma il path sincrono deve comunque ATTENDERE il run
+    # e rispondere 200 con lo stato finale e il campo response (invece del 202 fire-and-forget).
+    resp = client.post(
+        f"/api/triggers/{trigger['id']}/webhook?token={trigger['token']}&wait=true&timeout=30",
+        json={"x": 1},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "status" in body and "response" in body and body["run_id"]
+
+
+def test_webhook_accepts_token_in_query_and_text_body(client: TestClient) -> None:
+    # Percorso "pagina browser": token nel query, body text/plain (nessun preflight).
+    trigger = client.post(
+        "/api/triggers",
+        json={"kind": "webhook", "name": "wh2", "goal_template": "analizza la recensione"},
+    ).json()
+    resp = client.post(
+        f"/api/triggers/{trigger['id']}/webhook?token={trigger['token']}",
+        headers={"Content-Type": "text/plain;charset=UTF-8"},
+        content='{"cliente":"Anna","rating":4,"testo":"ottimo"}',
+    )
+    assert resp.status_code == 202
+    assert resp.json()["run_id"]
+    assert resp.headers.get("access-control-allow-origin") == "*"
+
+    # Query token errato → 403.
+    bad = client.post(
+        f"/api/triggers/{trigger['id']}/webhook?token=sbagliato",
+        headers={"Content-Type": "text/plain"},
+        content="{}",
+    )
+    assert bad.status_code == 403
 
 
 def test_stop_sandbox_missing_session_is_404(client: TestClient) -> None:

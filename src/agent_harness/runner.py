@@ -274,6 +274,7 @@ class GoalRunner:
                 "score": grade.score,
                 "feedback": grade.feedback,
                 "criteria_scores": grade.criteria_scores,
+                "safety_vetoed": grade.safety_vetoed,
             }
         )
         return grade

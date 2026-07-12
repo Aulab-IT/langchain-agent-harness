@@ -239,6 +239,26 @@ class ControlStore:
                 self._connection.execute(
                     "ALTER TABLE triggers ADD COLUMN success_criteria TEXT NOT NULL DEFAULT ''"
                 )
+            # Politica di approvazione del trigger: 0 = richiede conferma, 1 = autonomo (la sua
+            # sessione va in auto-approve a ogni fire). Default 0: un cron non gira comandi
+            # non sorvegliati se non lo si è scelto. La rete richiede comunque sempre conferma.
+            if "auto_approve" not in trigger_columns:
+                self._connection.execute(
+                    "ALTER TABLE triggers ADD COLUMN auto_approve INTEGER NOT NULL DEFAULT 0"
+                )
+            # Gradino modello forzato per i run del trigger: 'auto' lascia decidere al router,
+            # altrimenti 'low'/'mid'/'high'. Un cron di classificazione vuole un modello capace
+            # senza aspettare l'escalation, che sul nano può sbagliare al primo colpo.
+            if "model_tier" not in trigger_columns:
+                self._connection.execute(
+                    "ALTER TABLE triggers ADD COLUMN model_tier TEXT NOT NULL DEFAULT 'auto'"
+                )
+            # Risposta diretta: 1 = il run risponde solo con testo (niente file/verifica/tool),
+            # per webhook che vogliono una classificazione/sintesi, non un artefatto nel workspace.
+            if "text_response" not in trigger_columns:
+                self._connection.execute(
+                    "ALTER TABLE triggers ADD COLUMN text_response INTEGER NOT NULL DEFAULT 0"
+                )
 
     def create_session(self, title: str = "Nuova sessione") -> dict[str, Any]:
         session_id = str(uuid.uuid4())
@@ -503,6 +523,62 @@ class ControlStore:
                     run_id,
                 ),
             )
+
+    def cost_summary(self, *, recent: int = 20) -> dict[str, Any]:
+        """Costo totale, per sessione e dei run recenti, dal campo ``cost_usd`` nell'usage.
+
+        Somma i costi già registrati sui run (nessun ricalcolo): il denaro resta ``Decimal`` per
+        non accumulare errore, e viene serializzato a stringa solo in uscita.
+        """
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT r.id, r.session_id, r.completed_at, r.usage_json, s.title AS session_title
+                FROM runs r LEFT JOIN sessions s ON s.id = r.session_id
+                WHERE r.usage_json LIKE '%cost_usd%'
+                ORDER BY r.completed_at DESC
+                """
+            ).fetchall()
+        total = Decimal(0)
+        by_session: dict[str, dict[str, Any]] = {}
+        recent_runs: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                cost = Decimal(str(json.loads(row["usage_json"] or "{}").get("cost_usd", "0")))
+            except (ArithmeticError, ValueError, TypeError):
+                cost = Decimal(0)
+            total += cost
+            sid = row["session_id"]
+            bucket = by_session.setdefault(
+                sid,
+                {
+                    "session_id": sid,
+                    "title": row["session_title"] or "Sessione",
+                    "cost": Decimal(0),
+                    "runs": 0,
+                },
+            )
+            bucket["cost"] += cost
+            bucket["runs"] += 1
+            if len(recent_runs) < recent:
+                recent_runs.append(
+                    {
+                        "run_id": row["id"],
+                        "session_id": sid,
+                        "title": row["session_title"] or "Sessione",
+                        "cost_usd": str(cost),
+                        "completed_at": row["completed_at"],
+                    }
+                )
+        sessions = sorted(
+            (
+                {**bucket, "cost_usd": str(bucket.pop("cost"))}
+                for bucket in by_session.values()
+            ),
+            key=lambda item: Decimal(item["cost_usd"]),
+            reverse=True,
+        )
+        return {"total_usd": str(total), "sessions": sessions, "recent": recent_runs}
 
     def record_model_call(
         self,
@@ -882,6 +958,8 @@ class ControlStore:
     def _trigger(row: sqlite3.Row) -> dict[str, Any]:
         item = dict(row)
         item["enabled"] = bool(item["enabled"])
+        item["auto_approve"] = bool(item.get("auto_approve", 0))
+        item["text_response"] = bool(item.get("text_response", 0))
         return item
 
     def create_trigger(
@@ -895,17 +973,22 @@ class ControlStore:
         token: str | None = None,
         timezone: str = "UTC",
         success_criteria: str = "",
+        auto_approve: bool = False,
+        model_tier: str = "auto",
+        text_response: bool = False,
     ) -> dict[str, Any]:
         trigger_id = str(uuid.uuid4())
         now = utc_now()
+        tier = model_tier if model_tier in {"auto", "low", "mid", "high"} else "auto"
         with self._lock, self._connection:
             self._connection.execute(
                 """
                 INSERT INTO triggers(
                     id, kind, name, cron_expr, token, goal_template,
-                    session_id, enabled, created_at, timezone, success_criteria
+                    session_id, enabled, created_at, timezone, success_criteria,
+                    auto_approve, model_tier, text_response
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     trigger_id,
@@ -918,6 +1001,9 @@ class ControlStore:
                     now,
                     timezone,
                     success_criteria,
+                    1 if auto_approve else 0,
+                    tier,
+                    1 if text_response else 0,
                 ),
             )
         return self.get_trigger(trigger_id)

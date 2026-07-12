@@ -132,6 +132,13 @@ export function ContextPanel({
       <div className="mx-5 mb-5 rounded-lg border border-border bg-surface-raised/40 px-4 py-3 text-xs leading-relaxed text-muted">
         Totale provider esatto: {usage.input_tokens} input + {usage.output_tokens} output.
         Breakdown categorie {usage.estimated_context ? "stimato dallo stato graph" : "esatto"}.
+        {usage.cost_usd && Number(usage.cost_usd) > 0 ? (
+          <>
+            {" "}
+            Costo stimato del run:{" "}
+            <strong className="text-foreground">${Number(usage.cost_usd).toFixed(4)}</strong>.
+          </>
+        ) : null}
       </div>
 
       {open ? <ContextModal sessionId={sessionId} onClose={() => setOpen(false)} /> : null}

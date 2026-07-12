@@ -6,6 +6,7 @@ export function iconFor(type: string): string {
   if (type === "run_completed") return "✅";
   if (type === "run_failed") return "❌";
   if (type === "run_incomplete") return "⚠️";
+  if (type === "trigger_started") return "▶️";
   if (NEEDS_YOU.has(type)) return "🙋";
   return "•";
 }

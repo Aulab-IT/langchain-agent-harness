@@ -17,9 +17,11 @@ import { CronPicker } from "./CronPicker";
 export function TriggersView({
   runtime,
   onSchedulerChange,
+  onOpenSession,
 }: {
   runtime: RuntimeStatus;
   onSchedulerChange?: () => void;
+  onOpenSession?: (sessionId: string) => void;
 }) {
   const [triggers, setTriggers] = useState<Trigger[]>([]);
   const [schedulerBusy, setSchedulerBusy] = useState(false);
@@ -29,6 +31,9 @@ export function TriggersView({
   const [cron, setCron] = useState("0 9 * * *");
   const [timezone, setTimezone] = useState(browserZone());
   const [criteria, setCriteria] = useState("");
+  const [autoApprove, setAutoApprove] = useState(false);
+  const [textResponse, setTextResponse] = useState(false);
+  const [modelTier, setModelTier] = useState<"auto" | "low" | "mid" | "high">("auto");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -40,8 +45,12 @@ export function TriggersView({
     }
   }, []);
 
+  // Polling: la vista prima caricava una volta sola, quindi un trigger che partiva non si
+  // vedeva finché non facevi refresh. Ora lo stato «in esecuzione» si aggiorna da solo.
   useEffect(() => {
     void refresh();
+    const timer = window.setInterval(() => void refresh(), 4000);
+    return () => window.clearInterval(timer);
   }, [refresh]);
 
   const submit = async () => {
@@ -56,10 +65,16 @@ export function TriggersView({
         cron_expr: kind === "cron" ? cron.trim() : null,
         timezone,
         success_criteria: criteria.trim(),
+        auto_approve: autoApprove,
+        model_tier: modelTier,
+        text_response: textResponse,
       });
       setName("");
       setGoal("");
       setCriteria("");
+      setAutoApprove(false);
+      setTextResponse(false);
+      setModelTier("auto");
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Creazione fallita");
@@ -170,14 +185,14 @@ export function TriggersView({
             onChange={(event) => setName(event.target.value)}
           />
           <textarea
-            className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            className="max-h-[60vh] min-h-[64px] w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
             placeholder="Obiettivo (goal template) per il run"
-            rows={2}
+            rows={3}
             value={goal}
             onChange={(event) => setGoal(event.target.value)}
           />
           <textarea
-            className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            className="max-h-[60vh] min-h-[56px] w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
             placeholder="Criterio di successo: quando l'obiettivo si considera raggiunto (facoltativo)"
             rows={2}
             value={criteria}
@@ -196,6 +211,73 @@ export function TriggersView({
               attendibile, mai come istruzioni.
             </p>
           )}
+          <label className="flex flex-col gap-1 text-xs text-muted">
+            Modello
+            <select
+              value={modelTier}
+              onChange={(e) => setModelTier(e.target.value as typeof modelTier)}
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+            >
+              <option value="auto">Automatico (parte dal basso, sale se serve)</option>
+              <option value="low">Basso · economico e veloce</option>
+              <option value="mid">Medio</option>
+              <option value="high">Alto · più capace (consigliato per classificare/analizzare)</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => setAutoApprove((v) => !v)}
+            className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-left text-sm transition hover:border-warning/30"
+          >
+            <span className="flex min-w-0 flex-col">
+              <span className="flex items-center gap-2">
+                Esecuzione autonoma
+                <span className="text-xs text-muted">{autoApprove ? "on" : "off"}</span>
+              </span>
+              {/* Testo costante (condizionale "se attivo"): corretto in entrambi gli stati e a
+                  lunghezza fissa, così il componente non si allunga al toggle. */}
+              <span className="truncate text-xs text-muted">
+                Se attivo: comandi sandbox senza conferma (rete sempre da approvare).
+              </span>
+            </span>
+            <span
+              className={`ml-3 inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition ${
+                autoApprove ? "bg-warning/70" : "bg-border"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                  autoApprove ? "translate-x-4" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTextResponse((v) => !v)}
+            className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-left text-sm transition hover:border-accent/30"
+          >
+            <span className="flex min-w-0 flex-col">
+              <span className="flex items-center gap-2">
+                Risposta diretta
+                <span className="text-xs text-muted">{textResponse ? "on" : "off"}</span>
+              </span>
+              <span className="truncate text-xs text-muted">
+                Se attivo: solo testo, niente file né verifiche in sandbox (per classificare/sintetizzare).
+              </span>
+            </span>
+            <span
+              className={`ml-3 inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition ${
+                textResponse ? "bg-accent/70" : "bg-border"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                  textResponse ? "translate-x-4" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+          </button>
           {error ? <p className="text-sm text-danger">{error}</p> : null}
           <button
             type="button"
@@ -227,7 +309,42 @@ export function TriggersView({
                     {trigger.kind === "cron" ? <Timer size={15} /> : <Webhook size={15} />}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{trigger.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium">{trigger.name}</span>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase ${
+                          trigger.auto_approve
+                            ? "bg-warning/10 text-warning"
+                            : "bg-border/60 text-muted"
+                        }`}
+                        title={
+                          trigger.auto_approve
+                            ? "Autonomo: comandi sandbox senza conferma (rete esclusa)"
+                            : "Richiede conferma sui comandi sandbox"
+                        }
+                      >
+                        {trigger.auto_approve ? "autonomo" : "conferma"}
+                      </span>
+                      {trigger.model_tier && trigger.model_tier !== "auto" ? (
+                        <span
+                          className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] uppercase text-accent"
+                          title="Gradino modello forzato per questo trigger"
+                        >
+                          {trigger.model_tier}
+                        </span>
+                      ) : null}
+                      {trigger.running && trigger.session_id ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenSession?.(trigger.session_id as string)}
+                          title="In esecuzione — apri l'agente"
+                          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success transition hover:bg-success/20"
+                        >
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
+                          in esecuzione →
+                        </button>
+                      ) : null}
+                    </div>
                     <div className="font-mono text-xs text-muted">
                       {trigger.kind === "cron"
                         ? `${trigger.cron_expr} · ${trigger.timezone}`
@@ -277,23 +394,51 @@ export function TriggersView({
                   </button>
                 </div>
                 {trigger.kind === "webhook" && trigger.token ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised/40 px-3 py-2">
-                    <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs text-muted">
-                      curl -X POST {webhookUrl(trigger.id)} -H &quot;X-Trigger-Token:{" "}
-                      {trigger.token}&quot;
-                    </code>
-                    <button
-                      type="button"
-                      className="shrink-0 rounded-md p-1.5 text-muted hover:text-foreground"
-                      aria-label="Copia comando"
-                      onClick={() =>
-                        copy(
-                          `curl -X POST ${webhookUrl(trigger.id)} -H "X-Trigger-Token: ${trigger.token}"`,
-                        )
-                      }
-                    >
-                      <Copy size={14} />
-                    </button>
+                  <div className="space-y-2 rounded-lg border border-border bg-surface-raised/40 p-2.5">
+                    {(
+                      [
+                        ["URL", webhookUrl(trigger.id)],
+                        ["Token", trigger.token],
+                      ] as Array<[string, string]>
+                    ).map(([label, value]) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <span className="w-12 shrink-0 text-[11px] font-medium uppercase text-muted">
+                          {label}
+                        </span>
+                        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs text-foreground">
+                          {value}
+                        </code>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-md p-1.5 text-muted hover:text-foreground"
+                          aria-label={`Copia ${label}`}
+                          onClick={() => copy(value)}
+                        >
+                          <Copy size={13} />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2 border-t border-border pt-2">
+                      <span className="w-12 shrink-0 text-[11px] font-medium uppercase text-muted">
+                        curl
+                      </span>
+                      <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs text-muted">
+                        curl -X POST {webhookUrl(trigger.id)} -H &quot;X-Trigger-Token:{" "}
+                        {trigger.token}&quot;
+                      </code>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-md p-1.5 text-muted hover:text-foreground"
+                        aria-label="Copia comando curl"
+                        onClick={() =>
+                          copy(
+                            `curl -X POST ${webhookUrl(trigger.id)} -H "X-Trigger-Token: ${trigger.token}"`,
+                          )
+                        }
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
                   </div>
                 ) : null}
                 <p className="line-clamp-2 text-xs text-muted">{trigger.goal_template}</p>

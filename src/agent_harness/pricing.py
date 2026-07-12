@@ -191,6 +191,34 @@ def compute_costs(
     return input_cost, output_cost, reasoning_cost
 
 
+def estimate_cost_usd(
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    reasoning_tokens: int,
+    provider: str,
+    model: str,
+    catalog: PricingCatalog,
+) -> str:
+    """Costo in dollari di un run, come stringa ``Decimal``, dai token cumulativi e dal listino.
+
+    Stima a granularità di run: usa il prezzo del modello che ha risposto sui token totali
+    consumati. Un modello fuori listino (o locale, prezzo zero) contribuisce 0. Restituisce una
+    stringa perché il denaro è ``Decimal``, mai ``float`` (il ledger non deve accumulare errore).
+    """
+    price = catalog.resolve(provider, model)
+    if price is None:
+        return "0"
+    input_cost, output_cost, reasoning_cost = compute_costs(
+        input_tokens=max(0, input_tokens),
+        cached_input_tokens=0,
+        output_tokens=max(0, output_tokens),
+        reasoning_tokens=max(0, reasoning_tokens),
+        price=price,
+    )
+    return str(input_cost + output_cost + reasoning_cost)
+
+
 def _int(value: Any) -> int:
     try:
         return max(0, int(value))

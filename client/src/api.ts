@@ -1,6 +1,7 @@
 import type {
   CanaryAnalysis,
   ContextData,
+  CostSummary,
   CronPreview,
   ConfigVersion,
   EvaluationArtifact,
@@ -9,6 +10,8 @@ import type {
   ImprovementSummary,
   McpStatus,
   ModelOverride,
+  Rubric,
+  RuntimeField,
   Run,
   RunEvent,
   PromotionResult,
@@ -99,6 +102,24 @@ export function updateMcpConfig(content: string): Promise<{ content: string; ser
 
 export function getMcpStatus(): Promise<McpStatus> {
   return request("/api/settings/mcp/status");
+}
+
+export function getRubric(): Promise<Rubric> {
+  return request("/api/rubric");
+}
+
+export function getCosts(): Promise<CostSummary> {
+  return request("/api/costs");
+}
+
+export function getRuntimeSettings(): Promise<{ fields: RuntimeField[] }> {
+  return request("/api/settings/runtime");
+}
+
+export function updateRuntimeSettings(
+  values: Record<string, number>,
+): Promise<{ fields: RuntimeField[] }> {
+  return request("/api/settings/runtime", jsonOptions("PUT", { values }));
 }
 
 export function setTriggerScheduler(
@@ -311,6 +332,9 @@ export function createTrigger(body: {
   session_id?: string | null;
   timezone?: string;
   success_criteria?: string;
+  auto_approve?: boolean;
+  model_tier?: "auto" | "low" | "mid" | "high";
+  text_response?: boolean;
 }): Promise<Trigger> {
   return request("/api/triggers", jsonOptions("POST", body));
 }

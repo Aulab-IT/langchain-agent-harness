@@ -266,15 +266,22 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         tone: "running",
       };
     case "grader.completed": {
+      const vetoed = payload.safety_vetoed === true;
       const passed = payload.passed ? "passata" : "non passata";
       const score = asTraceText(payload.score);
       return {
-        title: `Valutazione rubric ${passed}`,
-        detail: [score ? `score ${score}` : null, compactTraceValue(payload.feedback, 180)]
+        title: vetoed
+          ? "Valutazione rubric — VETO di sicurezza"
+          : `Valutazione rubric ${passed}`,
+        detail: [
+          vetoed ? "punteggio limitato dalla sicurezza" : null,
+          score ? `score ${score}` : null,
+          compactTraceValue(payload.feedback, 180),
+        ]
           .filter(Boolean)
           .join(" · ") || null,
         subject,
-        tone: payload.passed ? "success" : "warning",
+        tone: vetoed ? "danger" : payload.passed ? "success" : "warning",
       };
     }
     case "usage.snapshot":

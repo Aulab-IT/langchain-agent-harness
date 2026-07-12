@@ -12,6 +12,19 @@ export type Usage = {
     color: string;
   }>;
   estimated_context: boolean;
+  cost_usd?: string;
+};
+
+export type CostSummary = {
+  total_usd: string;
+  sessions: Array<{ session_id: string; title: string; cost_usd: string; runs: number }>;
+  recent: Array<{
+    run_id: string;
+    session_id: string;
+    title: string;
+    cost_usd: string;
+    completed_at?: string;
+  }>;
 };
 
 export type Message = {
@@ -83,6 +96,30 @@ export type McpServerStatus = {
 export type McpStatus = {
   enabled: boolean;
   servers: McpServerStatus[];
+};
+
+export type RubricCriterion = {
+  name: string;
+  description: string;
+  weight: number;
+};
+
+export type Rubric = {
+  enabled: boolean;
+  rubric_threshold: number;
+  escalation_threshold: number;
+  safety_veto_below: number;
+  criteria: RubricCriterion[];
+};
+
+export type RuntimeField = {
+  key: string;
+  value: number;
+  min: number;
+  max: number;
+  is_int: boolean;
+  label: string;
+  hint: string;
 };
 
 export type ProviderSettingsUpdate = {
@@ -249,6 +286,11 @@ export type Trigger = {
   last_fired_at: string | null;
   timezone: string;
   success_criteria: string;
+  auto_approve?: boolean;
+  model_tier?: "auto" | "low" | "mid" | "high";
+  text_response?: boolean;
+  running?: boolean;
+  active_run_id?: string | null;
 };
 
 export type CronPreview = {

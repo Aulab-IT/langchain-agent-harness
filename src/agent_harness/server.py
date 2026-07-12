@@ -13,10 +13,10 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import uvicorn
-from fastapi import Body, FastAPI, Header, HTTPException, Query, Request, UploadFile, status
+from fastapi import FastAPI, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel, Field
 from starlette.responses import Response
@@ -56,7 +56,7 @@ from agent_harness.improve import (
 )
 from agent_harness.mcp_config import load_user_config_text, save_user_config
 from agent_harness.middleware import TIERS, Override
-from agent_harness.pricing import catalog_from_settings
+from agent_harness.pricing import catalog_from_settings, estimate_cost_usd
 from agent_harness.promotion import (
     list_config_versions,
     promote_proposal,
@@ -220,6 +220,11 @@ class NotificationsRead(BaseModel):
     ids: list[int] | None = None
 
 
+class RuntimeSettingsUpdate(BaseModel):
+    # chiave runtime (es. "rubric_threshold") → nuovo valore numerico.
+    values: dict[str, float] = Field(default_factory=dict)
+
+
 class McpConfigUpdate(BaseModel):
     content: Annotated[str, Field(max_length=100_000)]
 
@@ -246,6 +251,13 @@ class TriggerCreate(BaseModel):
     session_id: str | None = None
     timezone: Annotated[str, Field(default="UTC", max_length=64)]
     success_criteria: Annotated[str, Field(default="", max_length=2_000)]
+    # False = il run del trigger chiede conferma sui comandi sandbox; True = autonomo (la sua
+    # sessione va in auto-approve). La rete resta sempre da confermare, anche in autonomo.
+    auto_approve: bool = False
+    # Gradino modello forzato per i run del trigger. 'auto' = lascia decidere al router.
+    model_tier: Literal["auto", "low", "mid", "high"] = "auto"
+    # True = risposta solo testuale (niente file/verifica/tool): per classificazioni e sintesi.
+    text_response: bool = False
 
 
 class CronPreview(BaseModel):
@@ -593,6 +605,67 @@ def _select_attachments(changed_files: list[str]) -> list[str]:
     return selected[:_MAX_CHAT_ATTACHMENTS]
 
 
+def _model_provider_map() -> dict[str, str]:
+    """Mappa nome-modello → provider, dai tre gradini configurati, per risolvere il listino."""
+    mapping: dict[str, str] = {}
+    for tier in TIERS:
+        spec = tier_spec(settings, tier)
+        if spec.name:
+            mapping[spec.name] = spec.provider
+    return mapping
+
+
+def _run_cost_usd(usage: dict[str, Any], selected_model: str | None) -> str:
+    """Stima il costo in $ del run dai token cumulativi e dal listino del modello che ha risposto.
+
+    Stima a granularità di run: usa il prezzo del modello selezionato. Se il modello è ignoto o
+    locale (prezzo zero) il costo è 0. Il ledger fine (per-chiamata) è un passo successivo.
+    """
+    if not selected_model:
+        return "0"
+    provider = _model_provider_map().get(selected_model, "openai")
+    return estimate_cost_usd(
+        input_tokens=int(usage.get("cumulative_input_tokens", usage.get("input_tokens", 0))),
+        output_tokens=int(usage.get("cumulative_output_tokens", usage.get("output_tokens", 0))),
+        reasoning_tokens=int(usage.get("reasoning_tokens", 0)),
+        provider=provider,
+        model=selected_model,
+        catalog=catalog_from_settings(settings),
+    )
+
+
+def _classify_run_error(exc: Exception) -> str:
+    """Traduce l'eccezione di un run in un messaggio utile e sicuro per la UI.
+
+    Prima ogni fallimento diventava un generico «Esecuzione agente fallita»: l'errore vero (es.
+    un 400 del provider per un file corrotto) restava sepolto nei log, e l'utente non sapeva né
+    cosa fosse successo né cosa fare. Qui si riconoscono le cause note e si dà un'indicazione
+    azionabile, senza esporre dettagli sensibili del provider.
+    """
+    name = type(exc).__name__
+    text = str(exc).lower()
+    if "invalid_file" in text or ("file" in text and "corrupt" in text):
+        return (
+            "Il modello ha ricevuto un file non valido o corrotto (probabilmente un artefatto "
+            "malformato prodotto in un passo precedente). La conversazione è compromessa: apri "
+            "una nuova sessione e riprova."
+        )
+    if "rate limit" in text or "429" in text or name == "RateLimitError":
+        return "Limite di frequenza del provider raggiunto. Attendi qualche istante e riprova."
+    auth_error = name in {"AuthenticationError", "PermissionDeniedError"}
+    if auth_error or "api key" in text or "401" in text:
+        return "Autenticazione al provider fallita. Controlla la chiave API nelle Impostazioni."
+    if "context_length" in text or "maximum context" in text or "too many tokens" in text:
+        return (
+            "Superata la finestra di contesto del modello. Compatta il contesto o apri una "
+            "nuova sessione."
+        )
+    net_error = name in {"APITimeoutError", "APIConnectionError"}
+    if net_error or "timeout" in text or "connection" in text:
+        return "Il provider non ha risposto in tempo. Riprova tra poco."
+    return "Esecuzione agente fallita. Controlla configurazione e log backend."
+
+
 def _pending_with_network(value: Any) -> bool:
     """True se una delle tool call in sospeso chiede accesso rete (with_network)."""
     if isinstance(value, dict):
@@ -895,6 +968,7 @@ class RunManager:
 
             elapsed = time.monotonic() - started
             usage = compute_usage(result.messages, elapsed)
+            usage["cost_usd"] = _run_cost_usd(usage, selected_model)
             _persist_context(session_id, result.messages)
             # Frena la crescita incontrollata della memoria scritta dall'agente: se il file ha
             # sforato il limite, lo tronca e lo rende visibile invece di gonfiare ogni prompt.
@@ -963,19 +1037,11 @@ class RunManager:
             store.update_run(run_id, status="cancelled", usage=cancelled_usage)
             self._emit(run_id, session_id, "run.cancelled", {"status": "cancelled"})
             raise
-        except Exception:
+        except Exception as exc:
             _LOGGER.exception("Agent run failed", extra={"run_id": run_id})
-            store.update_run(
-                run_id,
-                status="failed",
-                error="Esecuzione agente fallita. Controlla configurazione e log backend.",
-            )
-            self._emit(
-                run_id,
-                session_id,
-                "run.failed",
-                {"error": "Esecuzione agente fallita."},
-            )
+            message = _classify_run_error(exc)
+            store.update_run(run_id, status="failed", error=message)
+            self._emit(run_id, session_id, "run.failed", {"error": message})
             self._notify(
                 "run_failed",
                 f"«{self._session_label(session_id)}» — fallito",
@@ -1050,9 +1116,23 @@ def _require_trigger(trigger_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Trigger non trovato.") from exc
 
 
+_TEXT_RESPONSE_DIRECTIVE = (
+    "\n\n[Modalità risposta diretta — OBBLIGATORIO, ha la precedenza]\n"
+    "Rispondi UNICAMENTE con il testo richiesto. NON creare né scrivere file, NON usare "
+    "docker_exec, NON produrre artefatti nel workspace, NON eseguire verifiche in sandbox. "
+    "La tua risposta finale È il risultato consegnato a chi ha chiamato. Ignora, per questo "
+    "compito, ogni indicazione generale che chiede di produrre artefatti o verificarli: qui "
+    "non serve e non va fatto."
+)
+
+
 def _trigger_goal(trigger: dict[str, Any], payload: Any = None) -> str:
     """Costruisce il goal del run; il payload webhook è allegato come dato NON attendibile."""
     goal = str(trigger["goal_template"])
+    if trigger.get("text_response"):
+        # Sovrascrive il default dell'harness (produci artefatti + verifica in sandbox), che per
+        # una classificazione/sintesi via webhook porterebbe l'agente a creare file inutili.
+        goal += _TEXT_RESPONSE_DIRECTIVE
     criteria = str(trigger.get("success_criteria") or "").strip()
     if criteria:
         # Criterio di uscita del loop, dichiarato quando il trigger è stato creato: senza,
@@ -1069,12 +1149,29 @@ def _trigger_goal(trigger: dict[str, Any], payload: Any = None) -> str:
 
 
 def _ensure_trigger_session(trigger: dict[str, Any]) -> str:
+    """Sessione in cui gira questo fire del trigger, con la politica del trigger applicata.
+
+    I **webhook** aprono una **sessione fresca a ogni evento**: ogni richiesta in arrivo (es. una
+    recensione) è indipendente, così due invii ravvicinati non si accodano nella stessa sessione
+    finendo skippati, e ognuno lascia il proprio risultato. Il **cron** riusa invece la sua
+    sessione: è un compito periodico su un contesto stabile. La sessione più recente resta
+    agganciata al trigger, così badge «in esecuzione» e notifiche puntano al run giusto.
+    """
     session_id = trigger.get("session_id")
-    if session_id and store.session_exists(session_id):
-        return str(session_id)
-    created = store.create_session(f"Trigger · {trigger['name']}")
-    store.attach_trigger_session(trigger["id"], created["id"])
-    return str(created["id"])
+    fresh_each_fire = trigger.get("kind") == "webhook"
+    if session_id and store.session_exists(session_id) and not fresh_each_fire:
+        target = str(session_id)
+    else:
+        created = store.create_session(f"Trigger · {trigger['name']}")
+        store.attach_trigger_session(trigger["id"], created["id"])
+        target = str(created["id"])
+    # Politica del trigger applicata alla sessione: autonomia (la rete resta sempre da
+    # confermare, lo impone il predicato di approvazione) e gradino modello forzato.
+    store.set_session_auto_approve(target, bool(trigger.get("auto_approve")))
+    tier = str(trigger.get("model_tier") or "auto")
+    if tier in {"auto", "low", "mid", "high"}:
+        store.set_session_model_override(target, tier)
+    return target
 
 
 async def fire_trigger(trigger: dict[str, Any], payload: Any = None) -> str | None:
@@ -1099,6 +1196,16 @@ async def fire_trigger(trigger: dict[str, Any], payload: Any = None) -> str | No
             return None
         raise
     store.mark_trigger_fired(trigger["id"])
+    # Notifica di inizio: senza, un trigger che parte con la finestra aperta non dà alcun
+    # segnale finché non finisce. Ora arriva subito (campanella + toast + desktop) e la vista
+    # Trigger mostra lo stato in esecuzione al prossimo poll.
+    note = store.add_notification(
+        type="trigger_started",
+        title=f"▶ «{trigger.get('name', 'Trigger')}» avviato",
+        session_id=session_id,
+        run_id=run["id"],
+    )
+    store.add_event(run["id"], session_id, "notification.created", note)
     return str(run["id"])
 
 
@@ -1179,6 +1286,11 @@ async def validate_origin(
     request: Request,
     call_next: Callable[[Request], Awaitable[Response]],
 ) -> Response:
+    # I webhook sono autenticati dal token, non dall'origine: sono pensati per essere chiamati
+    # da servizi esterni (o da una pagina demo su un'altra origine). Il controllo anti-CSRF
+    # basato sull'origine non si applica a loro — vale per il resto dell'API.
+    if request.url.path.endswith("/webhook"):
+        return await call_next(request)
     origin = request.headers.get("origin")
     if request.method in {"POST", "PATCH", "DELETE"} and origin and origin not in _ALLOWED_ORIGINS:
         return Response("Origin non consentita.", status_code=403)
@@ -1211,8 +1323,8 @@ async def runtime_status() -> dict[str, Any]:
             "available": _sandbox_available(),
             "approval_required": settings.harness_require_approval,
             "network": "on-demand (per comando, con conferma)",
-            "memory": "512 MB",
-            "cpu": "1 core",
+            "memory": "2 GB",
+            "cpu": "2 core",
         },
         "verification": {
             "enabled": settings.harness_enable_rubric,
@@ -1243,6 +1355,39 @@ async def mark_notifications_read(payload: NotificationsRead) -> dict[str, Any]:
     """Segna come lette le notifiche indicate (o tutte). Ritorna il conteggio non letto residuo."""
     store.mark_notifications_read(payload.ids)
     return {"unread_count": store.unread_notification_count()}
+
+
+@app.get("/api/costs")
+async def get_costs() -> dict[str, Any]:
+    """Ledger economico in dollari: totale, per sessione e run recenti. Prima calcolato ma mai
+    mostrato — si vedevano i token, non i costi. Stima a granularità di run dal listino attivo."""
+    return store.cost_summary()
+
+
+@app.get("/api/rubric")
+async def get_rubric() -> dict[str, Any]:
+    """La rubrica di verifica: criteri, pesi, veto di sicurezza e soglie. Prima scatola nera
+    hardcoded; qui diventa ispezionabile, così si vede con che metro l'agente è giudicato."""
+    from agent_harness.verification import (
+        CRITERION_WEIGHTS,
+        DEFAULT_CRITERIA,
+        SAFETY_VETO_BELOW,
+    )
+
+    return {
+        "enabled": settings.harness_enable_rubric,
+        "rubric_threshold": settings.harness_rubric_threshold,
+        "escalation_threshold": settings.harness_escalation_threshold,
+        "safety_veto_below": SAFETY_VETO_BELOW,
+        "criteria": [
+            {
+                "name": name,
+                "description": DEFAULT_CRITERIA[name],
+                "weight": CRITERION_WEIGHTS[name],
+            }
+            for name in DEFAULT_CRITERIA
+        ],
+    }
 
 
 @app.get("/api/durable/interrupts")
@@ -1313,6 +1458,34 @@ async def update_provider_settings(payload: ProviderSettingsUpdate) -> dict[str,
     # Flag e provider possono cambiare i tool disponibili: scarta il catalogo in cache.
     invalidate_tool_catalog()
     return provider_cfg.snapshot(settings)
+
+
+@app.get("/api/settings/runtime")
+async def get_runtime_settings() -> dict[str, Any]:
+    """Parametri runtime regolabili (soglie, limiti, contesto) con valore corrente e range."""
+    return {"fields": provider_cfg.runtime_snapshot(settings)}
+
+
+@app.put("/api/settings/runtime")
+async def update_runtime_settings(payload: RuntimeSettingsUpdate) -> dict[str, Any]:
+    """Aggiorna i parametri runtime, validati per range, attivi dal run successivo.
+
+    Prima erano solo in ``.env`` con riavvio; qui si regolano da UI. Ogni valore fuori range
+    viene rifiutato prima della scrittura, così un run non parte mai con una soglia assurda.
+    """
+    global settings
+    overrides = provider_cfg.load_overrides(settings.state_dir)
+    problems: list[str] = []
+    for key, value in payload.values.items():
+        problem = provider_cfg.apply_runtime_change(overrides, key, value)
+        if problem:
+            problems.append(problem)
+    if problems:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=" ".join(problems))
+    candidate = provider_cfg.apply_overrides(settings, overrides)
+    provider_cfg.save_overrides(settings.state_dir, overrides)
+    settings = candidate
+    return {"fields": provider_cfg.runtime_snapshot(settings)}
 
 
 @app.get("/api/settings/mcp")
@@ -1630,7 +1803,16 @@ async def cancel_run(run_id: str) -> dict[str, str]:
 
 @app.get("/api/triggers")
 async def list_triggers() -> list[dict[str, Any]]:
-    return store.list_triggers()
+    """Trigger con stato runtime: se la loro sessione ha un run attivo, `running` è vero e
+    `active_run_id` punta al run — così la UI mostra «in esecuzione» e ci porta all'agente."""
+    triggers = store.list_triggers()
+    for trigger in triggers:
+        session_id = trigger.get("session_id")
+        latest = store.latest_run(session_id) if session_id else None
+        running = bool(latest and latest["status"] not in _TERMINAL_RUN_STATES)
+        trigger["running"] = running
+        trigger["active_run_id"] = latest["id"] if (latest and running) else None
+    return triggers
 
 
 @app.post("/api/triggers/preview")
@@ -1671,6 +1853,9 @@ async def create_trigger(payload: TriggerCreate) -> dict[str, Any]:
         token=token,
         timezone=payload.timezone,
         success_criteria=payload.success_criteria,
+        auto_approve=payload.auto_approve,
+        model_tier=payload.model_tier,
+        text_response=payload.text_response,
     )
 
 
@@ -1686,22 +1871,102 @@ async def delete_trigger(trigger_id: str) -> None:
     store.delete_trigger(trigger_id)
 
 
+@app.options("/api/triggers/{trigger_id}/webhook")
+async def webhook_preflight(trigger_id: str) -> Response:
+    """Preflight CORS aperto: il webhook può essere chiamato da qualsiasi origine (lo autentica
+    il token, non l'origine). Serve alle pagine browser che inviano header o content-type custom."""
+    return Response(
+        status_code=204,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, X-Trigger-Token",
+            "Access-Control-Max-Age": "600",
+        },
+    )
+
+
+async def _await_webhook_result(run_id: str, wait_seconds: int) -> dict[str, Any] | None:
+    """Attende il completamento del run (senza cancellarlo) e ne restituisce la risposta finale.
+
+    Ritorna ``None`` se scade il tempo e il run è ancora in corso: chi chiama riceve allora il
+    solo ``run_id`` (fallback async). ``asyncio.shield`` evita di annullare il run se smettiamo
+    di attenderlo: la risposta arriverà comunque, semplicemente non in questa HTTP response.
+    """
+    task = run_manager.tasks.get(run_id)
+    if task is not None:
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=wait_seconds)
+        except TimeoutError:
+            return None
+        except Exception:
+            pass  # run fallito: lo stato lo leggiamo dallo store qui sotto
+    run = store.get_run(run_id)
+    session_id = str(run.get("session_id") or "")
+    answer = ""
+    for message in reversed(store.list_messages(session_id)):
+        if message.get("role") == "assistant" and message.get("run_id") == run_id:
+            answer = str(message.get("content") or "")
+            break
+    return {"status": run.get("status"), "response": answer}
+
+
 @app.post("/api/triggers/{trigger_id}/webhook", status_code=status.HTTP_202_ACCEPTED)
 async def fire_webhook(
     trigger_id: str,
+    request: Request,
     x_trigger_token: Annotated[str, Header()] = "",
-    payload: Annotated[Any, Body()] = None,
-) -> dict[str, Any]:
+    token: Annotated[str, Query()] = "",
+    wait: Annotated[bool, Query()] = False,
+    timeout: Annotated[int, Query(ge=5, le=300)] = 120,
+) -> Response:
+    """Avvia un trigger webhook. Il token può stare nell'header ``X-Trigger-Token`` (curl,
+    servizi server-to-server) o nel query ``?token=`` (pagine browser che evitano il preflight).
+    Il body è JSON se possibile, altrimenti testo — sempre trattato come dato non attendibile.
+
+    Con ``?wait=true`` la chiamata **attende la fine del run** (fino a ``timeout`` secondi) e
+    restituisce la **risposta finale** dell'agente; se il run non finisce in tempo torna comunque
+    il ``run_id`` (fallback async). Per il sincrono, il trigger dovrebbe essere autonomo,
+    altrimenti il run si ferma ad attendere un'approvazione e la chiamata va in timeout."""
     trigger = _require_trigger(trigger_id)
     expected = trigger.get("token") or ""
+    provided = x_trigger_token or token
+    cors = {"Access-Control-Allow-Origin": "*"}
     if trigger["kind"] != "webhook" or not expected:
         raise HTTPException(status_code=400, detail="Trigger non è di tipo webhook.")
-    if not x_trigger_token or not secrets.compare_digest(x_trigger_token, expected):
+    if not provided or not secrets.compare_digest(provided, expected):
         raise HTTPException(status_code=403, detail="Token trigger non valido.")
     if not trigger["enabled"]:
         raise HTTPException(status_code=409, detail="Trigger disabilitato.")
+    raw = await request.body()
+    payload: Any = None
+    if raw:
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            payload = {"text": raw.decode("utf-8", errors="replace")[:4_000]}
     run_id = await fire_trigger(trigger, payload)
-    return {"status": "queued" if run_id else "skipped", "run_id": run_id}
+
+    if wait and run_id:
+        result = await _await_webhook_result(run_id, timeout)
+        if result is not None:
+            return JSONResponse(
+                {"run_id": run_id, **result},
+                status_code=status.HTTP_200_OK,
+                headers=cors,
+            )
+        # Timeout: il run prosegue in background, chi chiama può leggerlo dopo col run_id.
+        return JSONResponse(
+            {"status": "running", "run_id": run_id},
+            status_code=status.HTTP_202_ACCEPTED,
+            headers=cors,
+        )
+
+    return JSONResponse(
+        {"status": "queued" if run_id else "skipped", "run_id": run_id},
+        status_code=status.HTTP_202_ACCEPTED,
+        headers=cors,
+    )
 
 
 def _improvements_dir() -> Path:

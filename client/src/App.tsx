@@ -152,7 +152,11 @@ export default function App() {
           </div>
         ) : view === "triggers" ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            <TriggersView runtime={runtime} onSchedulerChange={harness.refreshRuntime} />
+            <TriggersView
+              runtime={runtime}
+              onSchedulerChange={harness.refreshRuntime}
+              onOpenSession={selectSession}
+            />
           </div>
         ) : view === "improve" ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
