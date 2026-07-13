@@ -13,6 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # sessione (`control_store.prepare_session_root`) e le scritture dei tool skill_* e delle
 # rotte REST (`skills.py`). Sta qui perché è l'unico modulo che entrambi importano.
 SKILLS_LOCK = threading.RLock()
+SUBAGENTS_LOCK = threading.RLock()
 
 # Mount point delle directory host dentro il container sandbox.
 SANDBOX_WORKSPACE_MOUNT = "/workspace"
@@ -97,6 +98,12 @@ class Settings(BaseSettings):
     harness_max_continuations: int = Field(default=3, ge=1, le=10)
     harness_eval_max_continuations: int = Field(default=1, ge=1, le=3)
     harness_max_tool_calls: int = Field(default=40, ge=1, le=200)
+    # Limite deleghe `task`: preserva parallelismo, evita picchi costo/rate limit.
+    harness_subagents_max_parallel: int = Field(default=4, ge=1, le=32)
+    # Planner semantico: confronta l'obiettivo con il roster dinamico una volta per run.
+    # Fallisce aperto sul routing nativo del tool `task`, quindi non blocca l'esecuzione.
+    harness_enable_subagent_routing: bool = True
+    harness_subagent_router_max_tasks: int = Field(default=8, ge=1, le=16)
     harness_enable_rubric: bool = True
     # Due domande diverse, due soglie. «L'obiettivo è raggiunto?» resta severa: sotto 0.7 si
     # riprova. «Il gradino ha fallito?» dev'essere più esigente, perché da quando il router fa
@@ -143,9 +150,14 @@ class Settings(BaseSettings):
     def skills_dir(self) -> Path:
         return (self.project_root / "skills").resolve()
 
+    @property
+    def subagents_dir(self) -> Path:
+        return (self.project_root / "subagents").resolve()
+
     def ensure_directories(self) -> None:
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.state_dir.mkdir(parents=True, exist_ok=True)
+        self.subagents_dir.mkdir(parents=True, exist_ok=True)
 
     def require_openai_key(self) -> str:
         if not self.openai_api_key:

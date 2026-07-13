@@ -8,6 +8,7 @@ import {
   getRun,
   getRuntimeStatus,
   getSession,
+  getSessionEventPage,
   listSessions,
   rejectRun,
   renameSession,
@@ -36,13 +37,21 @@ import type {
   Usage,
 } from "../types";
 
+function mergeEvents(...groups: RunEvent[][]): RunEvent[] {
+  const byId = new Map<number, RunEvent>();
+  for (const group of groups) {
+    for (const event of group) byId.set(event.id, event);
+  }
+  return [...byId.values()].sort((left, right) => left.id - right.id);
+}
+
 export function useHarnessSession() {
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [run, setRun] = useState<Run | null>(null);
+  // Store canonico di sessione. Chat/Inspector filtrano il run corrente; Cronologia usa tutto.
   const [events, setEvents] = useState<RunEvent[]>([]);
-  const [traceEvents, setTraceEvents] = useState<RunEvent[]>([]);
   const [approval, setApproval] = useState<Record<string, unknown> | null>(null);
   const [actionRequest, setActionRequest] = useState<Record<string, unknown> | null>(null);
   const [pending, setPending] = useState<SessionFile[]>([]);
@@ -57,9 +66,26 @@ export function useHarnessSession() {
     return value;
   }, [search]);
 
+  const loadEventHistory = useCallback(async (sessionId: string): Promise<RunEvent[]> => {
+    const pages: RunEvent[][] = [];
+    let before: number | undefined;
+    while (true) {
+      const page = await getSessionEventPage(sessionId, before);
+      pages.unshift(page.events);
+      if (!page.has_more_before) break;
+      const firstId = page.events[0]?.id;
+      if (!firstId || firstId === before) break;
+      before = firstId;
+    }
+    return mergeEvents(...pages);
+  }, []);
+
   const loadSession = useCallback(async (sessionId: string) => {
-    const detail = await getSession(sessionId);
-    const latestApproval = [...detail.events]
+    const [detail, history] = await Promise.all([
+      getSession(sessionId),
+      loadEventHistory(sessionId),
+    ]);
+    const latestApproval = [...history]
       .reverse()
       .find((event) =>
         [
@@ -70,7 +96,7 @@ export function useHarnessSession() {
           "run.cancelled",
         ].includes(event.type),
       );
-    const latestAction = [...detail.events]
+    const latestAction = [...history]
       .reverse()
       .find((event) =>
         [
@@ -84,8 +110,7 @@ export function useHarnessSession() {
     startTransition(() => {
       setSession(detail);
       setRun(detail.latest_run);
-      setEvents(detail.events);
-      setTraceEvents(detail.trace_events);
+      setEvents(history);
       setApproval(
         latestApproval?.type === "approval.requested" ? latestApproval.payload : null,
       );
@@ -95,7 +120,7 @@ export function useHarnessSession() {
       setPending([]);
       setError("");
     });
-  }, []);
+  }, [loadEventHistory]);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,9 +162,6 @@ export function useHarnessSession() {
         setEvents((current) =>
           current.some((item) => item.id === event.id) ? current : [...current, event],
         );
-        setTraceEvents((current) =>
-          current.some((item) => item.id === event.id) ? current : [...current, event],
-        );
         if (event.type === "approval.requested") {
           setApproval(event.payload);
         }
@@ -155,12 +177,21 @@ export function useHarnessSession() {
         if (["run.completed", "run.failed", "run.cancelled"].includes(event.type)) {
           setApproval(null);
           setActionRequest(null);
-          Promise.all([getRun(run.id), getSession(event.session_id), refreshSessions()])
-            .then(([runValue, detail]) => {
+          Promise.all([
+            getRun(run.id),
+            getSession(event.session_id),
+            loadEventHistory(event.session_id),
+            refreshSessions(),
+          ])
+            .then(([runValue, detail, history]) => {
               setRun(runValue);
               setSession(detail);
-              setEvents(detail.events ?? []);
-              setTraceEvents(detail.trace_events ?? []);
+              setEvents((current) =>
+                mergeEvents(
+                  current.filter((item) => item.type !== "assistant.delta"),
+                  history,
+                ),
+              );
             })
             .catch((reason: unknown) => {
               setError(
@@ -171,7 +202,6 @@ export function useHarnessSession() {
           getSession(event.session_id)
             .then((detail) => {
               setSession(detail);
-              setEvents(detail.events ?? []);
             })
             .catch(() => undefined);
         } else if (event.type.startsWith("file.")) {
@@ -185,11 +215,15 @@ export function useHarnessSession() {
           .then((value) => {
             setRun(value);
             if (["completed", "failed", "cancelled"].includes(value.status)) {
-              getSession(value.session_id)
-                .then((detail) => {
+              Promise.all([getSession(value.session_id), loadEventHistory(value.session_id)])
+                .then(([detail, history]) => {
                   setSession(detail);
-                  setEvents(detail.events ?? []);
-                  setTraceEvents(detail.trace_events ?? []);
+                  setEvents((current) =>
+                    mergeEvents(
+                      current.filter((item) => item.type !== "assistant.delta"),
+                      history,
+                    ),
+                  );
                 })
                 .catch(() => undefined);
             }
@@ -198,24 +232,29 @@ export function useHarnessSession() {
       },
     );
     return stop;
-  }, [refreshSessions, run?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadEventHistory, refreshSessions, run?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const runEvents = useMemo(
+    () => (run ? events.filter((event) => event.run_id === run.id) : []),
+    [events, run],
+  );
 
   // Il pannello mostra ciò che la sessione ha davvero usato: entrambe le liste derivano
   // dalle invocazioni registrate, non dal catalogo di ciò che sarebbe disponibile.
-  const toolSteps = useMemo(() => deriveToolSteps(events), [events]);
+  const toolSteps = useMemo(() => deriveToolSteps(runEvents), [runEvents]);
   const toolItems = useMemo(() => deriveToolActivity(toolSteps), [toolSteps]);
   const skillItems = useMemo(() => deriveSkillActivity(toolSteps), [toolSteps]);
 
   const { latestLiveUsage, latestSnapshot } = useMemo(() => {
     let live: Record<string, unknown> | undefined;
     let snapshot: Record<string, unknown> | undefined;
-    for (let i = events.length - 1; i >= 0 && (!live || !snapshot); i--) {
-      const event = events[i];
+    for (let i = runEvents.length - 1; i >= 0 && (!live || !snapshot); i--) {
+      const event = runEvents[i];
       if (!live && event.type === "usage.live") live = event.payload;
       if (!snapshot && event.type === "usage.snapshot") snapshot = event.payload;
     }
     return { latestLiveUsage: live, latestSnapshot: snapshot };
-  }, [events]);
+  }, [runEvents]);
 
   const active = Boolean(run && !["completed", "failed", "cancelled"].includes(run.status));
 
@@ -224,13 +263,27 @@ export function useHarnessSession() {
       ? {
           ...EMPTY_USAGE,
           // Input/contesto: esatto per-turno dal provider; output: stima live dallo streaming.
-          input_tokens: Number(latestSnapshot?.input_tokens ?? 0),
+          input_tokens: Number(
+            latestSnapshot?.context_input_tokens ?? latestSnapshot?.input_tokens ?? 0,
+          ),
           output_tokens: Number(
-            latestSnapshot?.output_tokens ?? latestLiveUsage?.output_tokens ?? 0,
+            latestSnapshot?.cumulative_output_tokens ?? latestSnapshot?.output_tokens ?? latestLiveUsage?.output_tokens ?? 0,
           ),
           total_tokens: Number(
-            latestSnapshot?.total_tokens ?? latestLiveUsage?.output_tokens ?? 0,
+            latestSnapshot?.cumulative_input_tokens ?? latestSnapshot?.input_tokens ?? 0,
+          ) + Number(
+            latestSnapshot?.cumulative_output_tokens ?? latestSnapshot?.output_tokens ?? latestLiveUsage?.output_tokens ?? 0,
           ),
+          context_input_tokens: Number(
+            latestSnapshot?.context_input_tokens ?? latestSnapshot?.input_tokens ?? 0,
+          ),
+          cumulative_input_tokens: Number(
+            latestSnapshot?.cumulative_input_tokens ?? latestSnapshot?.input_tokens ?? 0,
+          ),
+          cumulative_output_tokens: Number(
+            latestSnapshot?.cumulative_output_tokens ?? latestSnapshot?.output_tokens ?? latestLiveUsage?.output_tokens ?? 0,
+          ),
+          reasoning_tokens: Number(latestSnapshot?.reasoning_tokens ?? 0),
           output_tokens_per_second: Number(latestLiveUsage?.output_tokens_per_second ?? 0),
           context_categories:
             (latestSnapshot?.context_categories as Usage["context_categories"] | undefined) ?? [],
@@ -257,14 +310,14 @@ export function useHarnessSession() {
     try {
       const names = pending.map((file) => file.name);
       const created = await sendMessage(session.id, content, names);
-      const [detail, runValue] = await Promise.all([
+      const [detail, runValue, history] = await Promise.all([
         getSession(session.id),
         getRun(created.run_id),
+        loadEventHistory(session.id),
       ]);
       setSession(detail);
       setRun(runValue);
-      setEvents(detail.events ?? []);
-      setTraceEvents(detail.trace_events ?? []);
+      setEvents(history);
       setPending([]);
       setError("");
       await refreshSessions();
@@ -440,8 +493,8 @@ export function useHarnessSession() {
     sessions,
     session,
     run,
-    events,
-    traceEvents,
+    events: runEvents,
+    traceEvents: events,
     approval,
     actionRequest,
     pending,

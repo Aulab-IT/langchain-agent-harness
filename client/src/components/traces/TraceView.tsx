@@ -52,8 +52,10 @@ type RunSummary = {
   durationMs: number;
   status: "running" | "completed" | "failed" | "cancelled";
   model: string | null;
-  inputTokens: number;
-  outputTokens: number;
+  contextTokens: number;
+  runInputTokens: number;
+  runOutputTokens: number;
+  reasoningTokens: number;
   grader: { passed: boolean; score: number } | null;
   iterations: number | null;
   toolCount: number;
@@ -65,8 +67,10 @@ function summarize(id: string, events: RunEvent[]): RunSummary {
   const end = Math.max(...times);
   let status: RunSummary["status"] = "running";
   let model: string | null = null;
-  let inputTokens = 0;
-  let outputTokens = 0;
+  let contextTokens = 0;
+  let runInputTokens = 0;
+  let runOutputTokens = 0;
+  let reasoningTokens = 0;
   let grader: RunSummary["grader"] = null;
   let iterations: number | null = null;
   let durationMs = end - start;
@@ -74,7 +78,9 @@ function summarize(id: string, events: RunEvent[]): RunSummary {
 
   for (const event of events) {
     const p = event.payload ?? {};
-    if (event.type === "agent.started" && typeof p.model === "string") model = p.model;
+    if ((event.type === "agent.started" || event.type === "model.selected") && typeof p.model === "string") {
+      model = p.model;
+    }
     if (event.type === "run.completed") {
       status = "completed";
       iterations = typeof p.iterations === "number" ? p.iterations : iterations;
@@ -85,13 +91,11 @@ function summarize(id: string, events: RunEvent[]): RunSummary {
     if (event.type === "grader.completed") {
       grader = { passed: Boolean(p.passed), score: Number(p.score ?? 0) };
     }
-    if (event.type === "usage.updated") {
-      inputTokens = Number(p.input_tokens ?? inputTokens);
-      outputTokens = Number(p.output_tokens ?? outputTokens);
-    }
-    if (event.type === "usage.snapshot" && !inputTokens) {
-      inputTokens = Number(p.input_tokens ?? 0);
-      outputTokens = Number(p.output_tokens ?? 0);
+    if (event.type === "usage.updated" || (event.type === "usage.snapshot" && !runInputTokens)) {
+      contextTokens = Number(p.context_input_tokens ?? p.input_tokens ?? contextTokens);
+      runInputTokens = Number(p.cumulative_input_tokens ?? p.input_tokens ?? runInputTokens);
+      runOutputTokens = Number(p.cumulative_output_tokens ?? p.output_tokens ?? runOutputTokens);
+      reasoningTokens = Number(p.reasoning_tokens ?? reasoningTokens);
     }
     if (event.type === "tool.completed" || event.type === "tool.failed") toolCount += 1;
   }
@@ -103,8 +107,10 @@ function summarize(id: string, events: RunEvent[]): RunSummary {
     durationMs,
     status,
     model,
-    inputTokens,
-    outputTokens,
+    contextTokens,
+    runInputTokens,
+    runOutputTokens,
+    reasoningTokens,
     grader,
     iterations,
     toolCount,
@@ -337,9 +343,26 @@ export function TraceView({ events }: { events: RunEvent[] }) {
               <Metric icon={Wrench} label="Tool" value={String(run.toolCount)} />
               <Metric
                 icon={Layers3}
-                label="Token"
-                value={`${run.inputTokens}/${run.outputTokens}`}
+                label="Token nel run"
+                value={formatTokens(run.runInputTokens + run.runOutputTokens)}
+                detail={`${formatTokens(run.runInputTokens)} input · ${formatTokens(run.runOutputTokens)} output`}
+                title="Somma di tutte le chiamate del run, inclusi subagent e verifica."
               />
+              <Metric
+                icon={Layers3}
+                label="Contesto finale"
+                value={formatTokens(run.contextTokens)}
+                detail="Dimensione dell'ultimo prompt"
+                title="Non è il consumo del run: è quanto contesto era presente nell'ultima chiamata."
+              />
+              {run.reasoningTokens > 0 ? (
+                <Metric
+                  icon={Activity}
+                  label="Reasoning"
+                  value={formatTokens(run.reasoningTokens)}
+                  detail="Già incluso nell'output"
+                />
+              ) : null}
               <Metric
                 icon={CircleCheck}
                 label="Verifica"
@@ -377,18 +400,27 @@ function Metric({
   icon: Icon,
   label,
   value,
+  detail,
+  title,
 }: {
   icon: typeof Clock3;
   label: string;
   value: string;
+  detail?: string;
+  title?: string;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-0 items-start gap-2" title={title}>
       <Icon size={15} className="shrink-0 text-muted" />
       <div className="min-w-0">
         <div className="text-xs text-muted-2">{label}</div>
         <div className="truncate font-mono text-sm">{value}</div>
+        {detail ? <div className="truncate text-[11px] text-muted">{detail}</div> : null}
       </div>
     </div>
   );
+}
+
+function formatTokens(value: number): string {
+  return value.toLocaleString("it-IT");
 }

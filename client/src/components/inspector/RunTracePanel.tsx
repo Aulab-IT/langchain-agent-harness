@@ -34,6 +34,7 @@ function toneClass(tone: TraceTone): string {
 }
 
 function iconFor(type: string, tone: TraceTone) {
+  if (type.startsWith("subagent.")) return Bot;
   if (type.startsWith("tool.")) return Wrench;
   if (type.startsWith("grader.")) return CircleCheck;
   if (type.startsWith("approval.")) return ShieldCheck;
@@ -44,6 +45,28 @@ function iconFor(type: string, tone: TraceTone) {
   if (tone === "danger") return CircleX;
   if (tone === "warning") return CircleAlert;
   return Activity;
+}
+
+const TRACE_FILTERS = [
+  ["all", "Tutto"],
+  ["router", "Router"],
+  ["subagent", "Subagent"],
+  ["tool", "Tool"],
+  ["model", "Modelli"],
+  ["file", "File"],
+  ["error", "Errori"],
+] as const;
+
+type TraceFilter = (typeof TRACE_FILTERS)[number][0];
+
+function matchesFilter(event: RunEvent, filter: TraceFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "router") return event.type.startsWith("subagent.routing.");
+  if (filter === "subagent") return event.type.startsWith("subagent.");
+  if (filter === "tool") return event.type.includes("tool.");
+  if (filter === "model") return event.type.startsWith("model.");
+  if (filter === "file") return event.type.startsWith("file.");
+  return event.type.endsWith("failed") || event.type.endsWith("blocked") || event.type.endsWith("incomplete");
 }
 
 function rawPayload(payload: Record<string, unknown>): string {
@@ -93,6 +116,7 @@ function TraceRow({ event }: { event: RunEvent }) {
 export function RunTracePanel({ run, events }: { run: Run | null; events: RunEvent[] }) {
   const active = Boolean(run && ["queued", "running", "waiting_approval", "waiting_action"].includes(run.status));
   const [now, setNow] = useState(() => Date.now());
+  const [filter, setFilter] = useState<TraceFilter>("all");
 
   // A run fermo non serve un tick al secondo: aggiornare ogni minuto basta a tenere
   // "N min fa" corretto senza far vedere il numero muoversi in tempo reale.
@@ -105,7 +129,10 @@ export function RunTracePanel({ run, events }: { run: Run | null; events: RunEve
   const current = useMemo(() => describeCurrentAction(events, run), [events, run]);
   const elapsed = runElapsedSeconds(run) ?? 0;
   const toolCount = actionEvents.filter((event) => event.type === "tool.started").length;
+  const subagentToolCount = actionEvents.filter((event) => event.type === "subagent.tool.started").length;
+  const subagentCount = actionEvents.filter((event) => event.type === "subagent.started").length;
   const failureCount = actionEvents.filter((event) => event.type.endsWith("failed")).length;
+  const visibleEvents = actionEvents.filter((event) => matchesFilter(event, filter));
   const sinceCurrent = current.startedAt
     ? (now - new Date(current.startedAt).getTime()) / 1000
     : elapsed;
@@ -126,18 +153,22 @@ export function RunTracePanel({ run, events }: { run: Run | null; events: RunEve
             {run?.status ?? "idle"}
           </span>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-4 gap-2">
           <div className="rounded-lg border border-border bg-background px-3 py-2">
             <div className="text-xs text-muted">Durata</div>
             <div className="font-mono text-sm">{formatTraceDuration(elapsed)}</div>
           </div>
           <div className="rounded-lg border border-border bg-background px-3 py-2">
-            <div className="text-xs text-muted">Tool avviati</div>
+            <div className="text-xs text-muted">Tool root</div>
             <div className="font-mono text-sm">{toolCount}</div>
           </div>
           <div className="rounded-lg border border-border bg-background px-3 py-2">
-            <div className="text-xs text-muted">Errori</div>
-            <div className="font-mono text-sm">{failureCount}</div>
+            <div className="text-xs text-muted">Tool subagent</div>
+            <div className="font-mono text-sm">{subagentToolCount}</div>
+          </div>
+          <div className="rounded-lg border border-border bg-background px-3 py-2">
+            <div className="text-xs text-muted">Subagent / errori</div>
+            <div className="font-mono text-sm">{subagentCount} / {failureCount}</div>
           </div>
         </div>
       </div>
@@ -164,10 +195,18 @@ export function RunTracePanel({ run, events }: { run: Run | null; events: RunEve
         </div>
       </div>
 
+      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-5 py-2">
+        {TRACE_FILTERS.map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setFilter(id)} className={`rounded-md border px-2 py-1 text-xs ${filter === id ? "border-accent bg-accent/10 text-foreground" : "border-border text-muted hover:bg-surface-raised"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        {actionEvents.length ? (
+        {visibleEvents.length ? (
           <div className="space-y-2">
-            {actionEvents.map((event) => (
+            {visibleEvents.map((event) => (
               <TraceRow key={event.id} event={event} />
             ))}
           </div>

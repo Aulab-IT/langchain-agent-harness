@@ -835,6 +835,61 @@ class ControlStore:
             result.append(item)
         return result
 
+    def event_history(
+        self,
+        *,
+        run_id: str | None = None,
+        session_id: str | None = None,
+        before_id: int | None = None,
+        limit: int = 1_000,
+        include_deltas: bool = False,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Pagina cronologica di eventi, letta a ritroso senza limiti silenziosi.
+
+        Una sola tra ``run_id`` e ``session_id`` deve essere valorizzata. La query legge
+        ``limit + 1`` righe per dichiarare esplicitamente se esiste una pagina precedente.
+        I delta di streaming sono trasporto effimero e restano esclusi dallo storico operativo.
+        """
+        if (run_id is None) == (session_id is None):
+            raise ValueError("Specificare esattamente run_id oppure session_id.")
+        field = "run_id" if run_id is not None else "session_id"
+        value = run_id if run_id is not None else session_id
+        clauses = [f"{field} = ?"]
+        params: list[Any] = [value]
+        if before_id is not None:
+            clauses.append("id < ?")
+            params.append(before_id)
+        if not include_deltas:
+            clauses.append("type != 'assistant.delta'")
+        params.append(limit + 1)
+        query = f"""
+            SELECT * FROM events
+            WHERE {' AND '.join(clauses)}
+            ORDER BY id DESC LIMIT ?
+        """
+        with self._lock:
+            rows = self._connection.execute(query, tuple(params)).fetchall()
+        has_more_before = len(rows) > limit
+        page = rows[:limit]
+        result = []
+        for row in reversed(page):
+            item = dict(row)
+            item["payload"] = json.loads(item.pop("payload_json"))
+            result.append(item)
+        return result, has_more_before
+
+    def delete_run_events(self, run_id: str, event_types: set[str]) -> int:
+        """Rimuove eventi effimeri già consolidati nel messaggio finale."""
+        if not event_types:
+            return 0
+        placeholders = ",".join("?" for _ in event_types)
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                f"DELETE FROM events WHERE run_id = ? AND type IN ({placeholders})",
+                (run_id, *sorted(event_types)),
+            )
+        return cursor.rowcount
+
     def recent_events(self, *, limit: int = 1_000) -> list[dict[str, Any]]:
         """Ultimi eventi su tutte le sessioni, per l'analisi hill-climbing."""
         with self._lock:

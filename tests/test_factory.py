@@ -3,14 +3,17 @@ from pathlib import Path
 
 import pytest
 
+import agent_harness.factory as factory
 from agent_harness.config import Settings
 from agent_harness.factory import (
     build_harness,
     build_tier_models,
     build_workspace_permissions,
+    docker_exec_requires_approval,
     tier_spec,
 )
 from agent_harness.improve import overrides_fingerprint
+from agent_harness.subagent_routing import SubagentRouterMiddleware
 
 
 def test_workspace_permissions_include_directory_roots() -> None:
@@ -23,6 +26,22 @@ def test_workspace_permissions_include_directory_roots() -> None:
     }
 
     assert {"/workspace", "/workspace/**", "/memories", "/skills"} <= allowed_paths
+
+
+def test_auto_approve_skips_local_commands_but_never_network() -> None:
+    assert not docker_exec_requires_approval(
+        {"command": "pytest", "with_network": False},
+        require_approval=True,
+        auto_approve=True,
+    )
+    assert docker_exec_requires_approval(
+        {"command": "pip install x", "with_network": True},
+        require_approval=True,
+        auto_approve=True,
+    )
+    assert docker_exec_requires_approval(
+        {"command": "pytest"}, require_approval=True, auto_approve=False
+    )
 
 
 @pytest.mark.asyncio
@@ -44,6 +63,65 @@ async def test_factory_builds_graph_without_network_calls(tmp_path: Path) -> Non
         # MCP disabilitato: niente tool di proposta server MCP.
         assert "propose_mcp_server" not in {tool.name for tool in harness.tools}
         assert (tmp_path / "state" / "checkpoints.sqlite").exists()
+
+
+@pytest.mark.asyncio
+async def test_factory_loads_user_subagent_and_overrides_builtin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "memories").mkdir()
+    (tmp_path / "memories" / "AGENTS.md").write_text("# Memoria\n", encoding="utf-8")
+    (tmp_path / "skills").mkdir()
+    (tmp_path / "subagents").mkdir()
+    (tmp_path / "subagents" / "reviewer.md").write_text(
+        "---\n"
+        "name: reviewer\n"
+        "description: Reviewer custom.\n"
+        "model_tier: high\n"
+        "capabilities:\n"
+        "- verifica artefatti\n"
+        "tools: []\n"
+        "read_only: true\n"
+        "---\n\n"
+        "Prompt custom.\n",
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_create_deep_agent(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(factory, "create_deep_agent", fake_create_deep_agent)
+    settings = Settings(
+        _env_file=None,
+        project_root=tmp_path,
+        openai_api_key="test-key",
+        harness_enable_mcp=False,
+        harness_enable_web_search=False,
+        harness_require_approval=False,
+    )
+    async with build_harness(settings):
+        pass
+
+    subagents = {item["name"]: item for item in captured["subagents"]}  # type: ignore[index,union-attr]
+    assert str(subagents["reviewer"]["system_prompt"]).strip() == "Prompt custom."
+    assert subagents["reviewer"]["tools"] == []
+    assert subagents["reviewer"]["permissions"]
+    router = next(
+        item for item in captured["middleware"] if isinstance(item, SubagentRouterMiddleware)  # type: ignore[union-attr]
+    )
+    root_audit = next(
+        item
+        for item in captured["middleware"]  # type: ignore[union-attr]
+        if isinstance(item, factory.AuditMiddleware) and item.subagent_name is None
+    )
+    profiles = {profile.name: profile for profile in router.profiles}
+    assert set(profiles) == {"researcher", "reviewer"}
+    assert profiles["reviewer"].capabilities == ["verifica artefatti"]
+    assert profiles["reviewer"].model_tier == "high"
+    assert root_audit.task_observer is not None
+    assert root_audit.task_coordinator is router
 
 
 @pytest.mark.asyncio

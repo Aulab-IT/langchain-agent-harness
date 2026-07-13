@@ -1,9 +1,16 @@
 export type AgentStatus = "idle" | "thinking" | "working" | "approval" | "error";
 
 export type Usage = {
+  /** Dimensione del prompt nell'ultima chiamata: misura pressione sulla finestra. */
   input_tokens: number;
+  /** Output cumulativo del run; mantenuto per compatibilità con gli eventi precedenti. */
   output_tokens: number;
   total_tokens: number;
+  /** Nomi espliciti: non confondere contesto finale con consumo dell'intero run. */
+  context_input_tokens?: number;
+  cumulative_input_tokens?: number;
+  cumulative_output_tokens?: number;
+  reasoning_tokens?: number;
   output_tokens_per_second: number;
   context_categories: Array<{
     name: string;
@@ -189,6 +196,11 @@ export type RunEvent = {
   created_at: string;
 };
 
+export type EventPage = {
+  events: RunEvent[];
+  has_more_before: boolean;
+};
+
 
 export type RuntimeStatus = {
   backend: "online";
@@ -248,6 +260,25 @@ export type Skill = {
 };
 
 export type SkillDetail = Skill & { content: string };
+
+export type Subagent = {
+  name: string;
+  description: string;
+  model_tier: ModelTier;
+  capabilities: string[];
+  inputs: string[];
+  outputs: string[];
+  constraints: string[];
+  tools: string[];
+  read_only: boolean;
+  valid: boolean;
+  errors: string[];
+};
+
+export type SubagentDetail = Subagent & {
+  system_prompt: string;
+  content: string;
+};
 
 export type SkillFile = {
   path: string;

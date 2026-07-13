@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pytest
+from langchain.agents.middleware import ModelRequest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from agent_harness.middleware import TierLadder, decide_tier
+from agent_harness.middleware import TierLadder, TierModel, build_model_router, decide_tier
 
 
 def test_the_first_attempt_uses_the_cheapest_tier() -> None:
@@ -125,3 +129,36 @@ def test_no_human_message_yields_the_cheapest_tier() -> None:
 
 def test_empty_history_yields_the_cheapest_tier() -> None:
     assert decide_tier([], TierLadder()).tier == "low"
+
+
+@pytest.mark.asyncio
+async def test_model_router_emits_started_and_completed_around_each_call() -> None:
+    low_model = SimpleNamespace(name="low-runtime")
+    tiers = {
+        "low": TierModel(name="low-name", effort="low", model=low_model),
+        "mid": TierModel(name="mid-name", effort="medium", model=SimpleNamespace()),
+        "high": TierModel(name="high-name", effort="high", model=SimpleNamespace()),
+    }
+    events: list[dict[str, object]] = []
+    router = build_model_router(  # type: ignore[arg-type]
+        tiers, TierLadder(), event_callback=events.append
+    )
+    request = ModelRequest(  # type: ignore[arg-type]
+        model=low_model,
+        messages=[HumanMessage(content="ciao")],
+        tools=[],
+    )
+
+    async def handler(next_request: ModelRequest) -> object:
+        assert next_request.model is low_model
+        return object()
+
+    await router.awrap_model_call(request, handler)  # type: ignore[arg-type]
+
+    assert [event["type"] for event in events] == [
+        "model.selected",
+        "model.started",
+        "model.completed",
+    ]
+    assert events[1]["call_id"] == events[2]["call_id"] == "model-1"
+    assert isinstance(events[2]["elapsed_ms"], int)

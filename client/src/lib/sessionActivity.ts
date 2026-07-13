@@ -5,11 +5,54 @@ export type ToolStep = {
   tool: string;
   args: string;
   output: string;
-  status: "running" | "ok" | "error";
+  status: "running" | "paused" | "ok" | "error";
   elapsedMs: number | null;
   skill: string | null;
   subagent: string | null;
   startedAt: string;
+};
+
+export type SubagentInvocation = {
+  invocationId: string;
+  name: string;
+  description: string;
+  status: "running" | "paused" | "ok" | "error";
+  elapsedMs: number | null;
+  output: string;
+  tools: ToolStep[];
+  routingTaskId: string | null;
+  attempt: number;
+  objectiveMet: boolean | null;
+  inputArtifacts: string[];
+  outputArtifacts: string[];
+};
+
+export type RoutingTask = {
+  id: string;
+  objective: string;
+  selectedAgent: string;
+  dependsOn: string[];
+  status: string;
+  attempt: number;
+  inputArtifacts: string[];
+  outputArtifacts: string[];
+};
+
+export type RoutingActivity = {
+  status:
+    | "planning"
+    | "planned"
+    | "executing"
+    | "direct"
+    | "fallback"
+    | "followed"
+    | "not_followed";
+  roster: string[];
+  rationale: string;
+  strategy: string;
+  error: string;
+  missingAgents: string[];
+  tasks: RoutingTask[];
 };
 
 /**
@@ -28,14 +71,95 @@ export type ActivityEntry = {
   calls: number;
   totalMs: number;
   running: boolean;
-  lastStatus: "ok" | "error" | "running";
+  lastStatus: "ok" | "error" | "running" | "paused";
   lastAt: string;
 };
 
-const STEP_TYPES = new Set(["tool.started", "tool.completed", "tool.failed"]);
+const STEP_TYPES = new Set([
+  "tool.started",
+  "tool.resumed",
+  "tool.paused",
+  "tool.completed",
+  "tool.failed",
+  "subagent.tool.started",
+  "subagent.tool.resumed",
+  "subagent.tool.paused",
+  "subagent.tool.completed",
+  "subagent.tool.failed",
+]);
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+/** Stato persistente del planner: roster, match, fallback e aderenza alle chiamate reali. */
+export function deriveSubagentRouting(events: RunEvent[]): RoutingActivity | null {
+  let routing: RoutingActivity | null = null;
+  for (const event of events) {
+    const payload = event.payload ?? {};
+    if (event.type === "subagent.routing.started") {
+      routing = {
+        status: "planning",
+        roster: strings(payload.agents),
+        rationale: "",
+        strategy: "",
+        error: "",
+        missingAgents: [],
+        tasks: [],
+      };
+      continue;
+    }
+    if (!routing) continue;
+    if (event.type === "subagent.routing.completed") {
+      const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+      routing.tasks = tasks.flatMap((raw): RoutingTask[] => {
+        if (!raw || typeof raw !== "object") return [];
+        const task = raw as Record<string, unknown>;
+        return [{
+          id: text(task.id),
+          objective: text(task.objective),
+          selectedAgent: text(task.selected_agent),
+          dependsOn: strings(task.depends_on),
+          status: "planned",
+          attempt: 0,
+          inputArtifacts: [],
+          outputArtifacts: [],
+        }];
+      });
+      routing.status = payload.delegate ? "planned" : "direct";
+      routing.rationale = text(payload.rationale);
+      routing.strategy = text(payload.strategy);
+      continue;
+    }
+    if (event.type.startsWith("subagent.task.")) {
+      const task = routing.tasks.find((item) => item.id === text(payload.routing_task_id));
+      if (!task) continue;
+      task.status = event.type.slice("subagent.task.".length);
+      task.attempt = typeof payload.attempt === "number" ? payload.attempt : task.attempt;
+      task.inputArtifacts = strings(payload.input_artifacts);
+      task.outputArtifacts = strings(payload.output_artifacts);
+      routing.status = "executing";
+      continue;
+    }
+    if (event.type === "subagent.routing.failed") {
+      routing.status = "fallback";
+      routing.error = text(payload.error);
+      continue;
+    }
+    if (event.type === "subagent.routing.followed") {
+      routing.status = "followed";
+      continue;
+    }
+    if (event.type === "subagent.routing.not_followed") {
+      routing.status = "not_followed";
+      routing.missingAgents = strings(payload.missing_agents);
+    }
+  }
+  return routing;
 }
 
 /**
@@ -54,8 +178,16 @@ export function deriveToolSteps(events: RunEvent[]): ToolStep[] {
     if (!STEP_TYPES.has(event.type)) continue;
     const tool = text(event.payload.tool);
     if (!tool) continue;
+    const eventSubagent = text(event.payload.subagent) || null;
+    const queueKey = `${eventSubagent ?? "root"}:${tool}`;
 
-    if (event.type === "tool.started") {
+    if (event.type.endsWith(".resumed")) {
+      const resumed = open.get(queueKey)?.[0];
+      if (resumed) resumed.status = "running";
+      continue;
+    }
+
+    if (event.type.endsWith(".started")) {
       const args = text(event.payload.args);
       const step: ToolStep = {
         id: event.id,
@@ -65,25 +197,115 @@ export function deriveToolSteps(events: RunEvent[]): ToolStep[] {
         status: "running",
         elapsedMs: null,
         skill: text(event.payload.skill) || null,
-        subagent: subagentOf(tool, args),
+        subagent: eventSubagent || subagentOf(tool, args),
         startedAt: event.created_at,
       };
       steps.push(step);
-      const queue = open.get(tool) ?? [];
+      const queue = open.get(queueKey) ?? [];
       queue.push(step);
-      open.set(tool, queue);
+      open.set(queueKey, queue);
       continue;
     }
 
-    const step = open.get(tool)?.shift();
+    const step = open.get(queueKey)?.[0];
     if (!step) continue;
-    step.status = event.type === "tool.failed" ? "error" : "ok";
+    if (event.type.endsWith(".paused")) {
+      step.status = "paused";
+      step.elapsedMs = typeof event.payload.elapsed_ms === "number"
+        ? event.payload.elapsed_ms
+        : null;
+      continue;
+    }
+    open.get(queueKey)?.shift();
+    step.status = event.type.endsWith(".failed") ? "error" : "ok";
     step.output = text(event.payload.output);
     const elapsed = event.payload.elapsed_ms;
     step.elapsedMs = typeof elapsed === "number" ? elapsed : null;
   }
 
   return steps;
+}
+
+/** Telemetria dedicata: una card per task, tool figli associati con invocation_id. */
+export function deriveSubagentInvocations(events: RunEvent[]): SubagentInvocation[] {
+  const byId = new Map<string, SubagentInvocation>();
+  const childByCall = new Map<string, ToolStep>();
+  for (const event of events) {
+    const payload = event.payload ?? {};
+    const invocationId = text(payload.invocation_id);
+    if (!invocationId || !event.type.startsWith("subagent.")) continue;
+    if (event.type === "subagent.started") {
+      byId.set(invocationId, {
+        invocationId,
+        name: text(payload.subagent) || "subagent",
+        description: text(payload.description),
+        status: "running",
+        elapsedMs: null,
+        output: "",
+        tools: [],
+        routingTaskId: text(payload.routing_task_id) || null,
+        attempt: typeof payload.attempt === "number" ? payload.attempt : 1,
+        objectiveMet: null,
+        inputArtifacts: strings(payload.input_artifacts),
+        outputArtifacts: [],
+      });
+      continue;
+    }
+    const invocation = byId.get(invocationId);
+    if (!invocation) continue;
+    if (event.type === "subagent.paused") {
+      invocation.status = "paused";
+      continue;
+    }
+    if (event.type === "subagent.resumed") {
+      invocation.status = "running";
+      continue;
+    }
+    if (event.type === "subagent.completed" || event.type === "subagent.failed") {
+      invocation.objectiveMet =
+        typeof payload.objective_met === "boolean" ? payload.objective_met : null;
+      invocation.status =
+        event.type === "subagent.failed" || invocation.objectiveMet === false ? "error" : "ok";
+      invocation.elapsedMs = typeof payload.elapsed_ms === "number" ? payload.elapsed_ms : null;
+      invocation.output = text(payload.output);
+      invocation.inputArtifacts = strings(payload.input_artifacts);
+      invocation.outputArtifacts = strings(payload.output_artifacts);
+      continue;
+    }
+    if (!event.type.startsWith("subagent.tool.")) continue;
+    const callId = text(payload.tool_call_id) || `${event.id}`;
+    if (event.type === "subagent.tool.started") {
+      const step: ToolStep = {
+        id: event.id,
+        tool: text(payload.tool),
+        args: text(payload.args),
+        output: "",
+        status: "running",
+        elapsedMs: null,
+        skill: text(payload.skill) || null,
+        subagent: invocation.name,
+        startedAt: event.created_at,
+      };
+      invocation.tools.push(step);
+      childByCall.set(`${invocationId}:${callId}`, step);
+      continue;
+    }
+    const step = childByCall.get(`${invocationId}:${callId}`);
+    if (!step) continue;
+    if (event.type === "subagent.tool.paused") {
+      step.status = "paused";
+      step.elapsedMs = typeof payload.elapsed_ms === "number" ? payload.elapsed_ms : null;
+      continue;
+    }
+    if (event.type === "subagent.tool.resumed") {
+      step.status = "running";
+      continue;
+    }
+    step.status = event.type === "subagent.tool.failed" ? "error" : "ok";
+    step.elapsedMs = typeof payload.elapsed_ms === "number" ? payload.elapsed_ms : null;
+    step.output = text(payload.output);
+  }
+  return [...byId.values()];
 }
 
 function aggregate(steps: ToolStep[], key: (step: ToolStep) => string | null): ActivityEntry[] {

@@ -14,6 +14,7 @@ import { ChatComposer } from "./ChatComposer";
 import { ChatMessage } from "./ChatMessage";
 import { MarkdownContent } from "./MarkdownContent";
 import { ThinkingTrace } from "./ThinkingTrace";
+import { SubagentActivity } from "./SubagentActivity";
 
 export function ChatPanel({
   session,
@@ -206,6 +207,7 @@ export function ChatPanel({
                   // normale quando il run termina.
                   <>
                     <ThinkingTrace events={events} run={run} />
+                    <SubagentActivity events={events} />
                     {liveText ? (
                       <details className="border-t border-border px-4 py-2">
                         <summary className="cursor-pointer select-none text-xs text-muted hover:text-foreground">
@@ -231,6 +233,7 @@ export function ChatPanel({
             </div>
           </article>
         ) : null}
+        {!active ? <SubagentActivity events={events} /> : null}
         {run?.status === "failed" && run.error ? (
           <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
             Run fallito: {run.error}

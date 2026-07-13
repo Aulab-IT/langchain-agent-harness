@@ -1,6 +1,7 @@
 import {
   Activity,
   BrainCircuit,
+  Bot,
   CircleCheck,
   Gauge,
   Settings2,
@@ -114,6 +115,10 @@ export function Sidebar({
               <button type="button" className={navClass(view === "skills")} onClick={() => onView("skills")}>
                 <Sparkles size={17} />
                 Skills
+              </button>
+              <button type="button" className={navClass(view === "subagents")} onClick={() => onView("subagents")}>
+                <Bot size={17} />
+                Subagent
               </button>
               <button type="button" className={navClass(view === "tools")} onClick={() => onView("tools")}>
                 <Wrench size={17} />

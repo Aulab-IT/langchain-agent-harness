@@ -5,10 +5,12 @@ import type {
   CronPreview,
   ConfigVersion,
   EvaluationArtifact,
+  EventPage,
   ImproveResult,
   ImprovementDetail,
   ImprovementSummary,
   McpStatus,
+  ModelTier,
   ModelOverride,
   Rubric,
   RuntimeField,
@@ -30,6 +32,8 @@ import type {
   SkillFileContent,
   SkillInstall,
   SkillInstallSource,
+  Subagent,
+  SubagentDetail,
   ToolDescriptor,
   Trigger,
 } from "./types";
@@ -206,36 +210,18 @@ export function getRun(runId: string): Promise<Run> {
   return request(`/api/runs/${runId}`);
 }
 
-const RUN_EVENT_TYPES = [
-  "run.started",
-  "agent.started",
-  "config.selected",
-  "tool.started",
-  "tool.completed",
-  "tool.failed",
-  "skill.started",
-  "skill.completed",
-  "grader.started",
-  "grader.completed",
-  "approval.requested",
-  "approval.resolved",
-  "approval.auto",
-  "action.requested",
-  "action.resolved",
-  "assistant.delta",
-  "assistant.iteration",
-  "model.selected",
-  "model.escalated",
-  "usage.live",
-  "usage.snapshot",
-  "usage.updated",
-  "assistant.completed",
-  "file.created",
-  "file.updated",
-  "run.completed",
-  "run.failed",
-  "run.cancelled",
-];
+export function getSessionEventPage(
+  sessionId: string,
+  before?: number,
+): Promise<EventPage> {
+  const query = before ? `?before=${before}` : "";
+  return request(`/api/sessions/${sessionId}/event-history${query}`);
+}
+
+export function getRunEventPage(runId: string, before?: number): Promise<EventPage> {
+  const query = before ? `?before=${before}` : "";
+  return request(`/api/runs/${runId}/event-history${query}`);
+}
 
 export function subscribeRun(
   runId: string,
@@ -243,23 +229,12 @@ export function subscribeRun(
   onDisconnect: () => void,
 ): () => void {
   const source = new EventSource(`${API_URL}/api/runs/${runId}/events`);
-  const listeners = new Map<string, EventListener>();
-  for (const type of RUN_EVENT_TYPES) {
-    const listener: EventListener = (raw) => {
-      const message = raw as MessageEvent<string>;
-      onEvent(JSON.parse(message.data) as RunEvent);
-    };
-    listeners.set(type, listener);
-    source.addEventListener(type, listener);
-  }
+  source.onmessage = (message) => onEvent(JSON.parse(message.data) as RunEvent);
   source.onerror = () => {
     source.close();
     onDisconnect();
   };
   return () => {
-    for (const [type, listener] of listeners) {
-      source.removeEventListener(type, listener);
-    }
     source.close();
   };
 }
@@ -386,6 +361,42 @@ export function runImprove(since: number): Promise<ImproveResult> {
 
 export function listSkills(): Promise<Skill[]> {
   return request("/api/skills");
+}
+
+export function listSubagents(): Promise<Subagent[]> {
+  return request("/api/subagents");
+}
+
+export function getSubagent(name: string): Promise<SubagentDetail> {
+  return request(`/api/subagents/${encodeURIComponent(name)}`);
+}
+
+export type SubagentInput = {
+  name: string;
+  description: string;
+  system_prompt: string;
+  model_tier: ModelTier;
+  capabilities: string[];
+  inputs: string[];
+  outputs: string[];
+  constraints: string[];
+  tools: string[];
+  read_only: boolean;
+};
+
+export function createSubagent(input: SubagentInput): Promise<SubagentDetail> {
+  return request("/api/subagents", jsonOptions("POST", input));
+}
+
+export function updateSubagent(
+  name: string,
+  input: Omit<SubagentInput, "name">,
+): Promise<SubagentDetail> {
+  return request(`/api/subagents/${encodeURIComponent(name)}`, jsonOptions("PUT", input));
+}
+
+export function deleteSubagent(name: string): Promise<void> {
+  return request(`/api/subagents/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
 
 export function setSessionModelOverride(

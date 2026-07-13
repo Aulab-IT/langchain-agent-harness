@@ -74,6 +74,39 @@ def test_tools_endpoint_describes_real_tools_with_their_arguments(client: TestCl
     assert tools["docker_exec"]["description"]
 
 
+def test_subagent_api_crud_and_validation(client: TestClient) -> None:
+    payload = {
+        "name": "web-research",
+        "description": "Ricerca fonti.",
+        "system_prompt": "Trova URL verificabili.",
+        "model_tier": "low",
+        "capabilities": ["ricerca web"],
+        "inputs": ["domanda"],
+        "outputs": ["sintesi con URL"],
+        "constraints": ["solo fonti pubbliche"],
+        "tools": ["web_search"],
+        "read_only": True,
+    }
+    created = client.post("/api/subagents", json=payload)
+    assert created.status_code == 201
+    assert created.json()["read_only"] is True
+    assert created.json()["capabilities"] == ["ricerca web"]
+    assert client.post("/api/subagents", json=payload).status_code == 409
+
+    listed = client.get("/api/subagents")
+    assert listed.status_code == 200
+    assert [item["name"] for item in listed.json()] == ["web-research"]
+
+    updated = client.put(
+        "/api/subagents/web-research",
+        json={**payload, "description": "Ricerca fonti recenti."},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["description"] == "Ricerca fonti recenti."
+    assert client.delete("/api/subagents/web-research").status_code == 204
+    assert client.get("/api/subagents/web-research").status_code == 404
+
+
 def test_skill_creator_route_installs_from_the_configured_source(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -263,18 +296,14 @@ def test_auto_approve_toggle_persists(client: TestClient) -> None:
     session = client.post("/api/sessions", json={}).json()
     assert session["auto_approve"] is False
 
-    enabled = client.patch(
-        f"/api/sessions/{session['id']}/auto-approve", json={"enabled": True}
-    )
+    enabled = client.patch(f"/api/sessions/{session['id']}/auto-approve", json={"enabled": True})
     assert enabled.status_code == 200
     assert enabled.json()["auto_approve"] is True
 
     refetched = client.get(f"/api/sessions/{session['id']}").json()
     assert refetched["auto_approve"] is True
 
-    disabled = client.patch(
-        f"/api/sessions/{session['id']}/auto-approve", json={"enabled": False}
-    )
+    disabled = client.patch(f"/api/sessions/{session['id']}/auto-approve", json={"enabled": False})
     assert disabled.json()["auto_approve"] is False
 
 
@@ -338,6 +367,78 @@ def test_chat_rejects_empty_message(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_event_history_endpoint_pages_actions_without_deltas(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={}).json()
+    run = server.store.create_run(session["id"])
+    for index in range(14):
+        event_type = "assistant.delta" if index % 4 == 0 else "tool.started"
+        server.store.add_event(run["id"], session["id"], event_type, {"n": index})
+
+    first = client.get(
+        f"/api/runs/{run['id']}/event-history", params={"limit": 5}
+    ).json()
+    assert first["has_more_before"] is True
+    assert len(first["events"]) == 5
+    assert all(event["type"] == "tool.started" for event in first["events"])
+
+    second = client.get(
+        f"/api/runs/{run['id']}/event-history",
+        params={"limit": 5, "before": first["events"][0]["id"]},
+    ).json()
+    assert second["events"][-1]["id"] < first["events"][0]["id"]
+
+
+def test_session_reload_keeps_active_routing_and_tools(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={}).json()
+    run = server.store.create_run(session["id"])
+    server.store.update_run(run["id"], status="running")
+    for event_type in (
+        "subagent.routing.started",
+        "assistant.delta",
+        "subagent.routing.completed",
+        "subagent.started",
+        "subagent.tool.started",
+        "tool.started",
+    ):
+        server.store.add_event(run["id"], session["id"], event_type, {"tool": "search"})
+
+    reloaded = client.get(f"/api/sessions/{session['id']}").json()
+
+    assert reloaded["latest_run"]["status"] == "running"
+    assert [event["type"] for event in reloaded["events"]] == [
+        "subagent.routing.started",
+        "subagent.routing.completed",
+        "subagent.started",
+        "subagent.tool.started",
+        "tool.started",
+    ]
+    assert reloaded["events_has_more_before"] is False
+
+
+def test_sse_uses_generic_messages_for_unknown_event_types(client: TestClient) -> None:
+    session = client.post("/api/sessions", json={}).json()
+    run = server.store.create_run(session["id"])
+    server.store.add_event(run["id"], session["id"], "future.telemetry", {"ok": True})
+    server.store.update_run(run["id"], status="completed")
+
+    with client.stream("GET", f"/api/runs/{run['id']}/events") as response:
+        body = "".join(response.iter_text())
+
+    assert '"type": "future.telemetry"' in body
+    assert "event: future.telemetry" not in body
+    assert "data:" in body
+
+
+def test_stream_delta_buffer_groups_fragments() -> None:
+    buffer = server.StreamDeltaBuffer(max_chars=5, max_interval_seconds=10)
+
+    assert buffer.offer("ab", now=0) is None
+    assert buffer.offer("cd", now=0) is None
+    assert buffer.offer("e", now=0) == "abcde"
+    assert buffer.offer("z", now=0) is None
+    assert buffer.flush(now=1) == "z"
 
 
 def test_state_changes_reject_unknown_browser_origin(client: TestClient) -> None:
@@ -423,8 +524,10 @@ def test_scheduler_toggle_persists_and_reports_state(client: TestClient) -> None
 
 def test_classify_run_error_gives_actionable_messages() -> None:
     invalid_file = server._classify_run_error(
-        Exception("Error code: 400 - {'message': 'file is badly formatted or corrupted', "
-                   "'code': 'invalid_file'}")
+        Exception(
+            "Error code: 400 - {'message': 'file is badly formatted or corrupted', "
+            "'code': 'invalid_file'}"
+        )
     )
     assert "nuova sessione" in invalid_file and "corrotto" in invalid_file
     assert "frequenza" in server._classify_run_error(Exception("429 rate limit exceeded"))
@@ -894,9 +997,7 @@ def test_webhook_accepts_token_in_query_and_text_body(client: TestClient) -> Non
 
 
 def test_stop_sandbox_missing_session_is_404(client: TestClient) -> None:
-    response = client.post(
-        "/api/sessions/11111111-1111-1111-1111-111111111111/sandbox/stop"
-    )
+    response = client.post("/api/sessions/11111111-1111-1111-1111-111111111111/sandbox/stop")
     assert response.status_code == 404
 
 

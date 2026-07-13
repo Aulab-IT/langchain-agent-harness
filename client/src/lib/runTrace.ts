@@ -165,6 +165,27 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         subject: asTraceText(payload.model),
         tone: "info",
       };
+    case "model.started":
+      return {
+        title: `Modello ${asTraceText(payload.model) ?? "?"} in elaborazione`,
+        detail: `Chiamata ${asTraceText(payload.call_id) ?? "modello"}`,
+        subject: asTraceText(payload.model),
+        tone: "running",
+      };
+    case "model.completed":
+      return {
+        title: `Modello ${asTraceText(payload.model) ?? "?"} completato`,
+        detail: elapsed,
+        subject: asTraceText(payload.model),
+        tone: "success",
+      };
+    case "model.failed":
+      return {
+        title: `Modello ${asTraceText(payload.model) ?? "?"} fallito`,
+        detail: [elapsed, compactTraceValue(payload.error, 180)].filter(Boolean).join(" · ") || null,
+        subject: asTraceText(payload.model),
+        tone: "danger",
+      };
     case "model.escalated":
       return {
         title: `Gradino superiore: ${asTraceText(payload.tier) ?? "?"}`,
@@ -172,6 +193,129 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         subject: asTraceText(payload.tier),
         tone: "warning",
       };
+    case "subagent.routing.started":
+      return {
+        title: "Routing subagent avviato",
+        detail: `Roster: ${compactTraceValue(payload.agents, 180) ?? "vuoto"}`,
+        subject: null,
+        tone: "running",
+      };
+    case "subagent.routing.completed": {
+      const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+      const matches = tasks
+        .map((task) => {
+          if (!task || typeof task !== "object") return null;
+          const item = task as Record<string, unknown>;
+          const agent = asTraceText(item.selected_agent);
+          const objective = asTraceText(item.objective);
+          return agent ? `${agent}${objective ? `: ${objective}` : ""}` : null;
+        })
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        title: payload.delegate ? `Routing: ${tasks.length} deleghe pianificate` : "Routing: esecuzione diretta",
+        detail: [elapsed, matches || compactTraceValue(payload.rationale, 180)].filter(Boolean).join(" · ") || null,
+        subject: null,
+        tone: payload.delegate ? "info" : "muted",
+      };
+    }
+    case "subagent.routing.failed":
+      return {
+        title: "Routing subagent non disponibile",
+        detail: `${compactTraceValue(payload.error, 180) ?? "errore sconosciuto"} · fallback nativo attivo`,
+        subject: null,
+        tone: "warning",
+      };
+    case "subagent.routing.retry":
+      return {
+        title: "Routing: retry JSON",
+        detail: compactTraceValue(payload.reason, 180),
+        subject: null,
+        tone: "warning",
+      };
+    case "subagent.routing.followed":
+      return {
+        title: "Piano subagent avviato",
+        detail: `Agent: ${compactTraceValue(payload.agents, 180) ?? "?"}`,
+        subject: null,
+        tone: "success",
+      };
+    case "subagent.routing.not_followed":
+      return {
+        title: "Piano subagent non seguito",
+        detail: `Mancano: ${compactTraceValue(payload.missing_agents, 180) ?? "?"}`,
+        subject: null,
+        tone: "warning",
+      };
+    case "subagent.started":
+      return {
+        title: `Subagent ${asTraceText(payload.subagent) ?? "?"} avviato`,
+        detail: [
+          asTraceText(payload.routing_task_id),
+          compactTraceValue(payload.description, 180),
+        ].filter(Boolean).join(" · ") || null,
+        subject: asTraceText(payload.subagent),
+        tone: "running",
+      };
+    case "subagent.paused":
+      return {
+        title: `Subagent ${asTraceText(payload.subagent) ?? "?"} in attesa approvazione`,
+        detail: asTraceText(payload.routing_task_id),
+        subject: asTraceText(payload.subagent),
+        tone: "warning",
+      };
+    case "subagent.resumed":
+      return {
+        title: `Subagent ${asTraceText(payload.subagent) ?? "?"} ripreso`,
+        detail: asTraceText(payload.routing_task_id),
+        subject: asTraceText(payload.subagent),
+        tone: "running",
+      };
+    case "subagent.completed":
+      return {
+        title: payload.objective_met === false
+          ? `Subagent ${asTraceText(payload.subagent) ?? "?"}: output incompleto`
+          : `Subagent ${asTraceText(payload.subagent) ?? "?"} completato`,
+        detail: [elapsed, compactTraceValue(payload.output_artifacts, 180)]
+          .filter(Boolean)
+          .join(" · ") || null,
+        subject: asTraceText(payload.subagent),
+        tone: payload.objective_met === false ? "warning" : "success",
+      };
+    case "subagent.failed":
+      return {
+        title: `Subagent ${asTraceText(payload.subagent) ?? "?"} fallito`,
+        detail: elapsed,
+        subject: asTraceText(payload.subagent),
+        tone: "danger",
+      };
+    case "subagent.task.queued":
+    case "subagent.task.waiting":
+    case "subagent.task.ready":
+    case "subagent.task.paused":
+    case "subagent.task.resumed":
+    case "subagent.task.completed":
+    case "subagent.task.incomplete":
+    case "subagent.task.failed":
+    case "subagent.task.blocked": {
+      const state = event.type.slice("subagent.task.".length);
+      const tone: TraceTone = state === "completed"
+        ? "success"
+        : ["failed", "blocked"].includes(state)
+          ? "danger"
+          : ["incomplete", "paused"].includes(state)
+            ? "warning"
+            : "info";
+      return {
+        title: `Task ${asTraceText(payload.routing_task_id) ?? "?"}: ${state}`,
+        detail: [
+          asTraceText(payload.selected_agent),
+          compactTraceValue(payload.output_artifacts ?? payload.error, 180),
+        ].filter(Boolean).join(" · ") || null,
+        subject: asTraceText(payload.routing_task_id),
+        tone,
+      };
+    }
     case "assistant.iteration":
       return {
         title: `Iterazione ${asTraceText(payload.iteration) ?? "?"}`,
@@ -189,6 +333,20 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
     case "tool.started":
       return {
         title: `Tool ${subject ?? "sconosciuto"} in esecuzione`,
+        detail: command,
+        subject,
+        tone: "running",
+      };
+    case "tool.paused":
+      return {
+        title: `Tool ${subject ?? "sconosciuto"} in attesa approvazione`,
+        detail: [elapsed, command].filter(Boolean).join(" · ") || null,
+        subject,
+        tone: "warning",
+      };
+    case "tool.resumed":
+      return {
+        title: `Tool ${subject ?? "sconosciuto"} ripreso`,
         detail: command,
         subject,
         tone: "running",
@@ -389,6 +547,17 @@ function pendingGraderEvent(events: RunEvent[]): RunEvent | null {
   return started;
 }
 
+function pendingModelEvent(events: RunEvent[]): RunEvent | null {
+  const pending = new Map<string, RunEvent>();
+  for (const event of events) {
+    const callId = asTraceText(event.payload?.call_id);
+    if (!callId) continue;
+    if (event.type === "model.started") pending.set(callId, event);
+    if (event.type === "model.completed" || event.type === "model.failed") pending.delete(callId);
+  }
+  return [...pending.values()].sort((a, b) => b.id - a.id)[0] ?? null;
+}
+
 function latestEvent(events: RunEvent[], predicate: (event: RunEvent) => boolean): RunEvent | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
@@ -468,6 +637,18 @@ export function describeCurrentAction(events: RunEvent[], run: Run | null): Curr
       startedAt: grader.created_at,
       tone: described.tone,
       event: grader,
+    };
+  }
+
+  const model = pendingModelEvent(events);
+  if (model) {
+    const described = describeTraceEvent(model);
+    return {
+      title: described.title,
+      detail: described.detail,
+      startedAt: model.created_at,
+      tone: described.tone,
+      event: model,
     };
   }
 

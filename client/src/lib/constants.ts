@@ -7,6 +7,10 @@ export const EMPTY_USAGE: Usage = {
   input_tokens: 0,
   output_tokens: 0,
   total_tokens: 0,
+  context_input_tokens: 0,
+  cumulative_input_tokens: 0,
+  cumulative_output_tokens: 0,
+  reasoning_tokens: 0,
   output_tokens_per_second: 0,
   context_categories: [],
   estimated_context: true,
@@ -16,6 +20,7 @@ export type View =
   | "control"
   | "traces"
   | "skills"
+  | "subagents"
   | "tools"
   | "triggers"
   | "improve"

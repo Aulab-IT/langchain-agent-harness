@@ -26,7 +26,11 @@ export function ContextPanel({
   sessionId: string;
   busy?: boolean;
 }) {
-  const percent = Math.min(100, Math.round((usage.input_tokens / contextWindow) * 100));
+  const contextTokens = usage.context_input_tokens ?? usage.input_tokens;
+  const runInputTokens = usage.cumulative_input_tokens ?? usage.input_tokens;
+  const runOutputTokens = usage.cumulative_output_tokens ?? usage.output_tokens;
+  const runTotalTokens = runInputTokens + runOutputTokens;
+  const percent = Math.min(100, Math.round((contextTokens / contextWindow) * 100));
   const gradient = buildGradient(usage.context_categories);
   const [open, setOpen] = useState(false);
   const [compacting, setCompacting] = useState(false);
@@ -55,9 +59,9 @@ export function ContextPanel({
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <div>
-          <h3 className="text-sm font-semibold">Contesto ultimo run</h3>
+          <h3 className="text-sm font-semibold">Contesto ultimo prompt</h3>
           <p className="text-xs text-muted">
-            {usage.total_tokens ? (
+            {contextTokens ? (
               <span className={pressureColor}>{percent}% finestra modello</span>
             ) : (
               "Nessun dato provider"
@@ -66,7 +70,7 @@ export function ContextPanel({
         </div>
         <div className="flex items-center gap-2">
           <span className="rounded-lg border border-border bg-surface-raised px-2.5 py-1 font-mono text-xs">
-            {usage.input_tokens} / {Math.round(contextWindow / 1_000)}k
+            {contextTokens.toLocaleString("it-IT")} / {Math.round(contextWindow / 1_000)}k
           </span>
           <button
             type="button"
@@ -98,8 +102,10 @@ export function ContextPanel({
           style={{ background: gradient }}
         >
           <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-surface text-center">
-            <strong className="text-xl font-semibold">{usage.total_tokens || "—"}</strong>
-            <span className="text-xs text-muted">token totali</span>
+            <strong className="text-xl font-semibold">
+              {contextTokens ? contextTokens.toLocaleString("it-IT") : "—"}
+            </strong>
+            <span className="text-xs text-muted">token nel prompt</span>
           </div>
         </button>
         <div className="w-full flex-1 space-y-3">
@@ -130,7 +136,9 @@ export function ContextPanel({
       ) : null}
 
       <div className="mx-5 mb-5 rounded-lg border border-border bg-surface-raised/40 px-4 py-3 text-xs leading-relaxed text-muted">
-        Totale provider esatto: {usage.input_tokens} input + {usage.output_tokens} output.
+        Contesto finale: {contextTokens.toLocaleString("it-IT")} token nell'ultima chiamata.
+        Consumo run: {runInputTokens.toLocaleString("it-IT")} input + {runOutputTokens.toLocaleString("it-IT")} output = {runTotalTokens.toLocaleString("it-IT")} token.
+        {usage.reasoning_tokens ? ` Reasoning: ${usage.reasoning_tokens.toLocaleString("it-IT")} token.` : ""}
         Breakdown categorie {usage.estimated_context ? "stimato dallo stato graph" : "esatto"}.
         {usage.cost_usd && Number(usage.cost_usd) > 0 ? (
           <>

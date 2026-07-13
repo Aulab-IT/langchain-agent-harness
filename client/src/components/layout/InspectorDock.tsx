@@ -114,7 +114,8 @@ export function InspectorDock(props: DockProps) {
     window.addEventListener("pointerup", onUp);
   }, []);
 
-  const percent = Math.min(100, Math.round((usage.input_tokens / contextWindow) * 100));
+  const contextTokens = usage.context_input_tokens ?? usage.input_tokens;
+  const percent = Math.min(100, Math.round((contextTokens / contextWindow) * 100));
   const status = run?.status ?? "idle";
   const active = Boolean(run && ["queued", "running", "waiting_approval", "waiting_action"].includes(run.status));
   const current = describeCurrentAction(events, run);
@@ -163,7 +164,7 @@ export function InspectorDock(props: DockProps) {
           <Cpu size={13} /> {modelLabel(runtime.models, modelOverride, liveModel)}
         </span>
         <span className="flex items-center gap-1.5">
-          <Layers3 size={13} /> {usage.input_tokens.toLocaleString("it-IT")} tok · {percent}%
+          <Layers3 size={13} /> contesto {contextTokens.toLocaleString("it-IT")} · {percent}%
         </span>
         <span className="hidden items-center gap-1.5 lg:flex">
           <Box size={13} /> sandbox {sessionSandbox.state}

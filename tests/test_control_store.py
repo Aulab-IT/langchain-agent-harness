@@ -30,6 +30,34 @@ def test_session_persists_messages_runs_and_events(tmp_path: Path) -> None:
     store.close()
 
 
+def test_event_history_is_paginated_and_excludes_streaming_deltas(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    session = store.create_session()
+    run = store.create_run(session["id"])
+    for index in range(23):
+        event_type = "assistant.delta" if index in {3, 11, 19} else "tool.started"
+        store.add_event(run["id"], session["id"], event_type, {"n": index})
+
+    collected: list[dict[str, object]] = []
+    before = None
+    while True:
+        page, has_more = store.event_history(
+            run_id=run["id"], before_id=before, limit=7
+        )
+        collected = page + collected
+        if not has_more:
+            break
+        before = page[0]["id"]
+
+    assert len(collected) == 20
+    assert all(event["type"] == "tool.started" for event in collected)
+    assert [event["payload"]["n"] for event in collected] == [
+        index for index in range(23) if index not in {3, 11, 19}
+    ]
+    assert store.delete_run_events(run["id"], {"assistant.delta"}) == 3
+    store.close()
+
+
 def test_session_model_override_defaults_to_auto_and_rejects_junk(tmp_path: Path) -> None:
     store = make_store(tmp_path)
     session = store.create_session()

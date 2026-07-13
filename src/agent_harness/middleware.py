@@ -32,6 +32,7 @@ L'utente può sempre scavalcare la scelta, per sessione o con un marcatore nel m
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -177,7 +178,7 @@ def build_model_router(
 
     # La decisione si ricalcola solo quando cambia il messaggio umano in coda, o quando il
     # gradino è salito: dentro un turno resta congelata e l'evento non si ripete.
-    state: dict[str, str | None] = {"turn": None}
+    state: dict[str, Any] = {"turn": None, "call": 0}
 
     @wrap_model_call
     async def route_model(
@@ -205,6 +206,41 @@ def build_model_router(
                 }
             )
 
-        return await handler(request.override(model=chosen.model))
+        state["call"] += 1
+        call_id = f"model-{state['call']}"
+        started = time.monotonic()
+        if event_callback is not None:
+            event_callback(
+                {
+                    "type": "model.started",
+                    "call_id": call_id,
+                    "model": chosen.name,
+                    "tier": decision.tier,
+                }
+            )
+        try:
+            response = await handler(request.override(model=chosen.model))
+        except Exception as exc:
+            if event_callback is not None:
+                event_callback(
+                    {
+                        "type": "model.failed",
+                        "call_id": call_id,
+                        "model": chosen.name,
+                        "elapsed_ms": round((time.monotonic() - started) * 1_000),
+                        "error": str(exc)[:500],
+                    }
+                )
+            raise
+        if event_callback is not None:
+            event_callback(
+                {
+                    "type": "model.completed",
+                    "call_id": call_id,
+                    "model": chosen.name,
+                    "elapsed_ms": round((time.monotonic() - started) * 1_000),
+                }
+            )
+        return response
 
     return route_model

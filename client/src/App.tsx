@@ -12,6 +12,7 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { Topbar } from "./components/layout/Topbar";
 import { SettingsView } from "./components/settings/SettingsView";
 import { SkillsView } from "./components/skills/SkillsView";
+import { SubagentsView } from "./components/subagents/SubagentsView";
 import { ToolsView } from "./components/tools/ToolsView";
 import { Spinner } from "./components/shared/PanelEmpty";
 import { TraceView } from "./components/traces/TraceView";
@@ -145,6 +146,10 @@ export default function App() {
         ) : view === "skills" ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <SkillsView />
+          </div>
+        ) : view === "subagents" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <SubagentsView />
           </div>
         ) : view === "tools" ? (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
