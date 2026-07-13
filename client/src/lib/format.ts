@@ -1,4 +1,5 @@
 import type { AgentStatus, Run } from "../types";
+import { isTerminalRunStatus } from "./runStatus";
 
 export function timeLabel(value: string | null | undefined): string {
   if (!value) return "—";
@@ -22,7 +23,10 @@ export function runToAgentStatus(run: Run | null): AgentStatus {
   if (!run) return "idle";
   if (run.status === "waiting_approval" || run.status === "waiting_action") return "approval";
   if (run.status === "running" || run.status === "queued") return "thinking";
-  if (run.status === "failed") return "error";
+  if (
+    isTerminalRunStatus(run.status)
+    && !["completed", "cancelled", "no_work"].includes(run.status)
+  ) return "error";
   return "idle";
 }
 

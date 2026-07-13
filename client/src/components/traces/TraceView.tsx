@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { timeLabel } from "../../lib/format";
-import type { RunEvent } from "../../types";
+import { isTerminalRunStatus, RUN_STATUS_LABELS } from "../../lib/runStatus";
+import type { RunEvent, RunStatus } from "../../types";
 
 type ToolStep = {
   kind: "tool";
@@ -50,7 +51,7 @@ type RunSummary = {
   start: number;
   end: number;
   durationMs: number;
-  status: "running" | "completed" | "failed" | "cancelled";
+  status: RunStatus;
   model: string | null;
   contextTokens: number;
   runInputTokens: number;
@@ -81,13 +82,14 @@ function summarize(id: string, events: RunEvent[]): RunSummary {
     if ((event.type === "agent.started" || event.type === "model.selected") && typeof p.model === "string") {
       model = p.model;
     }
+    if (event.type.startsWith("run.")) {
+      const candidate = event.type.slice(4) as RunStatus;
+      if (isTerminalRunStatus(candidate)) status = candidate;
+    }
     if (event.type === "run.completed") {
-      status = "completed";
       iterations = typeof p.iterations === "number" ? p.iterations : iterations;
       if (typeof p.elapsed_ms === "number") durationMs = p.elapsed_ms;
     }
-    if (event.type === "run.failed") status = "failed";
-    if (event.type === "run.cancelled") status = "cancelled";
     if (event.type === "grader.completed") {
       grader = { passed: Boolean(p.passed), score: Number(p.score ?? 0) };
     }
@@ -174,12 +176,21 @@ function eventMeta(type: string) {
 
 function StatusBadge({ status }: { status: RunSummary["status"] }) {
   const map: Record<RunSummary["status"], string> = {
+    queued: "bg-accent/10 text-accent",
     running: "bg-accent/10 text-accent",
+    waiting_approval: "bg-warning/10 text-warning",
+    waiting_action: "bg-warning/10 text-warning",
     completed: "bg-success/10 text-success",
+    incomplete: "bg-warning/10 text-warning",
+    blocked_needs_human: "bg-warning/10 text-warning",
+    failed_verification: "bg-danger/10 text-danger",
+    budget_exceeded: "bg-warning/10 text-warning",
+    security_stop: "bg-danger/10 text-danger",
+    no_work: "bg-muted-2/20 text-muted",
     failed: "bg-danger/10 text-danger",
     cancelled: "bg-muted-2/20 text-muted",
   };
-  return <span className={`rounded-full px-2.5 py-0.5 text-xs ${map[status]}`}>{status}</span>;
+  return <span className={`rounded-full px-2.5 py-0.5 text-xs ${map[status]}`}>{RUN_STATUS_LABELS[status]}</span>;
 }
 
 function Expandable({ label, value }: { label: string; value: string }) {

@@ -284,6 +284,30 @@ def test_improvement_window_is_bounded_by_terminal_runs(tmp_path: Path) -> None:
     store.close()
 
 
+@pytest.mark.parametrize(
+    "status",
+    [
+        "incomplete",
+        "blocked_needs_human",
+        "failed_verification",
+        "budget_exceeded",
+        "security_stop",
+        "no_work",
+    ],
+)
+def test_semantic_terminal_run_sets_completed_at(tmp_path: Path, status: str) -> None:
+    store = make_store(tmp_path)
+    session = store.create_session()
+    run = store.create_run(session["id"])
+
+    store.update_run(run["id"], status=status)
+
+    saved = store.get_run(run["id"])
+    assert saved["status"] == status
+    assert saved["completed_at"] is not None
+    store.close()
+
+
 def test_list_files_hides_dependencies_and_cache(tmp_path: Path) -> None:
     store = make_store(tmp_path)
     session = store.create_session()

@@ -85,6 +85,18 @@ def task(
         reason="Profilo compatibile",
         depends_on=depends_on or [],
         expected_output="artefatto",
+        kind="work",
+        required_tools=[],
+        required_capabilities=[],
+        requires_write=False,
+        success_criteria=["risultato verificabile"],
+    )
+
+
+def completed(text: str, *, verdict: str | None = None) -> AIMessage:
+    suffix = f"\nVERDICT: {verdict}" if verdict else ""
+    return AIMessage(
+        content=f"{text}\nTASK_STATUS: COMPLETE\nEVIDENCE:\n- verifica concreta{suffix}"
     )
 
 
@@ -114,6 +126,11 @@ def test_structured_output_schema_is_strict_for_openai() -> None:
         "reason",
         "depends_on",
         "expected_output",
+        "kind",
+        "required_tools",
+        "required_capabilities",
+        "requires_write",
+        "success_criteria",
     }
 
 
@@ -165,6 +182,57 @@ def test_validate_plan_rejects_dependency_cycles() -> None:
     assert result.delegate is False
     assert result.tasks == []
     assert "cicliche" in result.rationale
+
+
+def test_validate_plan_reassigns_only_to_capability_compatible_agent() -> None:
+    readonly = profile("worker-a").model_copy(update={"read_only": True})
+    writer = profile("worker-b")
+    planned = task("write", "worker-a").model_copy(
+        update={
+            "alternatives": ["worker-b"],
+            "requires_write": True,
+            "required_tools": ["artifact_write"],
+            "required_capabilities": ["sintesi strutturata"],
+        }
+    )
+
+    result = validate_plan(
+        DelegationPlan(delegate=True, rationale="write", tasks=[planned]),
+        [readonly, writer],
+    )
+
+    assert result.delegate is True
+    assert result.tasks[0].selected_agent == "worker-b"
+    assert result.tasks[0].alternatives == []
+
+
+def test_validate_plan_drops_task_and_descendants_when_no_agent_has_required_tool() -> None:
+    source = task("source", "worker-a").model_copy(
+        update={"required_tools": ["skill_create"]}
+    )
+    review = task("review", "worker-b", depends_on=["source"])
+
+    result = validate_plan(
+        DelegationPlan(delegate=True, rationale="unsupported", tasks=[source, review]),
+        [profile("worker-a"), profile("worker-b")],
+    )
+
+    assert result.delegate is False
+    assert result.tasks == []
+
+
+def test_validate_plan_uses_independent_agent_for_review() -> None:
+    work = task("work", "worker-a")
+    review = task("review", "worker-a", depends_on=["work"]).model_copy(
+        update={"kind": "review", "alternatives": ["worker-b"]}
+    )
+
+    result = validate_plan(
+        DelegationPlan(delegate=True, rationale="review", tasks=[work, review]),
+        [profile("worker-a"), profile("worker-b")],
+    )
+
+    assert result.tasks[1].selected_agent == "worker-b"
 
 
 def test_render_plan_exposes_agent_and_dependency_order() -> None:
@@ -244,9 +312,11 @@ def test_middleware_retries_with_json_when_structured_output_is_unsupported() ->
     raw = AIMessage(
         content=(
             '{"delegate": true, "rationale": "match", "tasks": ['
-            '{"id": "one", "objective": "crea", "selected_agent": "worker-a", '
-            '"alternatives": [], "reason": "profilo", "depends_on": [], '
-            '"expected_output": "artefatto"}]}'
+                '{"id": "one", "objective": "crea", "selected_agent": "worker-a", '
+                '"alternatives": [], "reason": "profilo", "depends_on": [], '
+                '"expected_output": "artefatto", "kind": "work", '
+                '"required_tools": [], "required_capabilities": [], '
+                '"requires_write": false, "success_criteria": ["artefatto presente"]}]}'
         )
     )
     model = FakeModel(RuntimeError("schema unsupported"), raw)
@@ -361,7 +431,7 @@ async def test_research_then_presentation_plan_is_executed_end_to_end() -> None:
     )
     router.complete_delegation(
         research,
-        result=AIMessage(content="Tre paper verificati: https://example.test/paper"),
+        result=completed("Tre paper verificati: https://example.test/paper"),
     )
     deck, prepared = await router.prepare_delegation(
         "presentation-maker", "[routing_task_id=deck] Crea deck", "call-deck"
@@ -370,7 +440,7 @@ async def test_research_then_presentation_plan_is_executed_end_to_end() -> None:
     assert "https://example.test/paper" in prepared
     router.complete_delegation(
         deck,
-        result=AIMessage(content="Creato file /workspace/output/deck.pptx con 8 slide."),
+        result=completed("Creato file /workspace/output/deck.pptx con 8 slide."),
     )
     router.finalize()
 
@@ -409,7 +479,7 @@ async def test_dependency_waits_and_receives_predecessor_output() -> None:
         "worker-a", "[routing_task_id=source] raccogli", "source-call"
     )
 
-    router.complete_delegation(source, result=AIMessage(content="Dati verificati completi."))
+    router.complete_delegation(source, result=completed("Dati verificati completi."))
     deliver, prepared = await pending
 
     assert deliver is not None
@@ -471,7 +541,7 @@ async def test_approval_pause_resumes_same_execution_without_retry() -> None:
     assert resumed is first
     assert resumed is not None and resumed.attempt == 1 and resumed.resumed is True
     assert resumed_prepared == prepared
-    router.complete_delegation(resumed, result=AIMessage(content="Risultato completo verificato."))
+    router.complete_delegation(resumed, result=completed("Risultato completo verificato."))
     router.finalize()
 
     types = [event["type"] for event in events]
@@ -505,7 +575,7 @@ async def test_markdown_wrapped_artifact_path_is_normalized_and_validated() -> N
 
     router.complete_delegation(
         execution,
-        result=AIMessage(content="Creato **/workspace/output/deck.pptx** e verificato."),
+        result=completed("Creato **/workspace/output/deck.pptx** e verificato."),
     )
 
     assert execution is not None
@@ -536,7 +606,7 @@ async def test_new_output_file_reconciles_missing_text_claim() -> None:
     listed.append("output/deck.pptx")
 
     router.complete_delegation(
-        execution, result=AIMessage(content="Presentazione creata e verificata correttamente.")
+        execution, result=completed("Presentazione creata e verificata correttamente.")
     )
 
     assert execution is not None
@@ -568,15 +638,148 @@ async def test_dependency_artifact_is_not_claimed_as_downstream_output() -> None
     )
     listed.append("output/source.pptx")
     router.complete_delegation(
-        source_execution, result=AIMessage(content="Ricerca completata e verificata.")
+        source_execution, result=completed("Ricerca completata e verificata.")
     )
     deck_execution, _ = await router.prepare_delegation(
         "worker-b", "[routing_task_id=deck] crea", "deck-call"
     )
     router.complete_delegation(
-        deck_execution, result=AIMessage(content="Elaborazione completata senza nuovo file.")
+        deck_execution, result=completed("Elaborazione completata senza nuovo file.")
     )
 
     assert deck_execution is not None
     assert deck_execution.status == "incomplete"
     assert deck_execution.output_artifacts == []
+
+
+@pytest.mark.asyncio
+async def test_incomplete_plan_blocks_root_and_can_reassign_to_planned_alternative() -> None:
+    planned = task("deck", "worker-a").model_copy(update={"alternatives": ["worker-b"]})
+    plan = DelegationPlan(delegate=True, rationale="fallback", tasks=[planned])
+    events: list[dict[str, Any]] = []
+    router = SubagentRouterMiddleware(  # type: ignore[arg-type]
+        FakeModel(plan),
+        [profile("worker-a"), profile("worker-b")],
+        event_callback=events.append,
+    )
+    request = ModelRequest(  # type: ignore[arg-type]
+        model=FakeModel(plan), messages=[HumanMessage(content="Crea")], tools=[]
+    )
+    router.wrap_model_call(request, lambda _: "ok")  # type: ignore[arg-type,return-value]
+    first, _ = await router.prepare_delegation(
+        "worker-a", "[routing_task_id=deck] crea", "call-a"
+    )
+    router.complete_delegation(first, result=AIMessage(content="Mi manca il materiale."))
+
+    passed, feedback = router.completion_check("Crea", [])
+    assert passed is False
+    assert "worker-b" in feedback
+
+    retry, _ = await router.prepare_delegation(
+        "worker-b", "[routing_task_id=deck] riprova", "call-b"
+    )
+    router.complete_delegation(
+        retry, result=completed("Risultato completo e verificato correttamente.")
+    )
+
+    assert router.completion_check("Crea", []) == (True, "")
+    assert any(event["type"] == "subagent.task.reassigned" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_required_tool_must_be_observed_before_task_can_complete() -> None:
+    planned = task("research", "worker-a").model_copy(
+        update={"required_tools": ["artifact_write"]}
+    )
+    plan = DelegationPlan(delegate=True, rationale="evidence", tasks=[planned])
+    router = SubagentRouterMiddleware(FakeModel(plan), [profile("worker-a")])  # type: ignore[arg-type]
+    request = ModelRequest(  # type: ignore[arg-type]
+        model=FakeModel(plan), messages=[HumanMessage(content="Ricerca")], tools=[]
+    )
+    router.wrap_model_call(request, lambda _: "ok")  # type: ignore[arg-type,return-value]
+
+    execution, _ = await router.prepare_delegation(
+        "worker-a", "[routing_task_id=research] esegui", "call-one"
+    )
+    router.complete_delegation(execution, result=completed("Risultato dichiarato completo."))
+    assert execution is not None and execution.status == "incomplete"
+
+    retry, _ = await router.prepare_delegation(
+        "worker-a", "[routing_task_id=research] riprova", "call-two"
+    )
+    router.record_tool_event(
+        {
+            "type": "subagent.tool.completed",
+            "routing_task_id": "research",
+            "attempt": 2,
+            "tool": "artifact_write",
+        }
+    )
+    router.complete_delegation(retry, result=completed("Risultato verificato con tool."))
+    assert retry is not None and retry.status == "completed"
+    assert retry.used_tools == ["artifact_write"]
+
+
+@pytest.mark.asyncio
+async def test_review_requires_explicit_pass_verdict() -> None:
+    planned = task("review", "worker-a").model_copy(update={"kind": "review"})
+    plan = DelegationPlan(delegate=True, rationale="review", tasks=[planned])
+    router = SubagentRouterMiddleware(FakeModel(plan), [profile("worker-a")])  # type: ignore[arg-type]
+    request = ModelRequest(  # type: ignore[arg-type]
+        model=FakeModel(plan), messages=[HumanMessage(content="Verifica")], tools=[]
+    )
+    router.wrap_model_call(request, lambda _: "ok")  # type: ignore[arg-type,return-value]
+
+    failed, _ = await router.prepare_delegation(
+        "worker-a", "[routing_task_id=review] verifica", "review-one"
+    )
+    router.complete_delegation(
+        failed, result=completed("Trovati difetti bloccanti.", verdict="FAIL")
+    )
+    assert failed is not None and failed.status == "incomplete"
+
+    passed, _ = await router.prepare_delegation(
+        "worker-a", "[routing_task_id=review] riverifica", "review-two"
+    )
+    router.complete_delegation(
+        passed, result=completed("Tutti i criteri risultano verificati.", verdict="PASS")
+    )
+    assert passed is not None and passed.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_preexisting_artifact_claim_is_rejected_but_modified_hash_is_accepted() -> None:
+    planned = task("deck", "worker-a").model_copy(
+        update={"expected_output": "File PowerPoint .pptx"}
+    )
+    plan = DelegationPlan(delegate=True, rationale="provenance", tasks=[planned])
+    snapshot = {"output/deck.pptx": "old-hash"}
+    router = SubagentRouterMiddleware(  # type: ignore[arg-type]
+        FakeModel(plan),
+        [profile("worker-a")],
+        artifact_validator=lambda path: path == "output/deck.pptx",
+        artifact_snapshotter=lambda: snapshot,
+    )
+    request = ModelRequest(  # type: ignore[arg-type]
+        model=FakeModel(plan), messages=[HumanMessage(content="Crea")], tools=[]
+    )
+    router.wrap_model_call(request, lambda _: "ok")  # type: ignore[arg-type,return-value]
+
+    unchanged, _ = await router.prepare_delegation(
+        "worker-a", "[routing_task_id=deck] crea", "deck-one"
+    )
+    router.complete_delegation(
+        unchanged, result=completed("Creato /workspace/output/deck.pptx")
+    )
+    assert unchanged is not None and unchanged.status == "incomplete"
+    assert unchanged.output_artifacts == []
+
+    modified, _ = await router.prepare_delegation(
+        "worker-a", "[routing_task_id=deck] modifica", "deck-two"
+    )
+    snapshot["output/deck.pptx"] = "new-hash"
+    router.complete_delegation(
+        modified, result=completed("Aggiornato /workspace/output/deck.pptx")
+    )
+    assert modified is not None and modified.status == "completed"
+    assert modified.output_artifacts == ["output/deck.pptx"]

@@ -56,6 +56,7 @@ class AuditMiddleware(AgentMiddleware):
         task_semaphore: Any = None,
         task_observer: Callable[[str], None] | None = None,
         task_coordinator: Any = None,
+        tool_observer: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.path = path
         self.event_callback = event_callback
@@ -65,6 +66,7 @@ class AuditMiddleware(AgentMiddleware):
         self.task_semaphore = task_semaphore
         self.task_observer = task_observer
         self.task_coordinator = task_coordinator
+        self.tool_observer = tool_observer
         self._paused_calls: set[str] = set()
         self._paused_lock = threading.Lock()
 
@@ -93,7 +95,7 @@ class AuditMiddleware(AgentMiddleware):
         result: Any = None,
         execution: Any = None,
     ) -> None:
-        if self.event_callback is None:
+        if self.event_callback is None and self.tool_observer is None:
             return
         args = request.tool_call.get("args", {})
         tool_name = request.tool_call["name"]
@@ -143,7 +145,10 @@ class AuditMiddleware(AgentMiddleware):
             parts = path.split("/")
             if len(parts) > 2 and parts[2]:
                 payload["skill"] = parts[2]
-        self.event_callback(payload)
+        if self.tool_observer is not None:
+            self.tool_observer(dict(payload))
+        if self.event_callback is not None:
+            self.event_callback(payload)
 
     def _task_scope(
         self, request: ToolCallRequest, execution: Any = None

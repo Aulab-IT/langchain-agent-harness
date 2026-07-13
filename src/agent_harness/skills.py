@@ -9,6 +9,7 @@ import shutil
 import socket
 import subprocess
 import tarfile
+import tempfile
 import urllib.parse
 import urllib.request
 import zipfile
@@ -146,6 +147,31 @@ def build_skill_md(name: str, description: str, body: str) -> str:
     return f"---\nname: {name}\ndescription: {description}\n---\n\n{body.strip()}\n"
 
 
+def _atomic_write(target: Path, content: str | bytes) -> None:
+    """Pubblica un file con replace sullo stesso filesystem; niente file visibili a metà."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    mode = "wb" if isinstance(content, bytes) else "w"
+    kwargs: dict[str, Any] = {} if isinstance(content, bytes) else {"encoding": "utf-8"}
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode=mode,
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+            **kwargs,
+        ) as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+            temporary = Path(handle.name)
+        temporary.replace(target)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def write_skill(skills_dir: Path, name: str, content: str) -> dict[str, Any]:
     """Scrive/aggiorna un SKILL.md dopo validazione contro lo standard."""
     directory = _skill_dir(skills_dir, name)
@@ -155,7 +181,7 @@ def write_skill(skills_dir: Path, name: str, content: str) -> dict[str, Any]:
         raise ValueError("; ".join(errors))
     with SKILLS_LOCK:
         directory.mkdir(parents=True, exist_ok=True)
-        (directory / "SKILL.md").write_text(content, encoding="utf-8")
+        _atomic_write(directory / "SKILL.md", content)
         return read_skill(skills_dir, name)
 
 
@@ -228,19 +254,18 @@ def write_skill_file(
     Se il file è il `SKILL.md` di primo livello, il frontmatter viene validato prima di scrivere.
     """
     directory = _skill_dir(skills_dir, name)
-    directory.mkdir(parents=True, exist_ok=True)
     target = _resolve_within(directory, relpath)
-    if target == (directory.resolve() / "SKILL.md") and isinstance(content, str):
+    manifest = directory.resolve() / "SKILL.md"
+    if target == manifest and isinstance(content, str):
         front, _ = parse_frontmatter(content)
         errors = validate_skill(front.get("name", name), name, front)
         if errors:
             raise ValueError("; ".join(errors))
     with SKILLS_LOCK:
+        if target != manifest and not manifest.is_file():
+            raise ValueError("Crea e valida SKILL.md prima dei file di risorsa.")
         target.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(content, bytes):
-            target.write_bytes(content)
-        else:
-            target.write_text(content, encoding="utf-8")
+        _atomic_write(target, content)
         return read_skill_file(skills_dir, name, relpath)
 
 
@@ -441,21 +466,37 @@ def _finalize_install(
     if errors:
         raise ValueError("; ".join(errors))
     target = _skill_dir(skills_dir, name)
-    # L'installazione è la scrittura più lunga sull'albero condiviso: senza il lock una
-    # sessione che prepara la propria radice potrebbe copiarne una versione a metà.
-    with SKILLS_LOCK:
-        if target.exists() and not force:
-            raise FileExistsError(name)
-        if target.exists():
-            shutil.rmtree(target)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        # symlinks=False: eventuali symlink residui vengono copiati come file reali, non
-        # seguiti fuori.
-        shutil.copytree(skill_src, target, symlinks=False)
-        record_skill_event(
-            skills_dir, name=name, source=source, value=value, by=by, action="install"
-        )
-        return read_skill(skills_dir, name)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging_parent = Path(tempfile.mkdtemp(prefix=".skill-stage-", dir=target.parent))
+    staged = staging_parent / name
+    backup = staging_parent / f"{name}.backup"
+    try:
+        # Preparazione completa fuori dal path pubblico. Se copia/validazione fallisce,
+        # catalogo corrente resta intatto.
+        shutil.copytree(skill_src, staged, symlinks=False)
+        staged_info = _skill_info(staged)
+        if not staged_info["valid"]:
+            raise ValueError("; ".join(staged_info["errors"]))
+        with SKILLS_LOCK:
+            if target.exists() and not force:
+                raise FileExistsError(name)
+            replaced = target.exists()
+            if replaced:
+                target.replace(backup)
+            try:
+                staged.replace(target)
+            except Exception:
+                if replaced and backup.exists():
+                    backup.replace(target)
+                raise
+            if backup.exists():
+                shutil.rmtree(backup)
+            record_skill_event(
+                skills_dir, name=name, source=source, value=value, by=by, action="install"
+            )
+            return read_skill(skills_dir, name)
+    finally:
+        shutil.rmtree(staging_parent, ignore_errors=True)
 
 
 def install_skill_from_archive(
@@ -575,9 +616,7 @@ def install_skill(
     if source == "archive_url":
         return install_skill_from_url(skills_dir, value, by=by, force=force)
     if source == "git":
-        return install_skill_from_git(
-            skills_dir, value, ref=ref, subdir=subdir, by=by, force=force
-        )
+        return install_skill_from_git(skills_dir, value, ref=ref, subdir=subdir, by=by, force=force)
     if source == "registry":
         if not registry_url:
             raise ValueError("Registry non configurato.")

@@ -60,6 +60,15 @@ def fake_harness(
     )
 
 
+class SequencedCompletionCheck:
+    def __init__(self, results: list[tuple[bool, str]]) -> None:
+        self.results = list(results)
+
+    def __call__(self, goal: str, messages: list[Any]) -> tuple[bool, str]:
+        del goal, messages
+        return self.results.pop(0)
+
+
 def test_final_text_excludes_encrypted_reasoning_blocks() -> None:
     message = AIMessage(
         content=[
@@ -89,6 +98,43 @@ async def test_runner_stops_on_completion_marker() -> None:
     result = await GoalRunner(fake_harness(graph)).run("Rispondi alla domanda", thread_id="t-1")
     assert result.completed is True
     assert result.iterations == 1
+
+
+@pytest.mark.asyncio
+async def test_completion_check_blocks_early_success_then_allows_retry() -> None:
+    graph = FakeGraph(
+        [
+            {"messages": [AIMessage(content="Fatto. [GOAL_COMPLETE]")]},
+            {"messages": [AIMessage(content="Deleghe verificate. [GOAL_COMPLETE]")]},
+        ]
+    )
+    harness = fake_harness(graph, 2)
+    harness.completion_checks = [
+        SequencedCompletionCheck(
+            [(False, "Delega incompleta: riprova."), (True, "")]
+        )
+    ]
+
+    result = await GoalRunner(harness).run("Rispondi", thread_id="guard-1")
+
+    assert result.completed is True
+    assert result.iterations == 2
+    assert "Delega incompleta" in graph.inputs[1]["messages"][0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_failed_completion_check_has_failed_verification_terminal_status() -> None:
+    graph = FakeGraph([{"messages": [AIMessage(content="Fatto.")]}])
+    harness = fake_harness(graph, 1)
+    harness.completion_checks = [
+        SequencedCompletionCheck([(False, "Skill non pubblicata.")])
+    ]
+
+    result = await GoalRunner(harness).run("Rispondi", thread_id="guard-2")
+
+    assert result.completed is False
+    assert result.terminal_status == "failed_verification"
+    assert result.failure_reason == "Skill non pubblicata."
 
 
 @pytest.mark.asyncio

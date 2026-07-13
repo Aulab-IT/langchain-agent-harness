@@ -1,4 +1,5 @@
 import type { Run, RunEvent } from "../types";
+import { isTerminalRunStatus, RUN_STATUS_LABELS } from "./runStatus";
 
 export type TraceTone = "running" | "success" | "warning" | "danger" | "muted" | "info";
 
@@ -128,6 +129,20 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         subject,
         tone: "success",
       };
+    case "run.incomplete":
+    case "run.blocked_needs_human":
+    case "run.failed_verification":
+    case "run.budget_exceeded":
+    case "run.security_stop":
+    case "run.no_work": {
+      const status = event.type.slice(4) as Run["status"];
+      return {
+        title: RUN_STATUS_LABELS[status],
+        detail: asTraceText(payload.reason) ?? compactTraceValue(payload, 180),
+        subject,
+        tone: status === "no_work" ? "muted" : status === "security_stop" ? "danger" : "warning",
+      };
+    }
     case "run.failed":
       return {
         title: "Run fallito",
@@ -164,6 +179,27 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         detail: asTraceText(payload.reason) ?? "",
         subject: asTraceText(payload.model),
         tone: "info",
+      };
+    case "model.preflight.started":
+      return {
+        title: `Preflight ${asTraceText(payload.model) ?? "modello"}`,
+        detail: `Verifica disponibilità provider ${asTraceText(payload.provider) ?? "?"}`,
+        subject: asTraceText(payload.model),
+        tone: "running",
+      };
+    case "model.preflight.completed":
+      return {
+        title: `Preflight ${asTraceText(payload.model) ?? "modello"} superato`,
+        detail: payload.cached ? "Risultato valido in cache" : elapsed,
+        subject: asTraceText(payload.model),
+        tone: "success",
+      };
+    case "model.preflight.failed":
+      return {
+        title: `Preflight ${asTraceText(payload.model) ?? "modello"} fallito`,
+        detail: compactTraceValue(payload.error, 180),
+        subject: asTraceText(payload.model),
+        tone: "danger",
       };
     case "model.started":
       return {
@@ -235,7 +271,7 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
       };
     case "subagent.routing.followed":
       return {
-        title: "Piano subagent avviato",
+        title: "Piano subagent completato",
         detail: `Agent: ${compactTraceValue(payload.agents, 180) ?? "?"}`,
         subject: null,
         tone: "success",
@@ -290,6 +326,7 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         tone: "danger",
       };
     case "subagent.task.queued":
+    case "subagent.task.reassigned":
     case "subagent.task.waiting":
     case "subagent.task.ready":
     case "subagent.task.paused":
@@ -310,6 +347,8 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         title: `Task ${asTraceText(payload.routing_task_id) ?? "?"}: ${state}`,
         detail: [
           asTraceText(payload.selected_agent),
+          compactTraceValue(payload.used_tools, 120),
+          compactTraceValue(payload.review_verdict, 60),
           compactTraceValue(payload.output_artifacts ?? payload.error, 180),
         ].filter(Boolean).join(" · ") || null,
         subject: asTraceText(payload.routing_task_id),
@@ -599,16 +638,11 @@ export function describeCurrentAction(events: RunEvent[], run: Run | null): Curr
     };
   }
 
-  if (run?.status === "completed" || run?.status === "failed" || run?.status === "cancelled") {
+  if (run && isTerminalRunStatus(run.status)) {
     const terminal = latestEvent(events, (event) => event.type === `run.${run.status}`);
     const described = terminal ? describeTraceEvent(terminal) : null;
-    const fallback = {
-      completed: "Run completato",
-      failed: "Run fallito",
-      cancelled: "Run cancellato",
-    } satisfies Record<typeof run.status, string>;
     return {
-      title: described?.title ?? fallback[run.status],
+      title: described?.title ?? RUN_STATUS_LABELS[run.status],
       detail: described?.detail ?? run.error ?? null,
       startedAt: terminal?.created_at ?? run.completed_at ?? run.started_at,
       tone: described?.tone ?? (run.status === "completed" ? "success" : "danger"),

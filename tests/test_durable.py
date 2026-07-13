@@ -33,6 +33,19 @@ def test_completed_and_incomplete_are_distinct() -> None:
     assert can_transition(RunState.RUNNING, RunState.COMPLETED)
 
 
+def test_semantic_terminal_states_are_terminal_and_reachable() -> None:
+    semantic = {
+        RunState.BLOCKED_NEEDS_HUMAN,
+        RunState.FAILED_VERIFICATION,
+        RunState.BUDGET_EXCEEDED,
+        RunState.SECURITY_STOP,
+        RunState.NO_WORK,
+    }
+    for state in semantic:
+        assert can_transition(RunState.RUNNING, state)
+        assert not can_transition(state, RunState.RUNNING)
+
+
 def test_enqueue_is_idempotent(tmp_path: Path) -> None:
     store = _store(tmp_path)
     key = idempotency_key("session-1", "req-1")

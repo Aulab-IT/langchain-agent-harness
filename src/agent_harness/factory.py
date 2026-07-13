@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -83,6 +84,7 @@ class Harness:
     config_fingerprint: str = ""
     baseline_fingerprint: str = ""
     config_source: str | None = None
+    completion_checks: list[Any] = field(default_factory=list)
 
 
 def build_workspace_permissions() -> list[FilesystemPermission]:
@@ -683,17 +685,6 @@ async def build_harness(
                     {"type": "subagent.warning", "message": message, "subagent": spec["name"]}
                 )
         merged_subagents[spec["name"]] = resolved
-    for subagent in merged_subagents.values():
-        subagent["middleware"] = [
-            AuditMiddleware(
-                settings.state_dir / "audit.jsonl",
-                event_callback,
-                run_id=run_id,
-                session_id=session_id,
-                subagent_name=subagent["name"],
-            )
-        ]
-    subagents = list(merged_subagents.values())
     subagent_profiles = _subagent_profiles(merged_subagents, user_subagent_specs, tiers)
 
     checkpoint_path = settings.state_dir / "checkpoints.sqlite"
@@ -725,23 +716,31 @@ async def build_harness(
                 return False
             return candidate.is_file()
 
-        def list_output_artifacts() -> list[str]:
-            output = (active_workspace / "output").resolve()
+        def snapshot_output_artifacts() -> dict[str, str]:
             root = active_workspace.resolve()
-            try:
-                output.relative_to(root)
-            except ValueError:
-                return []
-            if not output.is_dir():
-                return []
-            artifacts: list[str] = []
-            for path in sorted(output.rglob("*")):
-                if not path.is_file() or path.is_symlink():
-                    continue
+            artifacts: dict[str, str] = {}
+            for directory_name in ("output", "work"):
+                directory = (active_workspace / directory_name).resolve()
                 try:
-                    artifacts.append(path.relative_to(root).as_posix())
+                    directory.relative_to(root)
                 except ValueError:
                     continue
+                if not directory.is_dir():
+                    continue
+                for path in sorted(directory.rglob("*")):
+                    if not path.is_file() or path.is_symlink():
+                        continue
+                    try:
+                        relative = path.relative_to(root).as_posix()
+                        digest = hashlib.sha256()
+                        with path.open("rb") as stream:
+                            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                                digest.update(chunk)
+                        artifacts[relative] = digest.hexdigest()
+                    except (OSError, ValueError):
+                        continue
+                    if len(artifacts) >= 500:
+                        return artifacts
                 if len(artifacts) >= 500:
                     break
             return artifacts
@@ -753,11 +752,27 @@ async def build_harness(
                 event_callback=event_callback,
                 max_tasks=settings.harness_subagent_router_max_tasks,
                 artifact_validator=artifact_exists,
-                artifact_lister=list_output_artifacts,
+                artifact_snapshotter=snapshot_output_artifacts,
             )
             if settings.harness_enable_subagent_routing and subagent_profiles
             else None
         )
+        for subagent in merged_subagents.values():
+            subagent["middleware"] = [
+                AuditMiddleware(
+                    settings.state_dir / "audit.jsonl",
+                    event_callback,
+                    run_id=run_id,
+                    session_id=session_id,
+                    subagent_name=subagent["name"],
+                    tool_observer=(
+                        subagent_router.record_tool_event
+                        if subagent_router is not None
+                        else None
+                    ),
+                )
+            ]
+        subagents = list(merged_subagents.values())
         middleware: list[AgentMiddleware[Any, Any, Any]] = [
             # Guardia file: rimuove i blocchi-file corrotti prima che raggiungano il provider,
             # così un artefatto malformato non fa fallire (e non avvelena) l'intera conversazione.
@@ -825,6 +840,9 @@ async def build_harness(
                 config_fingerprint=selection.fingerprint,
                 baseline_fingerprint=selection.baseline_fingerprint,
                 config_source=selection.canary_source,
+                completion_checks=(
+                    [subagent_router.completion_check] if subagent_router is not None else []
+                ),
             )
         finally:
             if subagent_router is not None:

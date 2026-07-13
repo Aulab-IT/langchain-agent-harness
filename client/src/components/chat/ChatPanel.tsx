@@ -10,6 +10,7 @@ import type {
   SessionFile,
 } from "../../types";
 import { latestSelectedModel } from "../../lib/sessionActivity";
+import { isTerminalRunStatus, RUN_STATUS_LABELS } from "../../lib/runStatus";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessage } from "./ChatMessage";
 import { MarkdownContent } from "./MarkdownContent";
@@ -91,7 +92,7 @@ export function ChatPanel({
     if (event.dataTransfer.files.length) onUpload(event.dataTransfer.files);
   };
 
-  const active = Boolean(run && !["completed", "failed", "cancelled"].includes(run.status));
+  const active = Boolean(run && !isTerminalRunStatus(run.status));
   // Ogni continuazione produce un nuovo flusso di delta: senza ripartire dall'ultimo
   // confine, la bolla in streaming concatenerebbe tutte le iterazioni del run.
   const liveText = useMemo(() => {
@@ -234,9 +235,9 @@ export function ChatPanel({
           </article>
         ) : null}
         {!active ? <SubagentActivity events={events} /> : null}
-        {run?.status === "failed" && run.error ? (
+        {run && isTerminalRunStatus(run.status) && run.status !== "completed" && run.error ? (
           <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
-            Run fallito: {run.error}
+            {RUN_STATUS_LABELS[run.status]}: {run.error}
           </div>
         ) : null}
         <div ref={endRef} />

@@ -143,17 +143,25 @@ export type SessionFile = {
   modified_at?: string;
 };
 
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "waiting_approval"
+  | "waiting_action"
+  | "completed"
+  | "incomplete"
+  | "blocked_needs_human"
+  | "failed_verification"
+  | "budget_exceeded"
+  | "security_stop"
+  | "no_work"
+  | "failed"
+  | "cancelled";
+
 export type Run = {
   id: string;
   session_id: string;
-  status:
-    | "queued"
-    | "running"
-    | "waiting_approval"
-    | "waiting_action"
-    | "completed"
-    | "failed"
-    | "cancelled";
+  status: RunStatus;
   started_at: string;
   completed_at: string | null;
   error: string | null;

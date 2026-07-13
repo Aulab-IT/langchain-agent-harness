@@ -32,6 +32,8 @@ class RunResult:
     iterations: int
     completed: bool
     messages: list[BaseMessage]
+    terminal_status: str = "completed"
+    failure_reason: str = ""
 
 
 def final_text(messages: list[BaseMessage]) -> str:
@@ -158,10 +160,14 @@ class GoalRunner:
             if self.approval_callback is None:
                 raise RuntimeError("Esecuzione sospesa: manca un callback di approvazione.")
             approved = await self.approval_callback(payload)
-            decision = {"type": "approve"} if approved else {
-                "type": "reject",
-                "message": "Operazione rifiutata dall'utente.",
-            }
+            decision = (
+                {"type": "approve"}
+                if approved
+                else {
+                    "type": "reject",
+                    "message": "Operazione rifiutata dall'utente.",
+                }
+            )
             # HumanInTheLoopMiddleware sospende con UN interrupt per turno, ma i tool
             # sensibili chiamati in parallelo nello stesso turno finiscono tutti in
             # `action_requests`: serve una decisione per ciascuno, altrimenti
@@ -192,14 +198,28 @@ class GoalRunner:
             config,
         )
         maximum = self.harness.settings.harness_max_continuations
+        last_failure_reason = ""
+        failed_verification = False
         for iteration in range(1, maximum + 1):
             messages = result.get("messages", [])
             text = final_text(messages)
-            heuristic_ok = (
-                not requires_environment_verification(clean_goal)
-                or has_successful_verification(messages)
-            )
-            feedback = ""
+            checks: list[tuple[bool, str]] = []
+            if requires_environment_verification(clean_goal):
+                environment_ok = has_successful_verification(messages)
+                checks.append(
+                    (
+                        environment_ok,
+                        "Manca una verifica sandbox riuscita (`docker_exec`, exit_code=0).",
+                    )
+                )
+            for check in getattr(self.harness, "completion_checks", []):
+                checks.append(check(clean_goal, messages))
+            check_feedback = [message for passed, message in checks if not passed and message]
+            heuristic_ok = all(passed for passed, _ in checks)
+            feedback = "\n".join(check_feedback)
+            if not heuristic_ok:
+                failed_verification = True
+                last_failure_reason = feedback or "Verifica finale non superata."
             # Un punteggio sotto la soglia di uscita fa riprovare; solo un punteggio sotto la
             # soglia di escalation dice che il gradino non ce la fa. Fra le due, l'agente
             # riprova con lo stesso modello: costa una iterazione economica invece che una cara.
@@ -212,17 +232,22 @@ class GoalRunner:
                         iterations=iteration,
                         completed=True,
                         messages=messages,
+                        terminal_status="completed",
                     )
                 feedback = grade.feedback
-                fallimento_netto = (
-                    grade.score < self.harness.settings.harness_escalation_threshold
-                )
+                failed_verification = True
+                last_failure_reason = grade.feedback or "Rubric di verifica non superata."
+                fallimento_netto = grade.score < self.harness.settings.harness_escalation_threshold
             if iteration == maximum:
                 return RunResult(
                     text=text,
                     iterations=iteration,
                     completed=False,
                     messages=messages,
+                    terminal_status=(
+                        "failed_verification" if failed_verification else "incomplete"
+                    ),
+                    failure_reason=last_failure_reason,
                 )
             if feedback:
                 continuation = VERIFICATION_FEEDBACK_PROMPT.format(
@@ -251,9 +276,7 @@ class GoalRunner:
                     )
                 # Confine tra iterazioni: la UI accumula i delta di streaming e senza questo
                 # marcatore concatenerebbe la risposta di ogni continuazione alla precedente.
-                self.event_callback(
-                    {"type": "assistant.iteration", "iteration": iteration + 1}
-                )
+                self.event_callback({"type": "assistant.iteration", "iteration": iteration + 1})
             result = await self._invoke_with_approval(
                 {"messages": [{"role": "user", "content": continuation}]},
                 config,

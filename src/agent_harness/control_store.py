@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_harness.config import SKILLS_LOCK, Settings
+from agent_harness.durable import TERMINAL_STATES
 from agent_harness.pricing import ModelCallUsage, PriceEntry, PricingCatalog
 
 
@@ -195,8 +196,7 @@ class ControlStore:
                 (utc_now(),),
             )
             columns = {
-                row["name"]
-                for row in self._connection.execute("PRAGMA table_info(messages)")
+                row["name"] for row in self._connection.execute("PRAGMA table_info(messages)")
             }
             if "attachments_json" not in columns:
                 self._connection.execute(
@@ -206,8 +206,7 @@ class ControlStore:
             if "model" not in columns:
                 self._connection.execute("ALTER TABLE messages ADD COLUMN model TEXT")
             session_columns = {
-                row["name"]
-                for row in self._connection.execute("PRAGMA table_info(sessions)")
+                row["name"] for row in self._connection.execute("PRAGMA table_info(sessions)")
             }
             if "auto_approve" not in session_columns:
                 self._connection.execute(
@@ -226,8 +225,7 @@ class ControlStore:
                 "UPDATE sessions SET model_override = 'high' WHERE model_override = 'strong'"
             )
             trigger_columns = {
-                row["name"]
-                for row in self._connection.execute("PRAGMA table_info(triggers)")
+                row["name"] for row in self._connection.execute("PRAGMA table_info(triggers)")
             }
             # `0 9 * * *` sono le nove nel fuso di chi ha creato il trigger, non in UTC.
             if "timezone" not in trigger_columns:
@@ -483,7 +481,11 @@ class ControlStore:
             rows = self._connection.execute(
                 """
                 SELECT * FROM runs
-                WHERE status IN ('completed', 'failed', 'cancelled')
+                WHERE status IN (
+                    'completed', 'incomplete', 'blocked_needs_human',
+                    'failed_verification', 'budget_exceeded', 'security_stop',
+                    'no_work', 'failed', 'cancelled'
+                )
                 ORDER BY started_at DESC
                 LIMIT ?
                 """,
@@ -507,7 +509,7 @@ class ControlStore:
         error: str | None = None,
         usage: dict[str, Any] | None = None,
     ) -> None:
-        terminal = status in {"completed", "failed", "cancelled"}
+        terminal = status in {state.value for state in TERMINAL_STATES}
         with self._lock, self._connection:
             self._connection.execute(
                 """
@@ -571,10 +573,7 @@ class ControlStore:
                     }
                 )
         sessions = sorted(
-            (
-                {**bucket, "cost_usd": str(bucket.pop("cost"))}
-                for bucket in by_session.values()
-            ),
+            ({**bucket, "cost_usd": str(bucket.pop("cost"))} for bucket in by_session.values()),
             key=lambda item: Decimal(item["cost_usd"]),
             reverse=True,
         )
@@ -864,7 +863,7 @@ class ControlStore:
         params.append(limit + 1)
         query = f"""
             SELECT * FROM events
-            WHERE {' AND '.join(clauses)}
+            WHERE {" AND ".join(clauses)}
             ORDER BY id DESC LIMIT ?
         """
         with self._lock:

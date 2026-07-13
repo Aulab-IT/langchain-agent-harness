@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     # Fallisce aperto sul routing nativo del tool `task`, quindi non blocca l'esecuzione.
     harness_enable_subagent_routing: bool = True
     harness_subagent_router_max_tasks: int = Field(default=8, ge=1, le=16)
+    # Probe reale prima del run: evita che modello inesistente emerga dopo tool/deleghe.
+    # Successi in cache riducono latenza/costo; cambio nome/provider genera chiave diversa.
+    harness_model_preflight_timeout_seconds: int = Field(default=20, ge=2, le=120)
+    harness_model_preflight_ttl_seconds: int = Field(default=300, ge=0, le=86_400)
     harness_enable_rubric: bool = True
     # Due domande diverse, due soglie. «L'obiettivo è raggiunto?» resta severa: sotto 0.7 si
     # riprova. «Il gradino ha fallito?» dev'essere più esigente, perché da quando il router fa

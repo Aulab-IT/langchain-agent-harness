@@ -63,6 +63,12 @@ const STATUS_DOT: Record<string, string> = {
   queued: "bg-accent",
   waiting_approval: "bg-warning",
   waiting_action: "bg-accent",
+  incomplete: "bg-warning",
+  blocked_needs_human: "bg-warning",
+  failed_verification: "bg-danger",
+  budget_exceeded: "bg-warning",
+  security_stop: "bg-danger",
+  no_work: "bg-muted-2",
   failed: "bg-danger",
 };
 

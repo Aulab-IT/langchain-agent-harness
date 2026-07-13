@@ -1,7 +1,9 @@
 import itertools
 import json
 from collections.abc import Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -13,6 +15,7 @@ from agent_harness.config import Settings
 from agent_harness.control_store import ControlStore
 from agent_harness.durable import DurableStore
 from agent_harness.improve import Proposal, write_proposal
+from agent_harness.runner import RunResult
 from agent_harness.usage import context_categories
 
 
@@ -44,6 +47,68 @@ def test_status_exposes_runtime_without_secrets(client: TestClient) -> None:
     assert payload["backend"] == "online"
     assert "openai_api_key" not in payload
     assert "docker_exec" in {tool["name"] for tool in payload["tools"]}
+
+
+def test_human_rejection_overrides_model_success() -> None:
+    result = RunResult(
+        text="Fatto",
+        iterations=1,
+        completed=True,
+        messages=[],
+    )
+
+    assert server._terminal_outcome(
+        result,
+        "blocked_needs_human",
+        "Approvazione rifiutata.",
+    ) == ("blocked_needs_human", False, "Approvazione rifiutata.")
+
+
+@pytest.mark.asyncio
+async def test_incomplete_runner_result_is_persisted_as_failed_verification(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = client.post("/api/sessions", json={"title": "Outcome"}).json()
+    run = server.store.create_run(session["id"])
+
+    async def no_preflight(*args: object, **kwargs: object) -> None:
+        return None
+
+    @asynccontextmanager
+    async def fake_build_harness(*args: object, **kwargs: object) -> object:
+        yield SimpleNamespace(completion_checks=[])
+
+    class FakeGoalRunner:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.last_messages: list[object] = []
+
+        async def run(self, goal: str, *, thread_id: str) -> RunResult:
+            del goal, thread_id
+            messages = [AIMessage(content="Output parziale")]
+            self.last_messages = messages
+            return RunResult(
+                text="Output parziale",
+                iterations=3,
+                completed=False,
+                messages=messages,
+                terminal_status="failed_verification",
+                failure_reason="Delega pianificata non completata.",
+            )
+
+    monkeypatch.setattr(server.provider_cfg, "validate_overrides", lambda _: [])
+    monkeypatch.setattr(server, "preflight_tier_models", no_preflight)
+    monkeypatch.setattr(server, "load_subagent_specs", lambda _: ([], []))
+    monkeypatch.setattr(server, "build_harness", fake_build_harness)
+    monkeypatch.setattr(server, "GoalRunner", FakeGoalRunner)
+
+    await server.run_manager._execute(run["id"], session["id"], "Analizza")
+
+    saved = server.store.get_run(run["id"])
+    assert saved["status"] == "failed_verification"
+    assert saved["error"] == "Delega pianificata non completata."
+    events = server.store.list_events(run["id"])
+    assert any(event["type"] == "run.failed_verification" for event in events)
+    assert not any(event["type"] == "run.completed" for event in events)
 
 
 def test_status_exposes_the_three_rungs_with_their_price(client: TestClient) -> None:

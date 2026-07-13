@@ -139,6 +139,7 @@ def test_subagent_with_sandbox_can_request_dependency_installation() -> None:
 @pytest.mark.asyncio
 async def test_subagent_telemetry_keeps_parallel_invocations_correlated(tmp_path: Path) -> None:
     events: list[dict[str, object]] = []
+    tool_observations: list[dict[str, object]] = []
     observed: list[str] = []
     semaphore = asyncio.Semaphore(2)
     parent = AuditMiddleware(
@@ -147,7 +148,12 @@ async def test_subagent_telemetry_keeps_parallel_invocations_correlated(tmp_path
         task_semaphore=semaphore,
         task_observer=observed.append,
     )
-    child = AuditMiddleware(tmp_path / "audit.jsonl", events.append, subagent_name="researcher")
+    child = AuditMiddleware(
+        tmp_path / "audit.jsonl",
+        events.append,
+        subagent_name="researcher",
+        tool_observer=tool_observations.append,
+    )
 
     async def invoke(call_id: str) -> None:
         task_request = SimpleNamespace(
@@ -175,6 +181,10 @@ async def test_subagent_telemetry_keeps_parallel_invocations_correlated(tmp_path
     assert {event["invocation_id"] for event in child_events} == {"one", "two"}
     assert {event["parent_tool_call_id"] for event in child_events} == {"one", "two"}
     assert observed == ["researcher", "researcher"]
+    completed = [
+        event for event in tool_observations if event["type"] == "subagent.tool.completed"
+    ]
+    assert {event["invocation_id"] for event in completed} == {"one", "two"}
 
 
 @pytest.mark.asyncio

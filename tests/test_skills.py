@@ -105,6 +105,13 @@ def test_resource_file_roundtrip(tmp_path: Path) -> None:
     assert "scripts/run.sh" not in remaining
 
 
+def test_resource_cannot_create_orphan_skill_without_manifest(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match=r"SKILL\.md"):
+        write_skill_file(tmp_path, "orphan", "scripts/run.sh", "echo no")
+
+    assert not (tmp_path / "orphan").exists()
+
+
 @pytest.mark.parametrize("relpath", ["../evil.sh", "/etc/passwd", "sub/../../out.txt"])
 def test_resource_file_traversal_blocked(tmp_path: Path, relpath: str) -> None:
     _seed_skill(tmp_path)

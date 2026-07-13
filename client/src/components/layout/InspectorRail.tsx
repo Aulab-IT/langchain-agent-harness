@@ -1,6 +1,7 @@
 import { ChevronDown, Layers3, PanelRight, X } from "lucide-react";
 import type { InspectorTab } from "../../lib/constants";
 import type { ActivityEntry } from "../../lib/sessionActivity";
+import { isTerminalRunStatus } from "../../lib/runStatus";
 import type {
   Run,
   RunEvent,
@@ -138,7 +139,7 @@ export function InspectorRail({
             usage={usage}
             contextWindow={contextWindow}
             sessionId={sessionId}
-            busy={!!run && !["completed", "failed", "cancelled"].includes(run.status)}
+            busy={!!run && !isTerminalRunStatus(run.status)}
           />
         ) : null}
         {tab === "sandbox" ? (

@@ -44,12 +44,27 @@ class RunState(StrEnum):
     RETRY_SCHEDULED = "retry_scheduled"
     COMPLETED = "completed"
     INCOMPLETE = "incomplete"
+    BLOCKED_NEEDS_HUMAN = "blocked_needs_human"
+    FAILED_VERIFICATION = "failed_verification"
+    BUDGET_EXCEEDED = "budget_exceeded"
+    SECURITY_STOP = "security_stop"
+    NO_WORK = "no_work"
     FAILED = "failed"
     CANCELLED = "cancelled"
 
 
 TERMINAL_STATES: frozenset[RunState] = frozenset(
-    {RunState.COMPLETED, RunState.INCOMPLETE, RunState.FAILED, RunState.CANCELLED}
+    {
+        RunState.COMPLETED,
+        RunState.INCOMPLETE,
+        RunState.BLOCKED_NEEDS_HUMAN,
+        RunState.FAILED_VERIFICATION,
+        RunState.BUDGET_EXCEEDED,
+        RunState.SECURITY_STOP,
+        RunState.NO_WORK,
+        RunState.FAILED,
+        RunState.CANCELLED,
+    }
 )
 
 # Transizioni ammesse. Fuori da questa mappa la transizione è rifiutata: uno stato terminale
@@ -63,19 +78,27 @@ VALID_TRANSITIONS: dict[RunState, frozenset[RunState]] = {
             RunState.RETRY_SCHEDULED,
             RunState.COMPLETED,
             RunState.INCOMPLETE,
+            RunState.BLOCKED_NEEDS_HUMAN,
+            RunState.FAILED_VERIFICATION,
+            RunState.BUDGET_EXCEEDED,
+            RunState.SECURITY_STOP,
+            RunState.NO_WORK,
             RunState.FAILED,
             RunState.CANCELLED,
         }
     ),
-    RunState.WAITING_APPROVAL: frozenset(
-        {RunState.RUNNING, RunState.CANCELLED, RunState.FAILED}
-    ),
+    RunState.WAITING_APPROVAL: frozenset({RunState.RUNNING, RunState.CANCELLED, RunState.FAILED}),
     RunState.WAITING_USER_ACTION: frozenset(
         {RunState.RUNNING, RunState.CANCELLED, RunState.FAILED}
     ),
     RunState.RETRY_SCHEDULED: frozenset({RunState.RUNNING, RunState.CANCELLED, RunState.FAILED}),
     RunState.COMPLETED: frozenset(),
     RunState.INCOMPLETE: frozenset(),
+    RunState.BLOCKED_NEEDS_HUMAN: frozenset(),
+    RunState.FAILED_VERIFICATION: frozenset(),
+    RunState.BUDGET_EXCEEDED: frozenset(),
+    RunState.SECURITY_STOP: frozenset(),
+    RunState.NO_WORK: frozenset(),
     RunState.FAILED: frozenset(),
     RunState.CANCELLED: frozenset(),
 }

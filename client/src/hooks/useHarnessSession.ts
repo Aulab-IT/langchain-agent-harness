@@ -21,6 +21,7 @@ import {
   uploadContextFile,
 } from "../api";
 import { EMPTY_USAGE, type View } from "../lib/constants";
+import { isTerminalRunStatus } from "../lib/runStatus";
 import {
   deriveSkillActivity,
   deriveToolActivity,
@@ -43,6 +44,11 @@ function mergeEvents(...groups: RunEvent[][]): RunEvent[] {
     for (const event of group) byId.set(event.id, event);
   }
   return [...byId.values()].sort((left, right) => left.id - right.id);
+}
+
+function isTerminalRunEvent(event: RunEvent): boolean {
+  if (!event.type.startsWith("run.")) return false;
+  return isTerminalRunStatus(event.type.slice(4) as Run["status"]);
 }
 
 export function useHarnessSession() {
@@ -88,24 +94,14 @@ export function useHarnessSession() {
     const latestApproval = [...history]
       .reverse()
       .find((event) =>
-        [
-          "approval.requested",
-          "approval.resolved",
-          "run.completed",
-          "run.failed",
-          "run.cancelled",
-        ].includes(event.type),
+        ["approval.requested", "approval.resolved"].includes(event.type)
+        || isTerminalRunEvent(event),
       );
     const latestAction = [...history]
       .reverse()
       .find((event) =>
-        [
-          "action.requested",
-          "action.resolved",
-          "run.completed",
-          "run.failed",
-          "run.cancelled",
-        ].includes(event.type),
+        ["action.requested", "action.resolved"].includes(event.type)
+        || isTerminalRunEvent(event),
       );
     startTransition(() => {
       setSession(detail);
@@ -155,7 +151,7 @@ export function useHarnessSession() {
   }, [refreshSessions, search]);
 
   useEffect(() => {
-    if (!run || ["completed", "failed", "cancelled"].includes(run.status)) return;
+    if (!run || isTerminalRunStatus(run.status)) return;
     const stop = subscribeRun(
       run.id,
       (event) => {
@@ -174,7 +170,10 @@ export function useHarnessSession() {
         if (event.type === "action.resolved") {
           setActionRequest(null);
         }
-        if (["run.completed", "run.failed", "run.cancelled"].includes(event.type)) {
+        const eventStatus = event.type.startsWith("run.")
+          ? event.type.slice(4) as Run["status"]
+          : null;
+        if (eventStatus && isTerminalRunStatus(eventStatus)) {
           setApproval(null);
           setActionRequest(null);
           Promise.all([
@@ -214,7 +213,7 @@ export function useHarnessSession() {
         getRun(run.id)
           .then((value) => {
             setRun(value);
-            if (["completed", "failed", "cancelled"].includes(value.status)) {
+            if (isTerminalRunStatus(value.status)) {
               Promise.all([getSession(value.session_id), loadEventHistory(value.session_id)])
                 .then(([detail, history]) => {
                   setSession(detail);
@@ -256,7 +255,7 @@ export function useHarnessSession() {
     return { latestLiveUsage: live, latestSnapshot: snapshot };
   }, [runEvents]);
 
-  const active = Boolean(run && !["completed", "failed", "cancelled"].includes(run.status));
+  const active = Boolean(run && !isTerminalRunStatus(run.status));
 
   const usage: Usage =
     active && (latestSnapshot || latestLiveUsage)

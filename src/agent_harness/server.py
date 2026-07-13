@@ -28,7 +28,7 @@ from agent_harness.command_review import review_command
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
 from agent_harness.context_budget import LiveUsageThrottle
 from agent_harness.control_store import OUTPUT_DIR, ControlStore
-from agent_harness.durable import DurableStore, idempotency_key
+from agent_harness.durable import TERMINAL_STATES, DurableStore, idempotency_key
 from agent_harness.evaluation import (
     evaluate_candidate,
     execute_eval_case,
@@ -57,6 +57,13 @@ from agent_harness.improve import (
 )
 from agent_harness.mcp_config import load_user_config_text, save_user_config
 from agent_harness.middleware import TIERS, Override
+from agent_harness.model_preflight import (
+    ModelPreflightError,
+    clear_preflight_cache,
+    preflight_tier_models,
+    required_preflight_tiers,
+)
+from agent_harness.outcome_checks import SkillCatalogCompletionCheck, skill_catalog_snapshot
 from agent_harness.pricing import catalog_from_settings, estimate_cost_usd
 from agent_harness.promotion import (
     list_config_versions,
@@ -66,7 +73,7 @@ from agent_harness.promotion import (
     restore_config_version,
 )
 from agent_harness.prompts import COMPACT_INSTRUCTION, SYSTEM_PROMPT
-from agent_harness.runner import GoalRunner
+from agent_harness.runner import GoalRunner, RunResult
 from agent_harness.sandbox import (
     SandboxIdleReaper,
     cleanup_orphan_sandboxes,
@@ -90,6 +97,7 @@ from agent_harness.skills import (
 from agent_harness.subagents import (
     delete_subagent,
     list_subagents,
+    load_subagent_specs,
     read_subagent,
     write_subagent,
 )
@@ -102,7 +110,7 @@ from agent_harness.triggers import (
 from agent_harness.usage import CATEGORY_COLORS, compute_usage, token_estimate
 
 _LOGGER = logging.getLogger(__name__)
-_TERMINAL_RUN_STATES = {"completed", "failed", "cancelled"}
+_TERMINAL_RUN_STATES = {state.value for state in TERMINAL_STATES}
 _ALLOWED_UPLOADS = {
     ".csv",
     ".docx",
@@ -663,10 +671,7 @@ class StreamDeltaBuffer:
         current = time.monotonic() if now is None else now
         self._parts.append(text)
         self._chars += len(text)
-        if (
-            self._chars < self.max_chars
-            and current - self._last_flush < self.max_interval_seconds
-        ):
+        if self._chars < self.max_chars and current - self._last_flush < self.max_interval_seconds:
             return None
         return self.flush(now=current)
 
@@ -732,6 +737,8 @@ def _classify_run_error(exc: Exception) -> str:
     """
     name = type(exc).__name__
     text = str(exc).lower()
+    if isinstance(exc, ModelPreflightError):
+        return str(exc)
     if "invalid_file" in text or ("file" in text and "corrupt" in text):
         return (
             "Il modello ha ricevuto un file non valido o corrotto (probabilmente un artefatto "
@@ -752,6 +759,27 @@ def _classify_run_error(exc: Exception) -> str:
     if net_error or "timeout" in text or "connection" in text:
         return "Il provider non ha risposto in tempo. Riprova tra poco."
     return "Esecuzione agente fallita. Controlla configurazione e log backend."
+
+
+def _terminal_outcome(
+    result: RunResult,
+    terminal_hint: str | None,
+    terminal_hint_reason: str,
+) -> tuple[str, bool, str]:
+    """Un rifiuto/annullamento umano resta terminale anche se il modello si auto-dichiara ok."""
+    if terminal_hint:
+        return (
+            terminal_hint,
+            False,
+            terminal_hint_reason or "Run bloccato da una decisione o azione utente.",
+        )
+    if result.completed:
+        return "completed", True, ""
+    return (
+        result.terminal_status or "incomplete",
+        False,
+        result.failure_reason,
+    )
 
 
 def _pending_with_network(value: Any) -> bool:
@@ -857,12 +885,17 @@ class RunManager:
         # Il modello che ha davvero risposto. Resta None finché il router non lo dichiara:
         # meglio nessun badge che un badge sbagliato.
         selected_model: str | None = None
+        terminal_hint: str | None = None
+        terminal_hint_reason = ""
+        skills_before = skill_catalog_snapshot(settings.skills_dir)
+        skill_completion_check = SkillCatalogCompletionCheck(settings.skills_dir, skills_before)
         store.update_run(run_id, status="running")
         self._emit(run_id, session_id, "run.started", {"status": "running"})
         self._emit(run_id, session_id, "agent.started", {"status": "running"})
 
         def tool_event(event: dict[str, Any]) -> None:
             nonlocal selected_model
+            skill_completion_check.observe_event(event)
             event_type = str(event.pop("type", "tool.updated"))
             if event_type == "model.selected":
                 model_name = event.get("model")
@@ -916,6 +949,7 @@ class RunManager:
                 self._emit(run_id, session_id, event_type, event)
 
         async def approval(payload: dict[str, Any]) -> bool:
+            nonlocal terminal_hint, terminal_hint_reason
             mcp_request = _extract_mcp_proposal(payload)
             if mcp_request is not None:
                 # Aggiunta di un server MCP: gira sull'host, fuori dalla sandbox. Va sempre
@@ -951,6 +985,9 @@ class RunManager:
                 self._resolve_interrupt(interrupt, {"approved": approved})
                 store.update_run(run_id, status="running")
                 self._emit(run_id, session_id, "approval.resolved", {"approved": approved})
+                if not approved:
+                    terminal_hint = "blocked_needs_human"
+                    terminal_hint_reason = "Approvazione MCP rifiutata o scaduta."
                 return approved
 
             is_network = _pending_with_network(payload)
@@ -1002,9 +1039,13 @@ class RunManager:
                 "approval.resolved",
                 {"approved": approved},
             )
+            if not approved:
+                terminal_hint = "blocked_needs_human"
+                terminal_hint_reason = "Approvazione richiesta rifiutata o scaduta."
             return approved
 
         async def interaction(payload: dict[str, Any]) -> dict[str, Any]:
+            nonlocal terminal_hint, terminal_hint_reason
             # Azione umana sbloccante: si attende SEMPRE l'utente (l'autonomia non può
             # svolgere un'azione reale come un consenso OAuth nel browser).
             safe_payload: dict[str, Any] = {
@@ -1016,9 +1057,7 @@ class RunManager:
             action_future: asyncio.Future[dict[str, Any]] = loop.create_future()
             self.interactions[run_id] = action_future
             store.update_run(run_id, status="waiting_action")
-            interrupt = self._record_interrupt(
-                run_id, "user_action", str(safe_payload["title"])
-            )
+            interrupt = self._record_interrupt(run_id, "user_action", str(safe_payload["title"]))
             self._notify(
                 "needs_action",
                 f"«{self._session_label(session_id)}» — serve un'azione da te",
@@ -1040,6 +1079,9 @@ class RunManager:
                 "action.resolved",
                 {"cancelled": bool(resolved.get("cancelled"))},
             )
+            if resolved.get("cancelled"):
+                terminal_hint = "blocked_needs_human"
+                terminal_hint_reason = "Azione utente richiesta annullata o scaduta."
             return resolved
 
         goal_runner: GoalRunner | None = None
@@ -1049,6 +1091,22 @@ class RunManager:
             config_problems = provider_cfg.validate_overrides(settings)
             if config_problems:
                 raise RuntimeError(" ".join(config_problems))
+            model_override = _model_override(session_id)
+            subagent_specs, _ = load_subagent_specs(settings.subagents_dir)
+            subagent_tiers = [
+                "low",
+                "mid",
+                *(str(spec.get("model_tier", "low")) for spec in subagent_specs),
+            ]
+            await preflight_tier_models(
+                settings,
+                required_preflight_tiers(
+                    settings,
+                    model_override=model_override,
+                    subagent_tiers=subagent_tiers,
+                ),
+                event_callback=tool_event,
+            )
             root = await asyncio.to_thread(store.prepare_session_root, session_id)
             async with build_harness(
                 settings,
@@ -1057,11 +1115,12 @@ class RunManager:
                 backend_root=root,
                 event_callback=tool_event,
                 run_id=run_id,
-                model_override=_model_override(session_id),
+                model_override=model_override,
                 auto_approve=bool(store.get_session(session_id).get("auto_approve")),
             ) as harness:
                 manifest = _attachment_manifest(session_id)
                 goal = content + manifest if len(content) + len(manifest) <= 20_000 else content
+                harness.completion_checks.append(skill_completion_check)
                 goal_runner = GoalRunner(harness, approval, agent_event, interaction)
                 result = await goal_runner.run(goal, thread_id=session_id)
 
@@ -1100,7 +1159,17 @@ class RunManager:
                 attachments=attachments,
                 model=selected_model,
             )
-            store.update_run(run_id, status="completed", usage=usage)
+            final_status, effectively_completed, failure_reason = _terminal_outcome(
+                result,
+                terminal_hint,
+                terminal_hint_reason,
+            )
+            store.update_run(
+                run_id,
+                status=final_status,
+                error=failure_reason or None,
+                usage=usage,
+            )
             self._emit(run_id, session_id, "usage.updated", usage)
             self._emit(
                 run_id,
@@ -1111,18 +1180,19 @@ class RunManager:
             self._emit(
                 run_id,
                 session_id,
-                "run.completed",
+                f"run.{final_status}",
                 {
-                    "status": "completed",
+                    "status": final_status,
                     "elapsed_ms": round(elapsed * 1_000),
                     "iterations": result.iterations,
-                    "completed": result.completed,
+                    "completed": effectively_completed,
+                    "reason": failure_reason,
                 },
             )
             label = self._session_label(session_id)
             self._notify(
-                "run_completed" if result.completed else "run_incomplete",
-                f"«{label}» — {'completato' if result.completed else 'terminato senza verifica'}",
+                "run_completed" if effectively_completed else "run_incomplete",
+                f"«{label}» — {'completato' if effectively_completed else final_status}",
                 session_id,
                 run_id,
             )
@@ -1564,6 +1634,7 @@ async def update_provider_settings(payload: ProviderSettingsUpdate) -> dict[str,
     store.upsert_pricing_catalog(catalog_from_settings(settings))
     # Flag e provider possono cambiare i tool disponibili: scarta il catalogo in cache.
     invalidate_tool_catalog()
+    clear_preflight_cache()
     return provider_cfg.snapshot(settings)
 
 
