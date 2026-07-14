@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from collections.abc import Awaitable, Callable
@@ -15,10 +16,32 @@ from langgraph.errors import GraphInterrupt
 from langgraph.types import Command
 
 from agent_harness.config import SANDBOX_SKILLS_MOUNT
+from agent_harness.run_budget import SubagentProgressState
 
 _LOCK = threading.Lock()
 EventCallback = Callable[[dict[str, Any]], None]
 _SUBAGENT_SCOPE: ContextVar[dict[str, Any] | None] = ContextVar("subagent_scope", default=None)
+_NONZERO_EXIT = re.compile(r"\bexit_code\s*=\s*([1-9]\d*)\b", re.IGNORECASE)
+_SPACE = re.compile(r"\s+")
+_FATAL_ENVIRONMENT_MARKERS = (
+    "could not open lock file /var/lib/apt",
+    "are you root?",
+    "sudo: command not found",
+    "operation not permitted",
+)
+_DEPENDENCY_MISSING_MARKERS = (
+    "modulenotfounderror",
+    "no module named",
+    "package(s) not found",
+    "command not found",
+    "cannot import name",
+)
+
+
+class SubagentExecutionBlocked(RuntimeError):
+    """Errore operativo non recuperabile senza cambiare ambiente o intervento umano."""
+
+    blocked = True
 
 
 def _preview(value: Any, limit: int) -> str:
@@ -54,9 +77,10 @@ class AuditMiddleware(AgentMiddleware):
         session_id: str | None = None,
         subagent_name: str | None = None,
         task_semaphore: Any = None,
-        task_observer: Callable[[str], None] | None = None,
+        task_observer: Callable[[str, str], None] | None = None,
         task_coordinator: Any = None,
         tool_observer: Callable[[dict[str, Any]], None] | None = None,
+        progress_state: SubagentProgressState | None = None,
     ) -> None:
         self.path = path
         self.event_callback = event_callback
@@ -67,8 +91,97 @@ class AuditMiddleware(AgentMiddleware):
         self.task_observer = task_observer
         self.task_coordinator = task_coordinator
         self.tool_observer = tool_observer
+        self.progress_state = progress_state
         self._paused_calls: set[str] = set()
         self._paused_lock = threading.Lock()
+        self._tool_failure_counts: dict[str, int] = {}
+
+    @staticmethod
+    def _tool_outcomes(result: Any) -> list[str]:
+        text = str(_result_content(result))
+        lowered = text.lower()
+        compact = _SPACE.sub(" ", lowered)
+        outcomes: list[str] = []
+        if "pass-with-warnings" in lowered and any(
+            marker in compact for marker in ('"errors": []', "'errors': []", "errors: []")
+        ):
+            outcomes.append("validation_passed_with_warnings")
+        if any(marker in lowered for marker in _DEPENDENCY_MISSING_MARKERS):
+            outcomes.append("dependency_missing")
+        return outcomes
+
+    def _annotate_subagent_result(self, request: ToolCallRequest, result: Any) -> Any:
+        if not self.subagent_name:
+            return result
+        outcomes = self._tool_outcomes(result)
+        if not outcomes:
+            return result
+        if self.progress_state is not None:
+            self.progress_state.record(outcomes)
+        if self.event_callback is not None:
+            self.event_callback(
+                {
+                    "type": "subagent.tool.outcome",
+                    "subagent": self.subagent_name,
+                    "tool": str(request.tool_call.get("name", "tool")),
+                    "tool_call_id": str(request.tool_call.get("id", "")),
+                    "outcomes": outcomes,
+                }
+            )
+        notes = ["[HARNESS TOOL OUTCOME]"]
+        if "validation_passed_with_warnings" in outcomes:
+            notes.append(
+                "Validation passed with warnings and zero errors. Count it as successful unless "
+                "a warning violates an explicit success criterion."
+            )
+        if "dependency_missing" in outcomes:
+            notes.append(
+                "Dependency missing. Do not repeat environment probes. Optional or duplicate "
+                "validation may be reported as a limitation; mandatory dependency needs one "
+                "approved install attempt or BLOCKED status."
+            )
+        note = "\n".join(notes)
+        if isinstance(result, ToolMessage):
+            content = result.content
+            if isinstance(content, str):
+                return result.model_copy(update={"content": f"{content}\n\n{note}"})
+        if isinstance(result, str):
+            return f"{result}\n\n{note}"
+        return result
+
+    def _guard_subagent_result(self, request: ToolCallRequest, result: Any) -> None:
+        """Ferma retry subagent senza prospettiva: ambiente fatale o stesso errore due volte."""
+        if not self.subagent_name:
+            return
+        text = str(_result_content(result))
+        lowered = text.lower()
+        nonzero = _NONZERO_EXIT.search(lowered)
+        if not nonzero:
+            return
+        tool = str(request.tool_call.get("name", "tool"))
+        fatal = next((marker for marker in _FATAL_ENVIRONMENT_MARKERS if marker in lowered), None)
+        normalized = _SPACE.sub(" ", lowered)[-600:]
+        signature = f"{tool}:{normalized}"
+        count = self._tool_failure_counts.get(signature, 0) + 1
+        self._tool_failure_counts[signature] = count
+        if fatal is None and count < 2:
+            return
+        reason = (
+            f"Ambiente bloccante per {tool}: {fatal}."
+            if fatal
+            else f"Retry fermato: {tool} ha restituito due volte lo stesso errore."
+        )
+        if self.event_callback is not None:
+            self.event_callback(
+                {
+                    "type": "subagent.retry_stopped",
+                    "subagent": self.subagent_name,
+                    "tool": tool,
+                    "reason": reason,
+                    "attempts": count,
+                }
+            )
+        raise SubagentExecutionBlocked(reason)
 
     def _opening_status(self, request: ToolCallRequest, execution: Any = None) -> str:
         call_id = str(request.tool_call.get("id", ""))
@@ -112,6 +225,17 @@ class AuditMiddleware(AgentMiddleware):
             "tool": request.tool_call["name"],
             "tool_call_id": call_id,
         }
+        tool_metadata = getattr(getattr(request, "tool", None), "metadata", None)
+        if isinstance(tool_metadata, dict):
+            for source, target in (
+                ("tool_identity", "tool_identity"),
+                ("tool_origin", "tool_origin"),
+                ("tool_original_name", "tool_display_name"),
+                ("mcp_server", "mcp_server"),
+            ):
+                value = tool_metadata.get(source)
+                if isinstance(value, str) and value:
+                    payload[target] = value
         if tool_name == "task" and isinstance(args, dict):
             payload.update(
                 {
@@ -171,7 +295,7 @@ class AuditMiddleware(AgentMiddleware):
                 }
             )
         if self.task_observer is not None:
-            self.task_observer(scope["subagent"])
+            self.task_observer(scope["subagent"], call_id)
         return _SUBAGENT_SCOPE.set(scope), scope
 
     def _write(self, *, tool: str, status: str, elapsed_ms: int) -> None:
@@ -200,6 +324,8 @@ class AuditMiddleware(AgentMiddleware):
         self._emit(request=request, status=self._opening_status(request))
         try:
             result = handler(request)
+            result = self._annotate_subagent_result(request, result)
+            self._guard_subagent_result(request, result)
         except GraphInterrupt:
             elapsed = _elapsed(started)
             self._mark_paused(request)
@@ -217,7 +343,7 @@ class AuditMiddleware(AgentMiddleware):
         elapsed = _elapsed(started)
         self._write(tool=tool_name, status="ok", elapsed_ms=elapsed)
         self._emit(request=request, status="completed", elapsed_ms=elapsed, result=result)
-        return result
+        return cast(ToolMessage | Command[Any], result)
 
     async def awrap_tool_call(
         self,
@@ -231,11 +357,7 @@ class AuditMiddleware(AgentMiddleware):
         token = None
         try:
             args = request.tool_call.get("args", {})
-            if (
-                tool_name == "task"
-                and isinstance(args, dict)
-                and self.task_coordinator is not None
-            ):
+            if tool_name == "task" and isinstance(args, dict) and self.task_coordinator is not None:
                 execution, prepared_description = await self.task_coordinator.prepare_delegation(
                     str(args.get("subagent_type", "")),
                     str(args.get("description", "")),
@@ -258,6 +380,8 @@ class AuditMiddleware(AgentMiddleware):
                     result = await handler(prepared_request)
             else:
                 result = await handler(prepared_request)
+            result = self._annotate_subagent_result(prepared_request, result)
+            self._guard_subagent_result(prepared_request, result)
         except GraphInterrupt:
             elapsed = _elapsed(started)
             self._mark_paused(prepared_request)
@@ -297,7 +421,7 @@ class AuditMiddleware(AgentMiddleware):
             result=result,
             execution=execution,
         )
-        return result
+        return cast(ToolMessage | Command[Any], result)
 
 
 def _elapsed(started: float) -> int:

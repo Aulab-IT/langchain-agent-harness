@@ -74,7 +74,10 @@ function parsedArgs(payload: Record<string, unknown>): Record<string, unknown> |
 
 export function traceSubject(event: RunEvent): string | null {
   const payload = event.payload ?? {};
+  const toolDisplay = asTraceText(payload.tool_display_name);
+  const toolServer = asTraceText(payload.mcp_server);
   return (
+    (toolDisplay ? (toolServer ? `MCP · ${toolServer} · ${toolDisplay}` : toolDisplay) : null) ??
     asTraceText(payload.tool) ??
     asTraceText(payload.skill) ??
     asTraceText(payload.action) ??
@@ -128,6 +131,13 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         detail: elapsed ?? compactTraceValue(payload, 180),
         subject,
         tone: "success",
+      };
+    case "run.partial_result":
+      return {
+        title: "Risultato parziale conservato",
+        detail: asTraceText(payload.message) ?? compactTraceValue(payload.changed_files, 180),
+        subject,
+        tone: "warning",
       };
     case "run.incomplete":
     case "run.blocked_needs_human":
@@ -222,6 +232,22 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         subject: asTraceText(payload.model),
         tone: "danger",
       };
+    case "model.retrying":
+      return {
+        title: `Retry modello ${asTraceText(payload.attempt) ?? "?"}/${asTraceText(payload.max_attempts) ?? "?"}`,
+        detail: asTraceText(payload.message),
+        subject: asTraceText(payload.model),
+        tone: "warning",
+      };
+    case "model.retry_exhausted":
+    case "model.request_failed":
+    case "model.error":
+      return {
+        title: "Errore provider modello",
+        detail: `${asTraceText(payload.exception_type) ?? "errore"} · ${asTraceText(payload.message) ?? "nessun dettaglio"}${payload.request_id ? ` · ${asTraceText(payload.request_id)}` : ""}`,
+        subject: asTraceText(payload.model),
+        tone: "danger",
+      };
     case "model.escalated":
       return {
         title: `Gradino superiore: ${asTraceText(payload.tier) ?? "?"}`,
@@ -238,6 +264,18 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
       };
     case "subagent.routing.completed": {
       const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+      const rejected = Array.isArray(payload.rejected_matches)
+        ? payload.rejected_matches
+            .map((raw) => {
+              if (!raw || typeof raw !== "object") return null;
+              const item = raw as Record<string, unknown>;
+              const agent = asTraceText(item.agent);
+              const reason = asTraceText(item.reason);
+              return agent ? `${agent}${reason ? `: ${reason}` : ""}` : null;
+            })
+            .filter(Boolean)
+            .join(" · ")
+        : "";
       const matches = tasks
         .map((task) => {
           if (!task || typeof task !== "object") return null;
@@ -249,8 +287,17 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         .filter(Boolean)
         .join(" · ");
       return {
-        title: payload.delegate ? `Routing: ${tasks.length} deleghe pianificate` : "Routing: esecuzione diretta",
-        detail: [elapsed, matches || compactTraceValue(payload.rationale, 180)].filter(Boolean).join(" · ") || null,
+        title: payload.delegate
+          ? `Routing: ${tasks.length} deleghe pianificate`
+          : payload.decision === "direct_root"
+            ? "Routing: esecuzione diretta con tool root"
+            : "Routing: risposta diretta",
+        detail: [
+          elapsed,
+          matches,
+          rejected ? `match scartato ${rejected}` : null,
+          !matches ? compactTraceValue(payload.rationale, 180) : null,
+        ].filter(Boolean).join(" · ") || null,
         subject: null,
         tone: payload.delegate ? "info" : "muted",
       };
@@ -268,6 +315,43 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         detail: compactTraceValue(payload.reason, 180),
         subject: null,
         tone: "warning",
+      };
+    case "tool.routing.completed": {
+      const recommended = Array.isArray(payload.recommended)
+        ? payload.recommended.filter((item): item is string => typeof item === "string")
+        : [];
+      const readable = Array.isArray(payload.recommended_tools)
+        ? payload.recommended_tools
+            .map((raw) => {
+              if (!raw || typeof raw !== "object") return null;
+              const item = raw as Record<string, unknown>;
+              const name = asTraceText(item.display_name) ?? asTraceText(item.name);
+              const server = asTraceText(item.server);
+              return name ? (server ? `MCP · ${server} · ${name}` : name) : null;
+            })
+            .filter(Boolean)
+        : [];
+      return {
+        title: payload.required
+          ? "Tool routing: accesso runtime richiesto"
+          : recommended.length
+            ? "Tool routing: suggerimento opzionale"
+            : "Tool routing: nessun tool necessario",
+        detail: [
+          recommended.length ? `consigliato ${(readable.length ? readable : recommended).join(" → ")}` : null,
+          compactTraceValue(payload.rationale, 180),
+          asTraceText(payload.strategy),
+        ].filter(Boolean).join(" · ") || null,
+        subject: recommended[0] ?? null,
+        tone: payload.required ? "info" : recommended.length ? "muted" : "success",
+      };
+    }
+    case "tool.routing.used":
+      return {
+        title: `Tool consigliato usato: ${asTraceText(payload.tool) ?? "?"}`,
+        detail: compactTraceValue(payload.recommended, 180),
+        subject: asTraceText(payload.tool),
+        tone: "success",
       };
     case "subagent.routing.followed":
       return {
@@ -324,6 +408,13 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         detail: elapsed,
         subject: asTraceText(payload.subagent),
         tone: "danger",
+      };
+    case "subagent.retry_stopped":
+      return {
+        title: `Retry fermato: ${asTraceText(payload.subagent) ?? "subagent"}`,
+        detail: asTraceText(payload.reason),
+        subject: asTraceText(payload.tool),
+        tone: "warning",
       };
     case "subagent.task.queued":
     case "subagent.task.reassigned":
@@ -502,14 +593,93 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
         subject,
         tone: "muted",
       };
-    case "context.compaction.detected":
+    case "context.compaction.started":
       return {
-        title: "Contesto compattato",
+        title: "Compaction manuale avviata",
+        detail: "Analisi e riduzione del contesto in corso",
+        subject,
+        tone: "running",
+      };
+    case "context.compaction.detected": {
+      const manual = payload.mode === "manual";
+      return {
+        title: manual ? "Riduzione manuale rilevata" : "Compaction automatica",
         detail: `${asTraceText(payload.tokens_before) ?? "?"} → ${
           asTraceText(payload.tokens_after) ?? "?"
         } token (${asTraceText(payload.tokens_reclaimed) ?? "0"} liberati)`,
         subject,
         tone: "info",
+      };
+    }
+    case "context.compaction.completed":
+      return {
+        title: "Compaction manuale completata",
+        detail: asTraceText(payload.message),
+        subject,
+        tone: "success",
+      };
+    case "context.compaction.no_work":
+      return {
+        title: "Contesto già compatto",
+        detail: "Nessuna riduzione necessaria; nessun altro task eseguito.",
+        subject,
+        tone: "muted",
+      };
+    case "context.compaction.failed":
+      return {
+        title: "Compaction non riuscita",
+        detail: asTraceText(payload.message),
+        subject,
+        tone: "danger",
+      };
+    case "context.tool_output.offloaded":
+      return {
+        title: `Output ${asTraceText(payload.tool) ?? "tool"} scaricato dal contesto`,
+        detail: `${asTraceText(payload.tokens_reclaimed) ?? "0"} token recuperati · ${asTraceText(payload.reference) ?? "workspace"}`,
+        subject: asTraceText(payload.tool),
+        tone: "success",
+      };
+    case "budget.updated":
+      return {
+        title: "Budget run aggiornato",
+        detail: `call +${asTraceText(payload.call_input_tokens) ?? "0"} input / +${asTraceText(payload.call_output_tokens) ?? "0"} output · cumulativo ${tokenDetail(payload) ?? "0 token"}`,
+        subject: asTraceText(payload.call_kind),
+        tone: "info",
+      };
+    case "budget.retry_estimated":
+      return {
+        title: "Costo retry stimato",
+        detail: `${asTraceText(payload.estimated_failed_input_tokens) ?? "0"} input token · $${asTraceText(payload.estimated_failed_cost_usd) ?? "0"}`,
+        subject: asTraceText(payload.call_kind),
+        tone: "warning",
+      };
+    case "budget.warning":
+      return {
+        title: `Budget run al ${asTraceText(payload.level_percent) ?? "?"}%`,
+        detail: `corrente ${tokenDetail(payload) ?? "0 token"} · prossima proiezione ${asTraceText(payload.projected_tokens) ?? "?"}`,
+        subject: asTraceText(payload.exceeded_dimension),
+        tone: "warning",
+      };
+    case "budget.exceeded":
+      return {
+        title: `Limite raggiunto: ${asTraceText(payload.dimension) ?? "budget run"}`,
+        detail: asTraceText(payload.reason) ?? compactTraceValue(payload, 180),
+        subject: asTraceText(payload.dimension),
+        tone: "warning",
+      };
+    case "subagent.finalization.started":
+      return {
+        title: "Subagent in finalizzazione",
+        detail: `prossima call ${asTraceText(payload.next_model_call) ?? "?"}/${asTraceText(payload.max_model_calls) ?? "?"} · verifiche opzionali sospese`,
+        subject: asTraceText(payload.call_kind),
+        tone: "warning",
+      };
+    case "subagent.finalization.forced":
+      return {
+        title: "Call finale riservata alla consegna",
+        detail: `call ${asTraceText(payload.next_model_call) ?? "?"}/${asTraceText(payload.max_model_calls) ?? "?"} · tool disabilitati`,
+        subject: asTraceText(payload.call_kind),
+        tone: "warning",
       };
     case "memory.truncated":
       return {

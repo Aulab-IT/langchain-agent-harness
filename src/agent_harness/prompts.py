@@ -88,15 +88,20 @@ ferma il run e mostra all'utente comando, pacchetto e richiesta di rete da appro
 Non sostituirla con una domanda testuale o con `request_user_action`. Installa solo dentro
 `/workspace` (`/workspace/.pylib` per Python), mai sull'host o globalmente; usa registri ufficiali
 e nomi/versioni espliciti. Dopo approvazione riprendi e verifica; dopo rifiuto usa un fallback o
-spiega il limite senza fingere che la dipendenza sia presente.
+spiega il limite senza fingere che la dipendenza sia presente. Non usare package manager di
+sistema (`apt`, `brew`, `sudo`) nella sandbox: non hai privilegi root. Tenta al massimo una
+installazione workspace per la stessa dipendenza. Se serve un binario non installabile nel
+workspace, usa BLOCKED solo quando quel binario è indispensabile per un criterio esplicito.
+Una verifica alternativa già riuscita non viene annullata da un validatore aggiuntivo mancante:
+`pass-with-warnings` con zero errori vale come successo, salvo warning che viola direttamente
+un criterio. Non installare dipendenze solo per duplicare una verifica già superata. Raggruppa
+i controlli ambiente in un unico preflight prima del lavoro; non ripetere probe equivalenti.
 """
 
 SYSTEM_PROMPT += "\n\n" + DEPENDENCY_INSTALL_PROMPT
 
 CONTINUATION_PROMPT = """
-L'obiettivo originale non risulta ancora verificato:
-
-{goal}
+L'obiettivo originale già presente nella conversazione non risulta ancora verificato.
 
 Iterazione {iteration}/{maximum}. Riprendi dai file e dal piano persistente. Controlla cosa
 manca, esegui la prossima parte utile e verifica. Non ripetere lavoro già completato.
@@ -106,14 +111,14 @@ Usa [GOAL_COMPLETE] solo dopo prova concreta.
 COMPACT_INSTRUCTION = (
     "Compatta ora la conversazione: chiama il tool compact_conversation per riassumere la "
     "storia più vecchia e liberare spazio nella finestra di contesto, preservando obiettivo, "
-    "decisioni, file prodotti e verifiche. Dopo la compaction rispondi solo con "
-    "«Contesto compattato.» senza altro."
+    "decisioni, file prodotti e verifiche. Se il tool compatta, rispondi solo «Contesto "
+    "compattato.». Se risponde che non c'è nulla da compattare, rispondi solo «Contesto già "
+    "compatto; nessuna riduzione necessaria.». Non riprendere altri task della conversazione."
 )
 
 VERIFICATION_FEEDBACK_PROMPT = """
-La tua risposta non ha superato la verifica di qualità per questo obiettivo:
-
-{goal}
+La tua risposta non ha superato la verifica di qualità per l'obiettivo già presente nella
+conversazione.
 
 Feedback del valutatore:
 {feedback}
@@ -121,4 +126,16 @@ Feedback del valutatore:
 Iterazione {iteration}/{maximum}. Correggi i punti indicati riprendendo dai file e dal piano
 persistente. Porta prove concrete di ogni correzione. Usa [GOAL_COMPLETE] solo quando il
 feedback è risolto e verificato.
+"""
+
+FINAL_RESPONSE_FEEDBACK_PROMPT = """
+L'esecuzione e gli artefatti risultano già completati e verificati. Il valutatore ha trovato
+carente solo la risposta finale:
+
+{feedback}
+
+Iterazione {iteration}/{maximum}. Riscrivi soltanto la risposta finale, sintetizzando risultati,
+fonti, artefatti e verifiche già presenti nel contesto. Non creare un piano, non chiamare
+`write_todos`, non rileggere skill, non usare tool, non modificare file e non ripetere verifiche.
+Usa [GOAL_COMPLETE].
 """

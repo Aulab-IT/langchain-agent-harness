@@ -16,8 +16,14 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
 from agent_harness.factory import Harness
-from agent_harness.prompts import CONTINUATION_PROMPT, VERIFICATION_FEEDBACK_PROMPT
-from agent_harness.usage import compute_usage
+from agent_harness.model_errors import invoke_with_model_retry
+from agent_harness.prompts import (
+    CONTINUATION_PROMPT,
+    FINAL_RESPONSE_FEEDBACK_PROMPT,
+    VERIFICATION_FEEDBACK_PROMPT,
+)
+from agent_harness.run_budget import BudgetExceededError
+from agent_harness.usage import compute_usage, token_estimate
 from agent_harness.verification import GradeResult
 
 ApprovalCallback = Callable[[dict[str, Any]], Awaitable[bool]]
@@ -109,7 +115,16 @@ class GoalRunner:
         self.interaction_callback = interaction_callback
         self.last_messages: list[Any] = []
         self._last_snapshot: tuple[int, int] | None = None
+        self._completion_evidence_announced = False
         self._started = time.monotonic()
+
+    def _completion_evidence(self) -> str:
+        provider = getattr(self.harness, "completion_evidence", None)
+        return provider() if callable(provider) else ""
+
+    def _delegated_environment_verified(self) -> bool:
+        check = getattr(self.harness, "delegated_environment_verification", None)
+        return bool(check()) if callable(check) else False
 
     async def _invoke_graph(
         self,
@@ -203,9 +218,24 @@ class GoalRunner:
         for iteration in range(1, maximum + 1):
             messages = result.get("messages", [])
             text = final_text(messages)
+            completion_evidence = self._completion_evidence()
+            if completion_evidence and not self._completion_evidence_announced:
+                self._completion_evidence_announced = True
+                self._emit_event(
+                    {
+                        "type": "completion.evidence.reused",
+                        "chars": len(completion_evidence),
+                        "delegated_environment_verification": (
+                            self._delegated_environment_verified()
+                        ),
+                    }
+                )
+            response_only_retry = False
             checks: list[tuple[bool, str]] = []
             if requires_environment_verification(clean_goal):
-                environment_ok = has_successful_verification(messages)
+                environment_ok = (
+                    has_successful_verification(messages) or self._delegated_environment_verified()
+                )
                 checks.append(
                     (
                         environment_ok,
@@ -225,7 +255,7 @@ class GoalRunner:
             # riprova con lo stesso modello: costa una iterazione economica invece che una cara.
             fallimento_netto = not heuristic_ok
             if text and heuristic_ok:
-                grade = await self._grade(clean_goal, text)
+                grade = await self._grade(clean_goal, text, completion_evidence)
                 if grade is None or grade.passed:
                     return RunResult(
                         text=text,
@@ -237,7 +267,15 @@ class GoalRunner:
                 feedback = grade.feedback
                 failed_verification = True
                 last_failure_reason = grade.feedback or "Rubric di verifica non superata."
-                fallimento_netto = grade.score < self.harness.settings.harness_escalation_threshold
+                response_only_retry = bool(
+                    completion_evidence
+                    and grade.criteria_scores.get("sicurezza", 1.0) >= 0.5
+                    and grade.criteria_scores.get("aderenza", 1.0) >= 0.5
+                )
+                fallimento_netto = (
+                    grade.score < self.harness.settings.harness_escalation_threshold
+                    and not response_only_retry
+                )
             if iteration == maximum:
                 return RunResult(
                     text=text,
@@ -249,16 +287,27 @@ class GoalRunner:
                     ),
                     failure_reason=last_failure_reason,
                 )
-            if feedback:
+            if feedback and response_only_retry:
+                self._emit_event(
+                    {
+                        "type": "completion.final_response_retry",
+                        "iteration": iteration + 1,
+                        "reason": feedback,
+                    }
+                )
+                continuation = FINAL_RESPONSE_FEEDBACK_PROMPT.format(
+                    feedback=feedback,
+                    iteration=iteration + 1,
+                    maximum=maximum,
+                )
+            elif feedback:
                 continuation = VERIFICATION_FEEDBACK_PROMPT.format(
-                    goal=clean_goal,
                     feedback=feedback,
                     iteration=iteration + 1,
                     maximum=maximum,
                 )
             else:
                 continuation = CONTINUATION_PROMPT.format(
-                    goal=clean_goal,
                     iteration=iteration + 1,
                     maximum=maximum,
                 )
@@ -283,13 +332,47 @@ class GoalRunner:
             )
         raise AssertionError("Ciclo di continuazione terminato in stato impossibile.")
 
-    async def _grade(self, goal: str, answer: str) -> GradeResult | None:
+    async def _grade(self, goal: str, answer: str, evidence: str = "") -> GradeResult | None:
         """Valuta la risposta col grader a rubric, se presente, emettendo eventi trace."""
         grader = self.harness.grader
         if grader is None:
             return None
         self._emit_event({"type": "grader.started"})
-        grade = await grader.grade(goal, answer)
+        reservation = None
+        tracker = getattr(self.harness, "budget_tracker", None)
+        grader_rate = getattr(self.harness, "grader_rate", None)
+        if tracker is not None and grader_rate is not None:
+            reservation = tracker.before_model_call(
+                kind="grader",
+                rate=grader_rate,
+                estimated_input_tokens=(
+                    token_estimate(goal) + token_estimate(answer) + token_estimate(evidence) + 1_000
+                ),
+            )
+        try:
+            grade = await invoke_with_model_retry(
+                lambda: (
+                    grader.grade_with_evidence(goal, answer, evidence)
+                    if evidence and hasattr(grader, "grade_with_evidence")
+                    else grader.grade(goal, answer)
+                ),
+                event_callback=self.event_callback,
+                call_kind="grader",
+                model=getattr(grader_rate, "model", "grader"),
+                on_retry=(
+                    (lambda _exc, _details: tracker.record_retry_estimate(reservation))
+                    if reservation is not None and tracker is not None
+                    else None
+                ),
+            )
+            if reservation is not None and tracker is not None:
+                tracker.record_estimated_call(reservation, grade)
+        except BudgetExceededError:
+            raise
+        except Exception:
+            if reservation is not None and tracker is not None:
+                tracker.cancel_model_call(reservation)
+            raise
         self._emit_event(
             {
                 "type": "grader.completed",

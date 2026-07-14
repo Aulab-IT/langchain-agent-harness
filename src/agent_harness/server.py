@@ -10,6 +10,7 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -23,6 +24,7 @@ from pydantic import BaseModel, Field
 from starlette.responses import Response
 
 from agent_harness import provider_settings as provider_cfg
+from agent_harness.audit import SubagentExecutionBlocked
 from agent_harness.canary import CANARY_EVENT_TYPES, CanaryAnalysis, analyze_canary
 from agent_harness.command_review import review_command
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
@@ -57,6 +59,7 @@ from agent_harness.improve import (
 )
 from agent_harness.mcp_config import load_user_config_text, save_user_config
 from agent_harness.middleware import TIERS, Override
+from agent_harness.model_errors import is_transient_model_error, model_error_details
 from agent_harness.model_preflight import (
     ModelPreflightError,
     clear_preflight_cache,
@@ -64,7 +67,7 @@ from agent_harness.model_preflight import (
     required_preflight_tiers,
 )
 from agent_harness.outcome_checks import SkillCatalogCompletionCheck, skill_catalog_snapshot
-from agent_harness.pricing import catalog_from_settings, estimate_cost_usd
+from agent_harness.pricing import ModelCallUsage, catalog_from_settings, estimate_cost_usd
 from agent_harness.promotion import (
     list_config_versions,
     promote_proposal,
@@ -73,6 +76,11 @@ from agent_harness.promotion import (
     restore_config_version,
 )
 from agent_harness.prompts import COMPACT_INSTRUCTION, SYSTEM_PROMPT
+from agent_harness.run_budget import (
+    BudgetExceededError,
+    RunBudgetLimits,
+    RunBudgetTracker,
+)
 from agent_harness.runner import GoalRunner, RunResult
 from agent_harness.sandbox import (
     SandboxIdleReaper,
@@ -758,6 +766,11 @@ def _classify_run_error(exc: Exception) -> str:
     net_error = name in {"APITimeoutError", "APIConnectionError"}
     if net_error or "timeout" in text or "connection" in text:
         return "Il provider non ha risposto in tempo. Riprova tra poco."
+    if is_transient_model_error(exc):
+        details = model_error_details(exc)
+        request_id = details.get("request_id")
+        suffix = f" Request ID: {request_id}." if request_id else ""
+        return f"Errore temporaneo del provider dopo il retry automatico.{suffix}"
     return "Esecuzione agente fallita. Controlla configurazione e log backend."
 
 
@@ -780,6 +793,55 @@ def _terminal_outcome(
         False,
         result.failure_reason,
     )
+
+
+def _classify_compaction_result(result: RunResult) -> str:
+    """Traduce l'esito reale del tool in terminale, senza affidarsi alla frase del modello."""
+    tool_output = ""
+    for message in reversed(result.messages):
+        if isinstance(message, HumanMessage):
+            break
+        if isinstance(message, ToolMessage) and message.name == "compact_conversation":
+            tool_output = str(message.content)
+            break
+    if tool_output.startswith("Conversation compacted."):
+        result.text = "Contesto compattato."
+        result.completed = True
+        result.terminal_status = "completed"
+        result.failure_reason = ""
+        return "completed"
+    if tool_output.startswith("Nothing to compact"):
+        result.text = "Contesto già compatto; nessuna riduzione necessaria."
+        result.completed = False
+        result.terminal_status = "no_work"
+        result.failure_reason = ""
+        return "no_work"
+    if tool_output.startswith("Compaction failed:"):
+        result.text = "Compaction non riuscita."
+        result.completed = False
+        result.terminal_status = "incomplete"
+        result.failure_reason = tool_output[:500]
+        return "failed"
+    result.text = "Compaction non eseguita."
+    result.completed = False
+    result.terminal_status = "incomplete"
+    result.failure_reason = "Il modello non ha chiamato compact_conversation."
+    return "failed"
+
+
+def _merge_budget_usage(
+    usage: dict[str, Any], tracker: RunBudgetTracker | None
+) -> dict[str, Any]:
+    """Unisce il ledger di tutto il run alle metriche del solo thread root."""
+    if tracker is None:
+        return usage
+    budget = tracker.snapshot().to_dict()
+    usage["cumulative_input_tokens"] = budget["cumulative_input_tokens"]
+    usage["cumulative_output_tokens"] = budget["cumulative_output_tokens"]
+    usage["run_total_tokens"] = budget["total_tokens"]
+    usage["cost_usd"] = budget["cost_usd"]
+    usage["budget"] = budget
+    return usage
 
 
 def _pending_with_network(value: Any) -> bool:
@@ -854,24 +916,53 @@ class RunManager:
         session_id: str,
         content: str,
         attachments: list[str] | None = None,
+        *,
+        run_kind: Literal["task", "compaction"] = "task",
     ) -> dict[str, Any]:
         async with self._lock:
             latest = store.latest_run(session_id)
             if latest and latest["status"] not in _TERMINAL_RUN_STATES:
                 raise HTTPException(status_code=409, detail="Sessione già in esecuzione.")
             run = store.create_run(session_id)
-            store.add_message(
-                session_id, "user", content, run_id=run["id"], attachments=attachments
-            )
+            if run_kind == "task":
+                store.add_message(
+                    session_id, "user", content, run_id=run["id"], attachments=attachments
+                )
             task = asyncio.create_task(
-                self._execute(run["id"], session_id, content),
+                self._execute(run["id"], session_id, content, run_kind=run_kind),
                 name=f"harness-run-{run['id']}",
             )
             self.tasks[run["id"]] = task
             return run
 
-    async def _execute(self, run_id: str, session_id: str, content: str) -> None:
+    async def _execute(
+        self,
+        run_id: str,
+        session_id: str,
+        content: str,
+        *,
+        run_kind: Literal["task", "compaction"] = "task",
+    ) -> None:
         started = time.monotonic()
+        maintenance = run_kind == "compaction"
+        run_settings = settings
+        if maintenance:
+            # Compaction è manutenzione, non un nuovo task: una sola iterazione, nessun router,
+            # grader o subagent. Il cap token dedicato consente di leggere e riassumere una
+            # finestra piena senza trasformare l'operazione di risparmio in un hard-stop.
+            run_settings = settings.model_copy(
+                update={
+                    "harness_enable_subagent_routing": False,
+                    "harness_enable_rubric": False,
+                    "harness_max_continuations": 1,
+                    "harness_max_model_calls": 4,
+                    "harness_max_subagent_calls": 0,
+                    "harness_max_run_tokens": max(
+                        settings.harness_max_run_tokens,
+                        settings.harness_context_window * 3,
+                    ),
+                }
+            )
         loop = asyncio.get_running_loop()
         loop_thread_id = threading.get_ident()
         streamed_tokens = 0
@@ -882,6 +973,18 @@ class RunManager:
         live_throttle = LiveUsageThrottle()
         delta_buffer = StreamDeltaBuffer()
         files_before = {item["name"]: item for item in store.list_files(session_id)}
+
+        def changed_session_files() -> list[str]:
+            files_after = {item["name"]: item for item in store.list_files(session_id)}
+            changed: list[str] = []
+            for name, metadata in files_after.items():
+                if name not in files_before:
+                    changed.append(name)
+                    self._emit(run_id, session_id, "file.created", metadata)
+                elif metadata["modified_at"] != files_before[name]["modified_at"]:
+                    changed.append(name)
+                    self._emit(run_id, session_id, "file.updated", metadata)
+            return changed
         # Il modello che ha davvero risposto. Resta None finché il router non lo dichiara:
         # meglio nessun badge che un badge sbagliato.
         selected_model: str | None = None
@@ -890,7 +993,19 @@ class RunManager:
         skills_before = skill_catalog_snapshot(settings.skills_dir)
         skill_completion_check = SkillCatalogCompletionCheck(settings.skills_dir, skills_before)
         store.update_run(run_id, status="running")
-        self._emit(run_id, session_id, "run.started", {"status": "running"})
+        self._emit(
+            run_id,
+            session_id,
+            "run.started",
+            {"status": "running", "run_kind": run_kind},
+        )
+        if maintenance:
+            self._emit(
+                run_id,
+                session_id,
+                "context.compaction.started",
+                {"status": "running", "mode": "manual"},
+            )
         self._emit(run_id, session_id, "agent.started", {"status": "running"})
 
         def tool_event(event: dict[str, Any]) -> None:
@@ -901,6 +1016,41 @@ class RunManager:
                 model_name = event.get("model")
                 if isinstance(model_name, str):
                     selected_model = model_name
+            if event_type == "budget.updated":
+                try:
+                    provider = str(event.get("provider", ""))
+                    usage_source = str(event.get("usage_source", "estimated"))
+                    if usage_source not in {"provider", "estimated", "absent"}:
+                        usage_source = "estimated"
+                    store.record_model_call(
+                        ModelCallUsage(
+                            provider=provider,
+                            model=str(event.get("model", "")),
+                            execution_kind=(
+                                "local" if provider in {"ollama", "mlx"} else "cloud"
+                            ),
+                            input_tokens=int(event.get("call_input_tokens", 0) or 0),
+                            output_tokens=int(event.get("call_output_tokens", 0) or 0),
+                            reasoning_tokens=int(event.get("call_reasoning_tokens", 0) or 0),
+                            input_cost=Decimal(str(event.get("call_input_cost_usd", "0"))),
+                            output_cost=Decimal(str(event.get("call_output_cost_usd", "0"))),
+                            usage_source=usage_source,  # type: ignore[arg-type]
+                        ),
+                        run_id=run_id,
+                        session_id=session_id,
+                        iteration=int(event.get("model_calls", 0) or 0),
+                        tier=str(event.get("tier") or "") or None,
+                    )
+                except (ArithmeticError, TypeError, ValueError):
+                    _LOGGER.exception("Persistenza model call fallita", extra={"run_id": run_id})
+            if event_type == "budget.warning":
+                level = int(event.get("level_percent", 0) or 0)
+                self._notify(
+                    "budget_warning",
+                    f"«{self._session_label(session_id)}» — budget run al {level}%",
+                    session_id,
+                    run_id,
+                )
             if threading.get_ident() == loop_thread_id:
                 self._emit(run_id, session_id, event_type, event)
             else:
@@ -1084,32 +1234,43 @@ class RunManager:
                 terminal_hint_reason = "Azione utente richiesta annullata o scaduta."
             return resolved
 
+        # Un solo ledger nasce prima del preflight e accompagna l'intero run. In questo modo
+        # anche i probe provider rispettano costo/token/tempo e finiscono nel model-call ledger.
+        run_budget_tracker = RunBudgetTracker(
+            RunBudgetLimits.from_settings(run_settings),
+            event_callback=tool_event,
+        )
         goal_runner: GoalRunner | None = None
         try:
             # Valida i soli provider realmente assegnati ai gradini: una config tutta locale
             # (Ollama/MLX) o tutta Claude non deve pretendere una chiave OpenAI.
-            config_problems = provider_cfg.validate_overrides(settings)
+            config_problems = provider_cfg.validate_overrides(run_settings)
             if config_problems:
                 raise RuntimeError(" ".join(config_problems))
-            model_override = _model_override(session_id)
-            subagent_specs, _ = load_subagent_specs(settings.subagents_dir)
-            subagent_tiers = [
-                "low",
-                "mid",
-                *(str(spec.get("model_tier", "low")) for spec in subagent_specs),
-            ]
+            model_override: Override = "low" if maintenance else _model_override(session_id)
+            subagent_specs, _ = load_subagent_specs(run_settings.subagents_dir)
+            subagent_tiers = (
+                ["low"]
+                if maintenance
+                else [
+                    "low",
+                    "mid",
+                    *(str(spec.get("model_tier", "low")) for spec in subagent_specs),
+                ]
+            )
             await preflight_tier_models(
-                settings,
+                run_settings,
                 required_preflight_tiers(
-                    settings,
+                    run_settings,
                     model_override=model_override,
                     subagent_tiers=subagent_tiers,
                 ),
                 event_callback=tool_event,
+                budget_tracker=run_budget_tracker,
             )
             root = await asyncio.to_thread(store.prepare_session_root, session_id)
             async with build_harness(
-                settings,
+                run_settings,
                 session_id=session_id,
                 workspace_dir=store.workspace_dir(session_id),
                 backend_root=root,
@@ -1117,36 +1278,57 @@ class RunManager:
                 run_id=run_id,
                 model_override=model_override,
                 auto_approve=bool(store.get_session(session_id).get("auto_approve")),
+                compaction_mode="manual" if maintenance else "automatic",
+                budget_tracker=run_budget_tracker,
             ) as harness:
                 manifest = _attachment_manifest(session_id)
                 goal = content + manifest if len(content) + len(manifest) <= 20_000 else content
-                harness.completion_checks.append(skill_completion_check)
+                if not maintenance:
+                    harness.completion_checks.append(skill_completion_check)
                 goal_runner = GoalRunner(harness, approval, agent_event, interaction)
-                result = await goal_runner.run(goal, thread_id=session_id)
+                try:
+                    result = await asyncio.wait_for(
+                        goal_runner.run(goal, thread_id=session_id),
+                        timeout=run_settings.harness_max_run_seconds,
+                    )
+                except TimeoutError:
+                    reason = (
+                        "Durata massima run raggiunta "
+                        f"({run_settings.harness_max_run_seconds}s)."
+                    )
+                    if harness.budget_tracker is not None:
+                        harness.budget_tracker.exceed("duration", reason)
+                    raise BudgetExceededError("duration", reason) from None
+
+            if maintenance:
+                compaction_state = _classify_compaction_result(result)
+                self._emit(
+                    run_id,
+                    session_id,
+                    f"context.compaction.{compaction_state}",
+                    {
+                        "status": compaction_state,
+                        "mode": "manual",
+                        "message": result.text,
+                    },
+                )
 
             elapsed = time.monotonic() - started
             usage = compute_usage(result.messages, elapsed)
             usage["cost_usd"] = _run_cost_usd(usage, selected_model)
+            usage = _merge_budget_usage(usage, getattr(harness, "budget_tracker", None))
             _persist_context(session_id, result.messages)
             # Frena la crescita incontrollata della memoria scritta dall'agente: se il file ha
             # sforato il limite, lo tronca e lo rende visibile invece di gonfiare ogni prompt.
-            if store.cap_session_memory(session_id, settings.harness_memory_max_chars):
+            if store.cap_session_memory(session_id, run_settings.harness_memory_max_chars):
                 self._emit(
                     run_id,
                     session_id,
                     "memory.truncated",
-                    {"max_chars": settings.harness_memory_max_chars},
+                    {"max_chars": run_settings.harness_memory_max_chars},
                 )
             clean_text = result.text.replace("[GOAL_COMPLETE]", "").strip()
-            files_after = {item["name"]: item for item in store.list_files(session_id)}
-            changed_files: list[str] = []
-            for name, metadata in files_after.items():
-                if name not in files_before:
-                    changed_files.append(name)
-                    self._emit(run_id, session_id, "file.created", metadata)
-                elif metadata["modified_at"] != files_before[name]["modified_at"]:
-                    changed_files.append(name)
-                    self._emit(run_id, session_id, "file.updated", metadata)
+            changed_files = changed_session_files()
             # In chat vogliamo solo l'output richiesto, non gli artefatti intermedi.
             # `list_files` già esclude dipendenze e cache (es. .pylib, __pycache__); se
             # l'agente ha usato la cartella `output/` per i deliverable, allega solo quelli.
@@ -1190,12 +1372,28 @@ class RunManager:
                 },
             )
             label = self._session_label(session_id)
-            self._notify(
-                "run_completed" if effectively_completed else "run_incomplete",
-                f"«{label}» — {'completato' if effectively_completed else final_status}",
-                session_id,
-                run_id,
-            )
+            if maintenance:
+                maintenance_label = {
+                    "completed": "contesto compattato",
+                    "no_work": "contesto già compatto",
+                }.get(final_status, f"compaction {final_status}")
+                self._notify(
+                    (
+                        "run_completed"
+                        if final_status in {"completed", "no_work"}
+                        else "run_incomplete"
+                    ),
+                    f"«{label}» — {maintenance_label}",
+                    session_id,
+                    run_id,
+                )
+            else:
+                self._notify(
+                    "run_completed" if effectively_completed else "run_incomplete",
+                    f"«{label}» — {'completato' if effectively_completed else final_status}",
+                    session_id,
+                    run_id,
+                )
         except asyncio.CancelledError:
             # Stop richiesto: conserva l'ultimo usage noto invece di azzerarlo, altrimenti
             # il pannello Contesto torna vuoto anche se il run aveva già consumato token.
@@ -1203,17 +1401,197 @@ class RunManager:
             if goal_runner is not None and goal_runner.last_messages:
                 elapsed = time.monotonic() - started
                 cancelled_usage = compute_usage(goal_runner.last_messages, elapsed)
+                cancelled_usage = _merge_budget_usage(
+                    cancelled_usage,
+                    getattr(getattr(goal_runner, "harness", None), "budget_tracker", None),
+                )
             store.update_run(run_id, status="cancelled", usage=cancelled_usage)
             self._emit(run_id, session_id, "run.cancelled", {"status": "cancelled"})
             raise
+        except BudgetExceededError as exc:
+            elapsed = time.monotonic() - started
+            messages = goal_runner.last_messages if goal_runner is not None else []
+            usage = compute_usage(messages, elapsed)
+            tracker = (
+                getattr(getattr(goal_runner, "harness", None), "budget_tracker", None)
+                if goal_runner is not None
+                else run_budget_tracker
+            )
+            usage = _merge_budget_usage(usage, tracker)
+            message = str(exc)
+            if messages:
+                _persist_context(session_id, messages)
+            changed_files = changed_session_files()
+            attachments = _select_attachments(changed_files)
+            partial_text = f"Run fermato: {message} Risultato parziale conservato."
+            if attachments:
+                partial_text += " File prodotti: " + ", ".join(attachments) + "."
+            store.add_message(
+                session_id,
+                "assistant",
+                partial_text,
+                run_id=run_id,
+                attachments=attachments,
+                model=selected_model,
+            )
+            store.update_run(
+                run_id,
+                status="budget_exceeded",
+                error=message,
+                usage=usage,
+            )
+            self._emit(run_id, session_id, "usage.updated", usage)
+            self._emit(
+                run_id,
+                session_id,
+                "run.partial_result",
+                {
+                    "message": partial_text,
+                    "attachments": attachments,
+                    "changed_files": changed_files,
+                },
+            )
+            self._emit(
+                run_id,
+                session_id,
+                "assistant.completed",
+                {"message": partial_text, "partial": True},
+            )
+            self._emit(
+                run_id,
+                session_id,
+                "run.budget_exceeded",
+                {"status": "budget_exceeded", "dimension": exc.dimension, "reason": message},
+            )
+            self._notify(
+                "run_incomplete",
+                f"«{self._session_label(session_id)}» — {message}",
+                session_id,
+                run_id,
+            )
+        except SubagentExecutionBlocked as exc:
+            elapsed = time.monotonic() - started
+            messages = goal_runner.last_messages if goal_runner is not None else []
+            tracker = (
+                getattr(getattr(goal_runner, "harness", None), "budget_tracker", None)
+                if goal_runner is not None
+                else run_budget_tracker
+            )
+            usage = _merge_budget_usage(compute_usage(messages, elapsed), tracker)
+            if messages:
+                _persist_context(session_id, messages)
+            changed_files = changed_session_files()
+            attachments = _select_attachments(changed_files)
+            reason = str(exc)
+            partial_text = "Esecuzione fermata: serve intervento sull'ambiente."
+            if attachments:
+                partial_text += " File parziali conservati: " + ", ".join(attachments) + "."
+            store.add_message(
+                session_id,
+                "assistant",
+                partial_text,
+                run_id=run_id,
+                attachments=attachments,
+                model=selected_model,
+            )
+            store.update_run(
+                run_id,
+                status="blocked_needs_human",
+                error=reason,
+                usage=usage,
+            )
+            self._emit(run_id, session_id, "usage.updated", usage)
+            self._emit(
+                run_id,
+                session_id,
+                "run.partial_result",
+                {
+                    "message": partial_text,
+                    "attachments": attachments,
+                    "changed_files": changed_files,
+                },
+            )
+            self._emit(
+                run_id,
+                session_id,
+                "assistant.completed",
+                {"message": partial_text, "partial": True},
+            )
+            self._emit(
+                run_id,
+                session_id,
+                "run.blocked_needs_human",
+                {"status": "blocked_needs_human", "reason": reason},
+            )
+            self._notify(
+                "run_incomplete",
+                f"«{self._session_label(session_id)}» — intervento ambiente richiesto",
+                session_id,
+                run_id,
+            )
         except Exception as exc:
             _LOGGER.exception("Agent run failed", extra={"run_id": run_id})
             message = _classify_run_error(exc)
-            store.update_run(run_id, status="failed", error=message)
-            self._emit(run_id, session_id, "run.failed", {"error": message})
+            details = model_error_details(exc)
+            elapsed = time.monotonic() - started
+            messages = goal_runner.last_messages if goal_runner is not None else []
+            tracker = (
+                getattr(getattr(goal_runner, "harness", None), "budget_tracker", None)
+                if goal_runner is not None
+                else run_budget_tracker
+            )
+            usage = _merge_budget_usage(compute_usage(messages, elapsed), tracker)
+            if messages:
+                _persist_context(session_id, messages)
+            changed_files = changed_session_files()
+            attachments = _select_attachments(changed_files)
+            final_status = "incomplete" if attachments else "failed"
+            partial_text = message
+            if attachments:
+                partial_text += " Risultato parziale conservato. File prodotti: "
+                partial_text += ", ".join(attachments) + "."
+            store.add_message(
+                session_id,
+                "assistant",
+                partial_text,
+                run_id=run_id,
+                attachments=attachments,
+                model=selected_model,
+            )
+            store.update_run(run_id, status=final_status, error=message, usage=usage)
+            self._emit(run_id, session_id, "usage.updated", usage)
+            self._emit(
+                run_id,
+                session_id,
+                "model.error",
+                {"call_kind": "run", "model": selected_model, **details},
+            )
+            if attachments:
+                self._emit(
+                    run_id,
+                    session_id,
+                    "run.partial_result",
+                    {
+                        "message": partial_text,
+                        "attachments": attachments,
+                        "changed_files": changed_files,
+                    },
+                )
+            self._emit(
+                run_id,
+                session_id,
+                "assistant.completed",
+                {"message": partial_text, "partial": bool(attachments)},
+            )
+            self._emit(
+                run_id,
+                session_id,
+                f"run.{final_status}",
+                {"error": message, "error_details": details},
+            )
             self._notify(
-                "run_failed",
-                f"«{self._session_label(session_id)}» — fallito",
+                "run_incomplete" if attachments else "run_failed",
+                f"«{self._session_label(session_id)}» — {message}",
                 session_id,
                 run_id,
             )
@@ -1793,7 +2171,11 @@ async def compact_context(session_id: str) -> dict[str, Any]:
     esecuzione, la richiesta viene rifiutata con 409 come ogni altro avvio di run.
     """
     _require_session(session_id)
-    run = await run_manager.start(session_id, COMPACT_INSTRUCTION)
+    run = await run_manager.start(
+        session_id,
+        COMPACT_INSTRUCTION,
+        run_kind="compaction",
+    )
     return {"run_id": run["id"], "status": run["status"]}
 
 

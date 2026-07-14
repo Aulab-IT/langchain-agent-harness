@@ -42,6 +42,7 @@ export function InspectorRail({
   onUpload,
   onDeleteFile,
   onStopSandbox,
+  onCompact,
   variant = "rail",
   onClose,
 }: {
@@ -60,6 +61,7 @@ export function InspectorRail({
   onUpload: (files: FileList | null) => void;
   onDeleteFile: (name: string) => void;
   onStopSandbox: () => void;
+  onCompact: () => Promise<string>;
   variant?: "rail" | "sheet" | "dock";
   onClose?: () => void;
 }) {
@@ -139,7 +141,10 @@ export function InspectorRail({
             usage={usage}
             contextWindow={contextWindow}
             sessionId={sessionId}
+            run={run}
+            events={events}
             busy={!!run && !isTerminalRunStatus(run.status)}
+            onCompact={onCompact}
           />
         ) : null}
         {tab === "sandbox" ? (

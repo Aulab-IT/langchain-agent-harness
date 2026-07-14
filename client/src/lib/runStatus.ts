@@ -25,7 +25,7 @@ export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
   incomplete: "Incompleto",
   blocked_needs_human: "Bloccato: serve intervento",
   failed_verification: "Verifica fallita",
-  budget_exceeded: "Budget esaurito",
+  budget_exceeded: "Limite operativo raggiunto",
   security_stop: "Stop di sicurezza",
   no_work: "Nessun lavoro",
   failed: "Fallito",

@@ -20,6 +20,38 @@ export type Usage = {
   }>;
   estimated_context: boolean;
   cost_usd?: string;
+  run_total_tokens?: number;
+  budget?: {
+    cumulative_input_tokens: number;
+    cumulative_output_tokens: number;
+    total_tokens: number;
+    cost_usd: string;
+    model_calls: number;
+    subagent_calls: number;
+    by_call_kind?: Record<
+      string,
+      { input_tokens: number; output_tokens: number; total_tokens: number; model_calls: number }
+    >;
+    level_percent?: number;
+    projected_tokens?: number;
+    projected_cost_usd?: string;
+    requested_input_tokens?: number;
+    reserved_output_tokens?: number;
+    token_ratio: number;
+    cost_ratio: number;
+    exceeded: boolean;
+    exceeded_dimension: string;
+    exceeded_reason: string;
+    limits: {
+      max_tokens: number;
+      max_cost_usd: string;
+      max_seconds: number;
+      max_model_calls: number;
+      max_subagent_calls: number;
+      max_subagent_model_calls?: number;
+      max_subagent_tokens?: number;
+    };
+  };
 };
 
 export type CostSummary = {

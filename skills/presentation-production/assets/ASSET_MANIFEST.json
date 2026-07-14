@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "skill_assets": [
+    {
+      "id": "native-powerpoint-shapes",
+      "type": "component-guidance",
+      "title_or_description": "Use native shapes for editable diagrams, process maps, KPI cards and simple infographics.",
+      "creator_or_provider": "Presentation Production skill",
+      "url": null,
+      "retrieved_on": "2025-02-14",
+      "license_or_permission": "Original instructional guidance; no bundled third-party artwork.",
+      "modifications": "n/a",
+      "placement": "Generated slide objects",
+      "attribution_required": false,
+      "attribution_text": null,
+      "status": "approved"
+    }
+  ],
+  "project_asset_template": {
+    "id": "example-photo-001",
+    "type": "photo|icon|chart-data|screenshot|logo",
+    "title_or_description": "Describe the actual asset",
+    "creator_or_provider": "Name",
+    "url": "https://...",
+    "retrieved_on": "YYYY-MM-DD",
+    "license_or_permission": "License name/version, permission record, or client-owned basis",
+    "modifications": "crop, recolor, annotation, or none",
+    "placement": "slide 3, right image",
+    "attribution_required": true,
+    "attribution_text": "Required attribution text",
+    "status": "pending-review|approved|do-not-use"
+  }
+}

@@ -62,6 +62,63 @@ type RunSummary = {
   toolCount: number;
 };
 
+type ToolRoutingSummary = {
+  required: boolean;
+  recommended: string[];
+  used: string[];
+  matched: string[];
+  extra: string[];
+  labels: Record<string, string>;
+};
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function summarizeToolRouting(events: RunEvent[]): ToolRoutingSummary | null {
+  const routing = [...events].reverse().find((event) => event.type === "tool.routing.completed");
+  if (!routing) return null;
+  const recommended = stringList(routing.payload?.recommended);
+  const labels: Record<string, string> = {};
+  const recommendedTools = Array.isArray(routing.payload?.recommended_tools)
+    ? routing.payload.recommended_tools
+    : [];
+  for (const raw of recommendedTools) {
+    if (!raw || typeof raw !== "object") continue;
+    const item = raw as Record<string, unknown>;
+    if (typeof item.name !== "string") continue;
+    const display = typeof item.display_name === "string" ? item.display_name : item.name;
+    labels[item.name] = typeof item.server === "string"
+      ? `MCP · ${item.server} · ${display}`
+      : display;
+  }
+  const used = [...new Set(events
+    .filter((event) => event.type === "tool.completed" || event.type === "subagent.tool.completed")
+    .map((event) => event.payload?.tool)
+    .filter((tool): tool is string => typeof tool === "string"))];
+  for (const event of events) {
+    const tool = event.payload?.tool;
+    if (typeof tool !== "string") continue;
+    const display = typeof event.payload?.tool_display_name === "string"
+      ? event.payload.tool_display_name
+      : tool;
+    labels[tool] = typeof event.payload?.mcp_server === "string"
+      ? `MCP · ${event.payload.mcp_server} · ${display}`
+      : display;
+  }
+  const recommendedSet = new Set(recommended);
+  return {
+    required: routing.payload?.required === true,
+    recommended,
+    used,
+    matched: used.filter((tool) => recommendedSet.has(tool)),
+    extra: used.filter((tool) => !recommendedSet.has(tool)),
+    labels,
+  };
+}
+
 function summarize(id: string, events: RunEvent[]): RunSummary {
   const times = events.map((event) => new Date(event.created_at).getTime());
   const start = Math.min(...times);
@@ -136,7 +193,11 @@ function buildSteps(events: RunEvent[]): Step[] {
       steps.push({
         kind: "tool",
         key: `${event.id}`,
-        name: tool,
+        name: typeof p.mcp_server === "string" && typeof p.tool_display_name === "string"
+          ? `MCP · ${p.mcp_server} · ${p.tool_display_name}`
+          : typeof p.tool_display_name === "string"
+            ? p.tool_display_name
+            : tool,
         at: started ? new Date(started.created_at).getTime() : at,
         elapsedMs: ms(p.elapsed_ms),
         args: started ? (started.payload.args as string | undefined) : undefined,
@@ -163,6 +224,7 @@ function buildSteps(events: RunEvent[]): Step[] {
 }
 
 function eventMeta(type: string) {
+  if (type.startsWith("context.compaction.")) return { Icon: Layers3, color: "text-info" };
   if (type.startsWith("tool.")) return { Icon: Wrench, color: "text-info" };
   if (type.startsWith("grader.")) return { Icon: CircleCheck, color: "text-accent" };
   if (type.startsWith("approval.")) return { Icon: ShieldCheck, color: "text-warning" };
@@ -172,6 +234,29 @@ function eventMeta(type: string) {
   if (type === "agent.started") return { Icon: Bot, color: "text-accent" };
   if (type.startsWith("run.")) return { Icon: Play, color: "text-muted" };
   return { Icon: Activity, color: "text-muted" };
+}
+
+function eventLabel(type: string, payload: Record<string, unknown>): string {
+  const labels: Record<string, string> = {
+    "context.compaction.started": "Compaction manuale avviata",
+    "context.compaction.completed": "Compaction manuale completata",
+    "context.compaction.no_work": "Contesto già compatto",
+    "context.compaction.failed": "Compaction non riuscita",
+    "run.partial_result": "Risultato parziale conservato",
+    "subagent.retry_stopped": "Retry subagent fermato",
+    "subagent.finalization.started": "Subagent in finalizzazione",
+    "subagent.finalization.forced": "Call finale riservata alla consegna",
+    "subagent.tool.outcome": "Esito tool classificato",
+    "model.retrying": "Retry modello",
+    "model.retry_exhausted": "Retry modello esauriti",
+    "model.request_failed": "Richiesta modello fallita",
+    "model.error": "Errore provider modello",
+    "budget.retry_estimated": "Costo retry stimato",
+  };
+  if (type === "context.compaction.detected") {
+    return payload.mode === "manual" ? "Riduzione manuale rilevata" : "Compaction automatica";
+  }
+  return labels[type] ?? type;
 }
 
 function StatusBadge({ status }: { status: RunSummary["status"] }) {
@@ -266,7 +351,7 @@ function EventRow({ step }: { step: EventStep }) {
   return (
     <div className="flex items-start gap-2 px-1 py-1.5 text-sm">
       <Icon size={14} className={`mt-0.5 shrink-0 ${color}`} />
-      <span className="font-mono text-xs">{step.type}</span>
+      <span className="text-xs font-medium">{eventLabel(step.type, step.payload)}</span>
       {summary ? (
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted">· {summary}</span>
       ) : (
@@ -293,6 +378,10 @@ export function TraceView({ events }: { events: RunEvent[] }) {
   const [selected, setSelected] = useState<string | null>(null);
   const run = runs.find((item) => item.id === selected) ?? runs[0];
   const steps = useMemo(() => (run ? buildSteps(run.events) : []), [run]);
+  const toolRouting = useMemo(
+    () => (run ? summarizeToolRouting(run.events) : null),
+    [run],
+  );
 
   if (!runs.length) {
     return (
@@ -386,6 +475,8 @@ export function TraceView({ events }: { events: RunEvent[] }) {
               </div>
             </div>
 
+            {toolRouting ? <ToolRoutingCard value={toolRouting} /> : null}
+
             <div className="rounded-xl border border-border bg-surface">
               <div className="border-b border-border px-4 py-3 text-sm font-medium">
                 Timeline · {steps.length} passi
@@ -404,6 +495,64 @@ export function TraceView({ events }: { events: RunEvent[] }) {
         ) : null}
       </div>
     </section>
+  );
+}
+
+function ToolChips({
+  values,
+  empty,
+  labels = {},
+}: {
+  values: string[];
+  empty: string;
+  labels?: Record<string, string>;
+}) {
+  if (!values.length) return <span className="text-xs text-muted">{empty}</span>;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {values.map((value) => (
+        <code key={value} title={value} className="rounded bg-surface-raised px-2 py-1 text-[11px] text-foreground">
+          {labels[value] ?? value}
+        </code>
+      ))}
+    </div>
+  );
+}
+
+function ToolRoutingCard({ value }: { value: ToolRoutingSummary }) {
+  const followed = value.recommended.length === 0 || value.matched.length > 0;
+  const difference = value.recommended.length > 0 && value.matched.length === 0
+    ? "Tool consigliato non usato"
+    : value.extra.length
+      ? `${value.extra.length} tool aggiuntivi`
+      : "Nessuna differenza";
+  return (
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Wrench size={15} className="text-info" />
+        <span className="text-sm font-medium">Routing tool</span>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] ${
+          followed ? "bg-success/10 text-success" : value.required ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"
+        }`}>
+          {followed ? "coerente" : difference}
+        </span>
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <div>
+          <div className="mb-1.5 text-xs text-muted-2">Tool consigliato</div>
+          <ToolChips values={value.recommended} empty="Nessun tool necessario" labels={value.labels} />
+        </div>
+        <div>
+          <div className="mb-1.5 text-xs text-muted-2">Tool usato</div>
+          <ToolChips values={value.used} empty="Nessun tool usato" labels={value.labels} />
+        </div>
+        <div>
+          <div className="mb-1.5 text-xs text-muted-2">Differenza</div>
+          <div className="text-xs text-muted">{difference}</div>
+          {value.extra.length ? <ToolChips values={value.extra} empty="" labels={value.labels} /> : null}
+        </div>
+      </div>
+    </div>
   );
 }
 

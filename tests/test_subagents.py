@@ -6,9 +6,10 @@ import pytest
 from langchain_core.tools import tool
 from langgraph.errors import GraphInterrupt
 
-from agent_harness.audit import AuditMiddleware
+from agent_harness.audit import AuditMiddleware, SubagentExecutionBlocked
 from agent_harness.config import Settings
 from agent_harness.factory import _builtin_subagents, _resolve_subagent
+from agent_harness.run_budget import SubagentProgressState
 from agent_harness.subagents import (
     delete_subagent,
     load_subagent_specs,
@@ -146,7 +147,7 @@ async def test_subagent_telemetry_keeps_parallel_invocations_correlated(tmp_path
         tmp_path / "audit.jsonl",
         events.append,
         task_semaphore=semaphore,
-        task_observer=observed.append,
+        task_observer=lambda name, _invocation_id: observed.append(name),
     )
     child = AuditMiddleware(
         tmp_path / "audit.jsonl",
@@ -319,3 +320,88 @@ async def test_audit_treats_graph_interrupt_as_pause_and_resume(tmp_path: Path) 
     ]
     assert "subagent.failed" not in {event["type"] for event in events}
     assert '"status": "paused"' in (tmp_path / "audit.jsonl").read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_subagent_stops_on_fatal_environment_error(tmp_path: Path) -> None:
+    events: list[dict[str, object]] = []
+    middleware = AuditMiddleware(
+        tmp_path / "audit.jsonl",
+        events.append,
+        subagent_name="builder",
+    )
+    request = SimpleNamespace(
+        tool_call={"id": "apt-1", "name": "docker_exec", "args": {"command": "apt-get update"}}
+    )
+
+    async def handler(_: object) -> str:
+        return "exit_code=100\nCould not open lock file /var/lib/apt/lists/lock"
+
+    with pytest.raises(SubagentExecutionBlocked):
+        await middleware.awrap_tool_call(request, handler)  # type: ignore[arg-type,return-value]
+
+    assert any(event["type"] == "subagent.retry_stopped" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_subagent_stops_after_same_tool_error_twice(tmp_path: Path) -> None:
+    events: list[dict[str, object]] = []
+    middleware = AuditMiddleware(
+        tmp_path / "audit.jsonl",
+        events.append,
+        subagent_name="builder",
+    )
+
+    async def handler(_: object) -> str:
+        return "exit_code=1\nSTDERR:\nconversion failed"
+
+    for call_id in ("convert-1", "convert-2"):
+        request = SimpleNamespace(
+            tool_call={"id": call_id, "name": "docker_exec", "args": {"command": "convert"}}
+        )
+        if call_id == "convert-1":
+            await middleware.awrap_tool_call(request, handler)  # type: ignore[arg-type,return-value]
+        else:
+            with pytest.raises(SubagentExecutionBlocked):
+                await middleware.awrap_tool_call(request, handler)  # type: ignore[arg-type,return-value]
+
+    stopped = [event for event in events if event["type"] == "subagent.retry_stopped"]
+    assert stopped and stopped[0]["attempts"] == 2
+
+
+@pytest.mark.asyncio
+async def test_subagent_classifies_validation_and_missing_optional_dependency(
+    tmp_path: Path,
+) -> None:
+    events: list[dict[str, object]] = []
+    progress = SubagentProgressState()
+    middleware = AuditMiddleware(
+        tmp_path / "audit.jsonl",
+        events.append,
+        subagent_name="builder",
+        progress_state=progress,
+    )
+    request = SimpleNamespace(
+        tool_call={"id": "validate-1", "name": "docker_exec", "args": {"command": "check"}}
+    )
+
+    async def handler(_: object) -> str:
+        return (
+            'exit_code=0\n{"status": "pass-with-warnings", "errors": []}\n'
+            "ModuleNotFoundError: No module named 'defusedxml'"
+        )
+
+    result = await middleware.awrap_tool_call(  # type: ignore[arg-type,return-value]
+        request, handler
+    )
+
+    assert "HARNESS TOOL OUTCOME" in result
+    assert progress.snapshot() == {
+        "validation_passed_with_warnings": 1,
+        "dependency_missing": 1,
+    }
+    outcomes = [event for event in events if event["type"] == "subagent.tool.outcome"]
+    assert outcomes and outcomes[0]["outcomes"] == [
+        "validation_passed_with_warnings",
+        "dependency_missing",
+    ]

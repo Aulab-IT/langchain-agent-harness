@@ -1,11 +1,11 @@
 ---
 name: presentation-maker
-description: Quando si richiede la creazione di una presentazione
+description: Quando si richiede la creazione di una presentazione in powerpoint
 model_tier: mid
 capabilities:
-- progettazione narrativa e storyboard
+- progettazione narrativa e storyboard della presentazione
 - design visuale di slide
-- creazione di presentazioni PowerPoint o Keynote
+- creazione di presentazioni PowerPoint
 - verifica visuale e tecnica del deck
 inputs:
 - brief, pubblico, obiettivo e tono

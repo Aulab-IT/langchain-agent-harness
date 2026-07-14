@@ -125,3 +125,18 @@ async def test_grader_prompt_contains_goal_and_answer() -> None:
     rendered = str(judge.prompts[0])
     assert "OBIETTIVO-X" in rendered
     assert "RISPOSTA-Y" in rendered
+
+
+@pytest.mark.asyncio
+async def test_grader_receives_runtime_evidence_without_requiring_answer_duplication() -> None:
+    judge = FakeJudge(1.0, 1.0, 1.0, 1.0)
+    grader = RubricGrader(judge)
+
+    await grader.grade_with_evidence(
+        "Crea deck", "Deck pronto.", "output/deck.pptx; QA passed; tre fonti validate"
+    )
+
+    rendered = str(judge.prompts[0])
+    assert "EVIDENZE DI COMPLETAMENTO DEL RUNTIME" in rendered
+    assert "output/deck.pptx" in rendered
+    assert "non pretendere che la risposta finale le duplichi integralmente" in rendered

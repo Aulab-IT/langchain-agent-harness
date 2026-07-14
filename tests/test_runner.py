@@ -110,9 +110,7 @@ async def test_completion_check_blocks_early_success_then_allows_retry() -> None
     )
     harness = fake_harness(graph, 2)
     harness.completion_checks = [
-        SequencedCompletionCheck(
-            [(False, "Delega incompleta: riprova."), (True, "")]
-        )
+        SequencedCompletionCheck([(False, "Delega incompleta: riprova."), (True, "")])
     ]
 
     result = await GoalRunner(harness).run("Rispondi", thread_id="guard-1")
@@ -126,9 +124,7 @@ async def test_completion_check_blocks_early_success_then_allows_retry() -> None
 async def test_failed_completion_check_has_failed_verification_terminal_status() -> None:
     graph = FakeGraph([{"messages": [AIMessage(content="Fatto.")]}])
     harness = fake_harness(graph, 1)
-    harness.completion_checks = [
-        SequencedCompletionCheck([(False, "Skill non pubblicata.")])
-    ]
+    harness.completion_checks = [SequencedCompletionCheck([(False, "Skill non pubblicata.")])]
 
     result = await GoalRunner(harness).run("Rispondi", thread_id="guard-2")
 
@@ -138,7 +134,7 @@ async def test_failed_completion_check_has_failed_verification_terminal_status()
 
 
 @pytest.mark.asyncio
-async def test_runner_reinjects_goal_until_budget() -> None:
+async def test_runner_references_existing_goal_without_reinjecting_it() -> None:
     graph = FakeGraph(
         [
             {"messages": [AIMessage(content="Non ancora")]},
@@ -148,7 +144,8 @@ async def test_runner_reinjects_goal_until_budget() -> None:
     result = await GoalRunner(fake_harness(graph, 2)).run("Crea un file", thread_id="t-2")
     assert result.completed is False
     assert result.iterations == 2
-    assert "Crea un file" in graph.inputs[1]["messages"][0]["content"]
+    assert "Crea un file" not in graph.inputs[1]["messages"][0]["content"]
+    assert "obiettivo già presente" in graph.inputs[1]["messages"][0]["content"]
 
 
 @pytest.mark.asyncio
@@ -171,6 +168,19 @@ async def test_mutating_goal_requires_successful_sandbox_verification() -> None:
     result = await GoalRunner(fake_harness(graph, 2)).run("Crea un file", thread_id="t-5")
     assert result.completed is True
     assert result.iterations == 2
+
+
+@pytest.mark.asyncio
+async def test_mutating_goal_accepts_completed_subagent_sandbox_verification() -> None:
+    graph = FakeGraph([{"messages": [AIMessage(content="Artefatto pronto.")]}])
+    harness = fake_harness(graph, 2)
+    harness.delegated_environment_verification = lambda: True
+
+    result = await GoalRunner(harness).run("Crea una presentazione", thread_id="delegated-ok")
+
+    assert result.completed is True
+    assert result.iterations == 1
+    assert len(graph.inputs) == 1
 
 
 @pytest.mark.asyncio
@@ -213,6 +223,37 @@ async def test_runner_reinjects_feedback_when_grader_fails() -> None:
     assert result.completed is True
     assert result.iterations == 2
     assert "Manca la verifica dei risultati." in graph.inputs[1]["messages"][0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_completed_dag_grader_retry_is_final_response_only() -> None:
+    graph = FakeGraph(
+        [
+            {"messages": [AIMessage(content="File pronto.")]},
+            {"messages": [AIMessage(content="File, fonti e verifiche.")]},
+        ]
+    )
+    grader = FakeGrader(
+        [
+            GradeResult(
+                passed=False,
+                score=0.4,
+                feedback="Elenca fonti e verifiche.",
+                criteria_scores={"sicurezza": 1.0, "aderenza": 1.0},
+            ),
+            GradeResult(passed=True, score=0.9, feedback=""),
+        ]
+    )
+    harness = fake_harness(graph, 2, grader)
+    harness.completion_evidence = lambda: "task complete; output/deck.pptx verified"
+
+    result = await GoalRunner(harness).run("Rispondi", thread_id="final-only")
+
+    assert result.completed is True
+    prompt = graph.inputs[1]["messages"][0]["content"]
+    assert "Riscrivi soltanto la risposta finale" in prompt
+    assert "non usare tool" in prompt
+    assert harness.ladder.current == "low"
 
 
 @pytest.mark.asyncio
@@ -306,9 +347,7 @@ async def test_user_action_interrupt_routes_to_interaction_callback() -> None:
 
 @pytest.mark.asyncio
 async def test_user_action_without_interaction_callback_raises() -> None:
-    graph = FakeGraph(
-        [{"__interrupt__": [Interrupt(value={"type": "user_action"}, id="1")]}]
-    )
+    graph = FakeGraph([{"__interrupt__": [Interrupt(value={"type": "user_action"}, id="1")]}])
     with pytest.raises(RuntimeError, match="callback"):
         await GoalRunner(fake_harness(graph)).run("Azione utente", thread_id="t-a2")
 
@@ -318,6 +357,7 @@ async def test_empty_goal_is_rejected() -> None:
     graph = FakeGraph([])
     with pytest.raises(ValueError):
         await GoalRunner(fake_harness(graph)).run(" ", thread_id="t-4")
+
 
 @pytest.mark.asyncio
 async def test_a_failed_iteration_climbs_the_ladder_and_announces_it() -> None:

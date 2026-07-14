@@ -19,6 +19,7 @@ from agent_harness.config import Settings
 from agent_harness.evaluation import CaseResult, execute_eval_case, load_eval_cases, summarize
 from agent_harness.factory import build_harness
 from agent_harness.improve import run_improvement
+from agent_harness.run_budget import BudgetExceededError
 from agent_harness.runner import GoalRunner
 
 app = typer.Typer(help="Agent harness didattico con LangChain.")
@@ -56,8 +57,13 @@ async def ask_approval(payload: dict[str, Any]) -> bool:
 
 
 async def execute_goal(goal: str, thread_id: str) -> None:
+    _silence_openai_serializer_warnings()
     async with build_harness() as harness:
-        result = await GoalRunner(harness, ask_approval).run(goal, thread_id=thread_id)
+        try:
+            result = await GoalRunner(harness, ask_approval).run(goal, thread_id=thread_id)
+        except BudgetExceededError as exc:
+            console.print(f"[yellow]Run fermato per budget: {exc}[/yellow]")
+            return
         console.print(result.text)
         if not result.completed:
             console.print(

@@ -71,3 +71,19 @@ def test_middleware_detects_compaction_across_calls() -> None:
     detected = [e for e in events if e["type"] == "context.compaction.detected"]
     assert detected
     assert detected[0]["tokens_reclaimed"] > 0
+    assert detected[0]["mode"] == "automatic"
+
+
+def test_middleware_labels_manual_compaction() -> None:
+    events: list[dict] = []
+    mw = ContextMonitorMiddleware(
+        window_tokens=100_000,
+        event_callback=events.append,
+        compaction_mode="manual",
+    )
+
+    mw._observe(SimpleNamespace(messages=[HumanMessage(content="x" * 40_000)], system_message=None))
+    mw._observe(SimpleNamespace(messages=[HumanMessage(content="x" * 4_000)], system_message=None))
+
+    detected = [e for e in events if e["type"] == "context.compaction.detected"]
+    assert detected[0]["mode"] == "manual"

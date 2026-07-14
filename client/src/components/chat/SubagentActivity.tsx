@@ -34,7 +34,7 @@ function RoutingCard({ routing }: { routing: RoutingActivity }) {
     planning: "Analisi roster in corso",
     planned: `${routing.tasks.length} deleghe pianificate`,
     executing: "Piano deleghe in esecuzione",
-    direct: "Esecuzione diretta scelta",
+    direct: routing.decision === "direct_root" ? "Esecuzione diretta con tool root" : "Risposta diretta scelta",
     fallback: "Fallback nativo attivo",
     followed: "Piano deleghe avviato",
     not_followed: "Piano deleghe non seguito",
@@ -48,6 +48,7 @@ function RoutingCard({ routing }: { routing: RoutingActivity }) {
     {routing.roster.length ? <p className="mt-1 text-muted">Roster: {routing.roster.join(", ")}</p> : null}
     {routing.tasks.length ? <ul className="mt-2 space-y-1">{routing.tasks.map((task) => <li key={task.id} className="rounded border border-border/70 bg-background/40 px-2 py-1.5"><div className="flex gap-2"><code>{task.id}</code><span>→</span><strong>{task.selectedAgent}</strong><span className="ml-auto text-muted">{task.status}{task.attempt > 1 ? ` · tentativo ${task.attempt}` : ""}</span></div>{task.dependsOn.length ? <p className="text-muted">Dopo: {task.dependsOn.join(", ")}</p> : null}<p className="mt-0.5 text-muted">{task.objective}</p>{task.outputArtifacts.length ? <p className="mt-1 text-success">Artifact: {task.outputArtifacts.join(", ")}</p> : null}</li>)}</ul> : null}
     {routing.rationale ? <p className="mt-1.5 text-muted">{routing.rationale}</p> : null}
+    {routing.rejectedMatches.length ? <ul className="mt-1.5 space-y-1 text-warning">{routing.rejectedMatches.map((match, index) => <li key={`${match.agent}-${index}`}>Match scartato: <code>{match.agent}</code>{match.reason ? ` · ${match.reason}` : ""}</li>)}</ul> : null}
     {routing.error ? <p className="mt-1.5 text-warning">{routing.error}</p> : null}
     {routing.missingAgents.length ? <p className="mt-1.5 text-warning">Mancano: {routing.missingAgents.join(", ")}</p> : null}
   </article>;

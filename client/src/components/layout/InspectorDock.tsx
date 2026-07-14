@@ -5,6 +5,7 @@ import {
   Layers3,
   MessageSquare,
   PanelBottom,
+  WalletCards,
 } from "lucide-react";
 import {
   useCallback,
@@ -56,6 +57,7 @@ type DockProps = {
   onUpload: (files: FileList | null) => void;
   onDeleteFile: (name: string) => void;
   onStopSandbox: () => void;
+  onCompact: () => Promise<string>;
 };
 
 const STATUS_DOT: Record<string, string> = {
@@ -122,6 +124,11 @@ export function InspectorDock(props: DockProps) {
 
   const contextTokens = usage.context_input_tokens ?? usage.input_tokens;
   const percent = Math.min(100, Math.round((contextTokens / contextWindow) * 100));
+  const runBudgetTotal = usage.run_total_tokens ?? usage.budget?.total_tokens ?? 0;
+  const runBudgetLimit = usage.budget?.limits.max_tokens;
+  const runBudgetPercent = runBudgetLimit
+    ? Math.min(100, Math.round((runBudgetTotal / runBudgetLimit) * 100))
+    : null;
   const status = run?.status ?? "idle";
   const active = Boolean(run && ["queued", "running", "waiting_approval", "waiting_action"].includes(run.status));
   const current = describeCurrentAction(events, run);
@@ -172,6 +179,21 @@ export function InspectorDock(props: DockProps) {
         <span className="flex items-center gap-1.5">
           <Layers3 size={13} /> contesto {contextTokens.toLocaleString("it-IT")} · {percent}%
         </span>
+        {runBudgetPercent != null ? (
+          <span
+            className={`flex items-center gap-1.5 ${
+              runBudgetPercent >= 95
+                ? "text-danger"
+                : runBudgetPercent >= 70
+                  ? "text-warning"
+                  : "text-muted"
+            }`}
+            title="Consumo cumulativo di tutte le chiamate del run"
+          >
+            <WalletCards size={13} /> budget {runBudgetTotal.toLocaleString("it-IT")} /{" "}
+            {runBudgetLimit?.toLocaleString("it-IT")} · {runBudgetPercent}%
+          </span>
+        ) : null}
         <span className="hidden items-center gap-1.5 lg:flex">
           <Box size={13} /> sandbox {sessionSandbox.state}
         </span>

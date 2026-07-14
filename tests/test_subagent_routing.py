@@ -1,15 +1,18 @@
 import asyncio
+import json
 from typing import Any
 
 import pytest
-from langchain.agents.middleware import ModelRequest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain.agents.middleware import ModelRequest, ToolCallRequest
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from agent_harness.subagent_routing import (
     DelegationPlan,
+    RootToolRoute,
     RoutedTask,
     SubagentProfile,
     SubagentRouterMiddleware,
+    ToolProfile,
     parse_json_plan,
     render_plan,
     routing_prompt,
@@ -70,6 +73,22 @@ def profile(name: str) -> SubagentProfile:
     )
 
 
+def tool_profile(
+    name: str = "mcp__service__inspect__12345678",
+    *,
+    origin: str = "mcp:service",
+) -> ToolProfile:
+    return ToolProfile(
+        identity=f"{origin}:inspect",
+        name=name,
+        display_name="inspect",
+        origin=origin,
+        server="service" if origin.startswith("mcp:") else None,
+        description="Inspect current external service state.",
+        arguments=["scope"],
+    )
+
+
 def task(
     task_id: str,
     agent: str,
@@ -101,7 +120,11 @@ def completed(text: str, *, verdict: str | None = None) -> AIMessage:
 
 
 def test_routing_prompt_contains_dynamic_contract_not_name_rules() -> None:
-    prompt = routing_prompt("Prepara il risultato", [profile("worker-a")])
+    prompt = routing_prompt(
+        "Prepara il risultato",
+        [profile("worker-a")],
+        [tool_profile()],
+    )
 
     assert '"name": "worker-a"' in prompt
     assert '"capabilities"' in prompt
@@ -109,6 +132,140 @@ def test_routing_prompt_contains_dynamic_contract_not_name_rules() -> None:
     assert "Never infer routing" in prompt
     assert "from an agent's name" in prompt
     assert '"expected_output"' in prompt
+    assert "AVAILABLE ROOT TOOLS JSON" in prompt
+    assert '"external_data_required"' in prompt
+    assert '"mcp:service"' in prompt
+    assert "particular server or" in prompt
+    assert "workspace artifacts" in prompt
+    assert "Tool possession alone is not specialization" in prompt
+
+
+def test_validate_plan_requires_known_runtime_tool_independently_from_external_state() -> None:
+    candidate = tool_profile()
+    external = DelegationPlan(
+        delegate=False,
+        rationale="direct",
+        tasks=[],
+        root_tools=RootToolRoute(
+            required=True,
+            external_data_required=True,
+            candidates=[candidate.name, "invented"],
+            rationale="live state",
+        ),
+    )
+
+    validated = validate_plan(external, [], [candidate])
+
+    assert validated.root_tools.required is True
+    assert validated.root_tools.candidates == [candidate.name]
+
+    workspace_action = external.model_copy(
+        update={
+            "root_tools": RootToolRoute(
+                required=True,
+                external_data_required=False,
+                candidates=[candidate.name],
+                rationale="workspace action",
+            )
+        }
+    )
+    validated_workspace = validate_plan(workspace_action, [], [candidate])
+    assert validated_workspace.root_tools.required is True
+    assert validated_workspace.root_tools.external_data_required is False
+
+    informational = workspace_action.model_copy(
+        update={
+            "root_tools": RootToolRoute(
+                required=False,
+                external_data_required=False,
+                candidates=[candidate.name],
+                rationale="optional lookup",
+            )
+        }
+    )
+    validated_info = validate_plan(informational, [], [candidate])
+    assert validated_info.root_tools.required is False
+
+
+def test_single_tool_task_with_irrelevant_agent_is_redirected_to_root() -> None:
+    docker = tool_profile("docker_exec", origin="built-in")
+    presenter = SubagentProfile(
+        name="presentation-maker",
+        description="Crea presentazioni PowerPoint.",
+        capabilities=[
+            "creazione di presentazioni PowerPoint",
+            "verifica visuale e tecnica del deck",
+        ],
+        outputs=["presentazione finale verificata"],
+        tools=["docker_exec"],
+        read_only=False,
+    )
+    merge = RoutedTask(
+        id="merge-documents",
+        objective="Unisci i due PDF e salva il documento risultante.",
+        selected_agent=presenter.name,
+        alternatives=[],
+        reason="Unico agente con docker_exec",
+        depends_on=[],
+        expected_output="output/merged.pdf",
+        kind="work",
+        required_tools=["docker_exec"],
+        # Capability copiate dal profilo non devono rendere circolare il match.
+        required_capabilities=list(presenter.capabilities),
+        requires_write=True,
+        success_criteria=["PDF risultante valido"],
+    )
+    diagnostics: list[dict[str, Any]] = []
+
+    validated = validate_plan(
+        DelegationPlan(delegate=True, rationale="delegate", tasks=[merge]),
+        [presenter],
+        [docker],
+        diagnostics=diagnostics,
+    )
+
+    assert validated.delegate is False
+    assert validated.tasks == []
+    assert validated.root_tools.required is True
+    assert validated.root_tools.external_data_required is False
+    assert validated.root_tools.candidates == ["docker_exec"]
+    assert diagnostics[0]["agent"] == presenter.name
+    assert "semantic mismatch" in diagnostics[0]["reason"]
+
+
+def test_single_tool_task_keeps_objective_relevant_specialist() -> None:
+    docker = tool_profile("docker_exec", origin="built-in")
+    presenter = SubagentProfile(
+        name="presentation-maker",
+        description="Crea presentazioni PowerPoint.",
+        capabilities=["creazione di presentazioni PowerPoint"],
+        outputs=["presentazione finale verificata"],
+        tools=["docker_exec"],
+        read_only=False,
+    )
+    deck = RoutedTask(
+        id="deck",
+        objective="Crea una presentazione PowerPoint dai materiali forniti.",
+        selected_agent=presenter.name,
+        alternatives=[],
+        reason="Specialista pertinente",
+        depends_on=[],
+        expected_output="output/deck.pptx",
+        kind="work",
+        required_tools=["docker_exec"],
+        required_capabilities=list(presenter.capabilities),
+        requires_write=True,
+        success_criteria=["Presentazione valida"],
+    )
+
+    validated = validate_plan(
+        DelegationPlan(delegate=True, rationale="specialization", tasks=[deck]),
+        [presenter],
+        [docker],
+    )
+
+    assert validated.delegate is True
+    assert [item.selected_agent for item in validated.tasks] == [presenter.name]
 
 
 def test_structured_output_schema_is_strict_for_openai() -> None:
@@ -116,7 +273,15 @@ def test_structured_output_schema_is_strict_for_openai() -> None:
     task_schema = schema["$defs"]["RoutedTask"]
 
     assert schema["additionalProperties"] is False
-    assert set(schema["required"]) == {"delegate", "rationale", "tasks"}
+    assert set(schema["required"]) == {"delegate", "rationale", "tasks", "root_tools"}
+    tool_route_schema = schema["$defs"]["RootToolRoute"]
+    assert tool_route_schema["additionalProperties"] is False
+    assert set(tool_route_schema["required"]) == {
+        "required",
+        "external_data_required",
+        "candidates",
+        "rationale",
+    }
     assert task_schema["additionalProperties"] is False
     assert set(task_schema["required"]) == {
         "id",
@@ -207,9 +372,7 @@ def test_validate_plan_reassigns_only_to_capability_compatible_agent() -> None:
 
 
 def test_validate_plan_drops_task_and_descendants_when_no_agent_has_required_tool() -> None:
-    source = task("source", "worker-a").model_copy(
-        update={"required_tools": ["skill_create"]}
-    )
+    source = task("source", "worker-a").model_copy(update={"required_tools": ["skill_create"]})
     review = task("review", "worker-b", depends_on=["source"])
 
     result = validate_plan(
@@ -282,7 +445,10 @@ def test_middleware_plans_once_injects_route_and_emits_trace() -> None:
     assert [event["type"] for event in events] == [
         "subagent.routing.started",
         "subagent.routing.completed",
+        "tool.routing.completed",
     ]
+    assert events[1]["decision"] == "delegation_useful"
+    assert events[1]["rejected_matches"] == []
 
 
 def test_middleware_falls_back_without_mutating_request_when_planner_fails() -> None:
@@ -308,15 +474,53 @@ def test_middleware_falls_back_without_mutating_request_when_planner_fails() -> 
     assert events[-1]["type"] == "subagent.routing.failed"
 
 
+def test_middleware_trace_explains_irrelevant_match_redirected_to_root() -> None:
+    worker = profile("artifact-worker")
+    root_tool = tool_profile("artifact_write", origin="built-in")
+    routed = task("merge", worker.name, objective="Unisci due PDF")
+    routed = routed.model_copy(
+        update={
+            "alternatives": [],
+            "expected_output": "output/merged.pdf",
+            "required_tools": ["artifact_write"],
+            # Valore realmente esposto, ma non pertinente alla fusione PDF.
+            "required_capabilities": ["sintesi strutturata"],
+            "requires_write": True,
+        }
+    )
+    events: list[dict[str, Any]] = []
+    router = SubagentRouterMiddleware(  # type: ignore[arg-type]
+        FakeModel(DelegationPlan(delegate=True, rationale="tool match", tasks=[routed])),
+        [worker],
+        tools=[root_tool],
+        event_callback=events.append,
+    )
+    request = ModelRequest(  # type: ignore[arg-type]
+        model=FakeModel(DelegationPlan(delegate=False, rationale="unused", tasks=[])),
+        messages=[HumanMessage(content="Unisci questi PDF")],
+        tools=[],
+    )
+
+    router.wrap_model_call(request, lambda _: "ok")  # type: ignore[arg-type,return-value]
+
+    routing = next(event for event in events if event["type"] == "subagent.routing.completed")
+    tools = next(event for event in events if event["type"] == "tool.routing.completed")
+    assert routing["decision"] == "direct_root"
+    assert routing["delegate"] is False
+    assert routing["rejected_matches"][0]["agent"] == worker.name
+    assert tools["required"] is True
+    assert tools["recommended"] == ["artifact_write"]
+
+
 def test_middleware_retries_with_json_when_structured_output_is_unsupported() -> None:
     raw = AIMessage(
         content=(
             '{"delegate": true, "rationale": "match", "tasks": ['
-                '{"id": "one", "objective": "crea", "selected_agent": "worker-a", '
-                '"alternatives": [], "reason": "profilo", "depends_on": [], '
-                '"expected_output": "artefatto", "kind": "work", '
-                '"required_tools": [], "required_capabilities": [], '
-                '"requires_write": false, "success_criteria": ["artefatto presente"]}]}'
+            '{"id": "one", "objective": "crea", "selected_agent": "worker-a", '
+            '"alternatives": [], "reason": "profilo", "depends_on": [], '
+            '"expected_output": "artefatto", "kind": "work", '
+            '"required_tools": [], "required_capabilities": [], '
+            '"requires_write": false, "success_criteria": ["artefatto presente"]}]}'
         )
     )
     model = FakeModel(RuntimeError("schema unsupported"), raw)
@@ -337,19 +541,36 @@ def test_middleware_retries_with_json_when_structured_output_is_unsupported() ->
         "subagent.routing.started",
         "subagent.routing.retry",
         "subagent.routing.completed",
+        "tool.routing.completed",
     ]
     assert events[-1]["strategy"] == "json"
 
 
 def test_middleware_initializes_when_provider_has_no_structured_output() -> None:
+    candidate = tool_profile()
     raw = AIMessage(
-        content='{"delegate": false, "rationale": "direct", "tasks": []}'
+        content=json.dumps(
+            {
+                "delegate": False,
+                "rationale": "direct",
+                "tasks": [],
+                "root_tools": {
+                    "required": True,
+                    "external_data_required": True,
+                    "candidates": [candidate.name],
+                    "rationale": "live state",
+                },
+            }
+        )
     )
     model = FakeModelWithoutStructuredOutput(RuntimeError("unused"), raw)
     events: list[dict[str, Any]] = []
 
     router = SubagentRouterMiddleware(  # type: ignore[arg-type]
-        model, [profile("worker-a")], event_callback=events.append
+        model,
+        [profile("worker-a")],
+        tools=[candidate],
+        event_callback=events.append,
     )
     request = ModelRequest(  # type: ignore[arg-type]
         model=model,
@@ -363,16 +584,16 @@ def test_middleware_initializes_when_provider_has_no_structured_output() -> None
         "subagent.routing.started",
         "subagent.routing.retry",
         "subagent.routing.completed",
+        "tool.routing.completed",
     ]
     assert events[1]["reason"] == "provider has no structured output"
     assert events[-1]["strategy"] == "json"
+    assert events[-1]["recommended"] == [candidate.name]
 
 
 @pytest.mark.asyncio
 async def test_async_middleware_falls_back_when_provider_has_no_structured_output() -> None:
-    raw = AIMessage(
-        content='{"delegate": false, "rationale": "direct", "tasks": []}'
-    )
+    raw = AIMessage(content='{"delegate": false, "rationale": "direct", "tasks": []}')
     model = FakeModelWithoutStructuredOutput(RuntimeError("unused"), raw)
     events: list[dict[str, Any]] = []
     router = SubagentRouterMiddleware(  # type: ignore[arg-type]
@@ -394,6 +615,7 @@ async def test_async_middleware_falls_back_when_provider_has_no_structured_outpu
         "subagent.routing.started",
         "subagent.routing.retry",
         "subagent.routing.completed",
+        "tool.routing.completed",
     ]
     assert events[-1]["strategy"] == "json"
 
@@ -468,9 +690,7 @@ async def test_dependency_waits_and_receives_predecessor_output() -> None:
     router.wrap_model_call(request, lambda _: "ok")  # type: ignore[arg-type,return-value]
 
     pending = asyncio.create_task(
-        router.prepare_delegation(
-            "worker-b", "[routing_task_id=deliver] consegna", "deliver-call"
-        )
+        router.prepare_delegation("worker-b", "[routing_task_id=deliver] consegna", "deliver-call")
     )
     await asyncio.sleep(0)
     assert not pending.done()
@@ -666,9 +886,7 @@ async def test_incomplete_plan_blocks_root_and_can_reassign_to_planned_alternati
         model=FakeModel(plan), messages=[HumanMessage(content="Crea")], tools=[]
     )
     router.wrap_model_call(request, lambda _: "ok")  # type: ignore[arg-type,return-value]
-    first, _ = await router.prepare_delegation(
-        "worker-a", "[routing_task_id=deck] crea", "call-a"
-    )
+    first, _ = await router.prepare_delegation("worker-a", "[routing_task_id=deck] crea", "call-a")
     router.complete_delegation(first, result=AIMessage(content="Mi manca il materiale."))
 
     passed, feedback = router.completion_check("Crea", [])
@@ -688,9 +906,7 @@ async def test_incomplete_plan_blocks_root_and_can_reassign_to_planned_alternati
 
 @pytest.mark.asyncio
 async def test_required_tool_must_be_observed_before_task_can_complete() -> None:
-    planned = task("research", "worker-a").model_copy(
-        update={"required_tools": ["artifact_write"]}
-    )
+    planned = task("research", "worker-a").model_copy(update={"required_tools": ["artifact_write"]})
     plan = DelegationPlan(delegate=True, rationale="evidence", tasks=[planned])
     router = SubagentRouterMiddleware(FakeModel(plan), [profile("worker-a")])  # type: ignore[arg-type]
     request = ModelRequest(  # type: ignore[arg-type]
@@ -718,6 +934,104 @@ async def test_required_tool_must_be_observed_before_task_can_complete() -> None
     router.complete_delegation(retry, result=completed("Risultato verificato con tool."))
     assert retry is not None and retry.status == "completed"
     assert retry.used_tools == ["artifact_write"]
+
+
+def test_required_root_tool_blocks_completion_until_recommended_tool_succeeds() -> None:
+    candidate = tool_profile()
+    plan = DelegationPlan(
+        delegate=False,
+        rationale="direct external lookup",
+        tasks=[],
+        root_tools=RootToolRoute(
+            required=True,
+            external_data_required=True,
+            candidates=[candidate.name],
+            rationale="current external state required",
+        ),
+    )
+    events: list[dict[str, Any]] = []
+    router = SubagentRouterMiddleware(  # type: ignore[arg-type]
+        FakeModel(plan), [], tools=[candidate], event_callback=events.append
+    )
+    request = ModelRequest(  # type: ignore[arg-type]
+        model=FakeModel(plan), messages=[HumanMessage(content="Mostra stato corrente")], tools=[]
+    )
+    router.wrap_model_call(request, lambda _: "ok")  # type: ignore[arg-type,return-value]
+
+    passed, feedback = router.tool_completion_check("", [])
+    assert passed is False
+    assert candidate.name in feedback
+
+    tool_request = ToolCallRequest(  # type: ignore[arg-type]
+        tool_call={"id": "external-one", "name": candidate.name, "args": {}},
+        tool=None,
+        state={},
+        runtime=None,
+    )
+    router.wrap_tool_call(
+        tool_request,
+        lambda _: ToolMessage(
+            content="live result", tool_call_id="external-one", name=candidate.name
+        ),
+    )
+
+    assert router.tool_completion_check("", []) == (True, "")
+    routing = next(event for event in events if event["type"] == "tool.routing.completed")
+    assert routing["recommended"] == [candidate.name]
+    assert any(event["type"] == "tool.routing.used" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_completed_dag_exposes_evidence_and_delegated_sandbox_verification() -> None:
+    plan = DelegationPlan(delegate=True, rationale="evidence", tasks=[task("deck", "worker-a")])
+    model = FakeModel(plan)
+    router = SubagentRouterMiddleware(model, [profile("worker-a")])  # type: ignore[arg-type]
+    request = ModelRequest(  # type: ignore[arg-type]
+        model=model, messages=[HumanMessage(content="Crea")], tools=[]
+    )
+    router.wrap_model_call(request, lambda _: "ok")  # type: ignore[arg-type,return-value]
+    execution, _ = await router.prepare_delegation(
+        "worker-a", "[routing_task_id=deck] crea", "call-one"
+    )
+    router.record_tool_event(
+        {
+            "type": "subagent.tool.completed",
+            "routing_task_id": "deck",
+            "attempt": 1,
+            "tool": "docker_exec",
+            "output": "exit_code=0\nSTDOUT: 8 slides valid",
+        }
+    )
+    router.complete_delegation(
+        execution, result=completed("Presentazione creata e controllata: output/deck.pptx")
+    )
+
+    assert router.has_successful_environment_verification() is True
+    evidence = router.completion_evidence()
+    assert "output/deck.pptx" in evidence
+    assert "Sandbox verified: yes" in evidence
+
+    captured: list[ModelRequest[Any]] = []
+    router.wrap_model_call(  # type: ignore[arg-type]
+        request, lambda next_request: captured.append(next_request) or "ok"
+    )
+    system = captured[0].system_message
+    assert system is not None
+    assert "finalization mode" in system.text
+    assert "Do not recreate a plan" in system.text
+    assert "Execute this validated plan" not in system.text
+
+    tool_request = ToolCallRequest(  # type: ignore[arg-type]
+        tool_call={"id": "todo-one", "name": "write_todos", "args": {}},
+        tool=None,
+        state={},
+        runtime=None,
+    )
+    tool_result = router.wrap_tool_call(  # type: ignore[arg-type]
+        tool_request, lambda _: pytest.fail("completed DAG must not execute more tools")
+    )
+    assert isinstance(tool_result, ToolMessage)
+    assert "already complete" in str(tool_result.content)
 
 
 @pytest.mark.asyncio
@@ -768,9 +1082,7 @@ async def test_preexisting_artifact_claim_is_rejected_but_modified_hash_is_accep
     unchanged, _ = await router.prepare_delegation(
         "worker-a", "[routing_task_id=deck] crea", "deck-one"
     )
-    router.complete_delegation(
-        unchanged, result=completed("Creato /workspace/output/deck.pptx")
-    )
+    router.complete_delegation(unchanged, result=completed("Creato /workspace/output/deck.pptx"))
     assert unchanged is not None and unchanged.status == "incomplete"
     assert unchanged.output_artifacts == []
 
@@ -778,8 +1090,6 @@ async def test_preexisting_artifact_claim_is_rejected_but_modified_hash_is_accep
         "worker-a", "[routing_task_id=deck] modifica", "deck-two"
     )
     snapshot["output/deck.pptx"] = "new-hash"
-    router.complete_delegation(
-        modified, result=completed("Aggiornato /workspace/output/deck.pptx")
-    )
+    router.complete_delegation(modified, result=completed("Aggiornato /workspace/output/deck.pptx"))
     assert modified is not None and modified.status == "completed"
     assert modified.output_artifacts == ["output/deck.pptx"]

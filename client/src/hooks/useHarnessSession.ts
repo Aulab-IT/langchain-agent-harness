@@ -2,6 +2,7 @@ import { startTransition, useCallback, useEffect, useMemo, useState } from "reac
 import {
   approveRun,
   cancelRun,
+  compactContext,
   createSession,
   deleteContextFile,
   deleteSession,
@@ -244,21 +245,25 @@ export function useHarnessSession() {
   const toolItems = useMemo(() => deriveToolActivity(toolSteps), [toolSteps]);
   const skillItems = useMemo(() => deriveSkillActivity(toolSteps), [toolSteps]);
 
-  const { latestLiveUsage, latestSnapshot } = useMemo(() => {
+  const { latestLiveUsage, latestSnapshot, latestBudget } = useMemo(() => {
     let live: Record<string, unknown> | undefined;
     let snapshot: Record<string, unknown> | undefined;
-    for (let i = runEvents.length - 1; i >= 0 && (!live || !snapshot); i--) {
+    let budget: Record<string, unknown> | undefined;
+    for (let i = runEvents.length - 1; i >= 0 && (!live || !snapshot || !budget); i--) {
       const event = runEvents[i];
       if (!live && event.type === "usage.live") live = event.payload;
       if (!snapshot && event.type === "usage.snapshot") snapshot = event.payload;
+      if (!budget && ["budget.updated", "budget.warning", "budget.exceeded"].includes(event.type)) {
+        budget = event.payload;
+      }
     }
-    return { latestLiveUsage: live, latestSnapshot: snapshot };
+    return { latestLiveUsage: live, latestSnapshot: snapshot, latestBudget: budget };
   }, [runEvents]);
 
   const active = Boolean(run && !isTerminalRunStatus(run.status));
 
   const usage: Usage =
-    active && (latestSnapshot || latestLiveUsage)
+    active && (latestSnapshot || latestLiveUsage || latestBudget)
       ? {
           ...EMPTY_USAGE,
           // Input/contesto: esatto per-turno dal provider; output: stima live dallo streaming.
@@ -269,19 +274,22 @@ export function useHarnessSession() {
             latestSnapshot?.cumulative_output_tokens ?? latestSnapshot?.output_tokens ?? latestLiveUsage?.output_tokens ?? 0,
           ),
           total_tokens: Number(
-            latestSnapshot?.cumulative_input_tokens ?? latestSnapshot?.input_tokens ?? 0,
+            latestBudget?.total_tokens ?? latestSnapshot?.cumulative_input_tokens ?? latestSnapshot?.input_tokens ?? 0,
           ) + Number(
-            latestSnapshot?.cumulative_output_tokens ?? latestSnapshot?.output_tokens ?? latestLiveUsage?.output_tokens ?? 0,
+            latestBudget?.total_tokens ? 0 : latestSnapshot?.cumulative_output_tokens ?? latestSnapshot?.output_tokens ?? latestLiveUsage?.output_tokens ?? 0,
           ),
           context_input_tokens: Number(
             latestSnapshot?.context_input_tokens ?? latestSnapshot?.input_tokens ?? 0,
           ),
           cumulative_input_tokens: Number(
-            latestSnapshot?.cumulative_input_tokens ?? latestSnapshot?.input_tokens ?? 0,
+            latestBudget?.cumulative_input_tokens ?? latestSnapshot?.cumulative_input_tokens ?? latestSnapshot?.input_tokens ?? 0,
           ),
           cumulative_output_tokens: Number(
-            latestSnapshot?.cumulative_output_tokens ?? latestSnapshot?.output_tokens ?? latestLiveUsage?.output_tokens ?? 0,
+            latestBudget?.cumulative_output_tokens ?? latestSnapshot?.cumulative_output_tokens ?? latestSnapshot?.output_tokens ?? latestLiveUsage?.output_tokens ?? 0,
           ),
+          run_total_tokens: Number(latestBudget?.total_tokens ?? 0),
+          cost_usd: typeof latestBudget?.cost_usd === "string" ? latestBudget.cost_usd : undefined,
+          budget: latestBudget as Usage["budget"] | undefined,
           reasoning_tokens: Number(latestSnapshot?.reasoning_tokens ?? 0),
           output_tokens_per_second: Number(latestLiveUsage?.output_tokens_per_second ?? 0),
           context_categories:
@@ -323,6 +331,20 @@ export function useHarnessSession() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Invio fallito");
     }
+  };
+
+  const handleCompact = async (): Promise<string> => {
+    if (!session) throw new Error("Sessione non disponibile.");
+    const created = await compactContext(session.id);
+    const [detail, runValue, history] = await Promise.all([
+      getSession(session.id),
+      getRun(created.run_id),
+      loadEventHistory(session.id),
+    ]);
+    setSession(detail);
+    setRun(runValue);
+    setEvents(history);
+    return created.run_id;
   };
 
   const handleUpload = async (selected: FileList | null) => {
@@ -510,6 +532,7 @@ export function useHarnessSession() {
     setSidebarOpen,
     handleNew,
     handleSend,
+    handleCompact,
     handleUpload,
     handleComposerUpload,
     handleRemovePending,

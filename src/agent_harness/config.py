@@ -88,6 +88,23 @@ class Settings(BaseSettings):
     harness_reserved_output_tokens: int = Field(default=4_000, ge=0, le=64_000)
     harness_context_warning_ratio: float = Field(default=0.7, ge=0.1, le=1.0)
     harness_context_compaction_ratio: float = Field(default=0.8, ge=0.1, le=1.0)
+    # Governance costo P1. Questi sono limiti cumulativi dell'intero run: includono agente
+    # principale, router, grader e subagent. Le prenotazioni pre-call impediscono alle chiamate
+    # parallele di superare insieme il residuo disponibile.
+    harness_max_run_tokens: int = Field(default=500_000, ge=1_000, le=10_000_000)
+    harness_max_run_cost_usd: float = Field(default=3.0, ge=0.0, le=10_000.0)
+    harness_max_run_seconds: int = Field(default=900, ge=10, le=86_400)
+    harness_max_model_calls: int = Field(default=48, ge=1, le=1_000)
+    harness_max_subagent_calls: int = Field(default=10, ge=0, le=200)
+    # Guardrail per singola delega: un subagent bloccato non può assorbire da solo tutto il
+    # budget globale continuando a reinviare lo stesso contesto.
+    harness_max_subagent_model_calls: int = Field(default=10, ge=1, le=200)
+    harness_max_subagent_tokens: int = Field(default=200_000, ge=1_000, le=10_000_000)
+    harness_budget_warning_ratio: float = Field(default=0.7, ge=0.1, le=1.0)
+    # Qualunque ToolMessage oltre questa soglia viene salvato nel workspace e sostituito nel
+    # prompt da riferimento, checksum ed estratto. Il contenuto resta recuperabile.
+    harness_context_tool_output_tokens: int = Field(default=2_000, ge=100, le=100_000)
+    harness_subagent_result_max_chars: int = Field(default=4_000, ge=500, le=50_000)
 
     # La memoria (`memories/AGENTS.md`) entra nel prompt a ogni run: se cresce senza limite, il
     # costo del prompt cresce con lei per sempre. L'agente può scriverci; questo cap frena la
@@ -97,7 +114,7 @@ class Settings(BaseSettings):
 
     harness_max_continuations: int = Field(default=3, ge=1, le=10)
     harness_eval_max_continuations: int = Field(default=1, ge=1, le=3)
-    harness_max_tool_calls: int = Field(default=40, ge=1, le=200)
+    harness_max_tool_calls: int = Field(default=56, ge=1, le=200)
     # Limite deleghe `task`: preserva parallelismo, evita picchi costo/rate limit.
     harness_subagents_max_parallel: int = Field(default=4, ge=1, le=32)
     # Planner semantico: confronta l'obiettivo con il roster dinamico una volta per run.

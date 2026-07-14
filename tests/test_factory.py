@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from langchain_core.tools import tool
 
 import agent_harness.factory as factory
 from agent_harness.config import Settings
@@ -14,6 +15,30 @@ from agent_harness.factory import (
 )
 from agent_harness.improve import overrides_fingerprint
 from agent_harness.subagent_routing import SubagentRouterMiddleware
+
+
+@tool
+def shared_remote_tool(query: str) -> str:
+    """Reads   current remote state."""
+    return query
+
+
+def test_mcp_tools_have_stable_collision_free_identity_and_enriched_description() -> None:
+    first = factory._normalize_mcp_tool("server-one", shared_remote_tool)
+    second = factory._normalize_mcp_tool("server-two", shared_remote_tool)
+    repeated = factory._normalize_mcp_tool("server-one", shared_remote_tool)
+
+    assert first.name == repeated.name
+    assert first.name != second.name
+    assert first.name.startswith("mcp__server-one__shared_remote_tool__")
+    assert first.metadata == {
+        "tool_identity": "mcp:server-one:shared_remote_tool",
+        "tool_origin": "mcp:server-one",
+        "mcp_server": "server-one",
+        "tool_original_name": "shared_remote_tool",
+    }
+    assert "fuori dalla sandbox Docker" in first.description
+    assert "Reads current remote state." in first.description
 
 
 def test_workspace_permissions_include_directory_roots() -> None:
@@ -109,7 +134,9 @@ async def test_factory_loads_user_subagent_and_overrides_builtin(
     assert subagents["reviewer"]["tools"] == []
     assert subagents["reviewer"]["permissions"]
     router = next(
-        item for item in captured["middleware"] if isinstance(item, SubagentRouterMiddleware)  # type: ignore[union-attr]
+        item
+        for item in captured["middleware"]
+        if isinstance(item, SubagentRouterMiddleware)  # type: ignore[union-attr]
     )
     root_audit = next(
         item

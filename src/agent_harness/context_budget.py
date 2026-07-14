@@ -13,10 +13,13 @@ liste di messaggi, quindi interamente testabile offline, senza chiamare un model
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
+from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.messages import BaseMessage, ToolMessage
 
 from agent_harness.usage import token_estimate
@@ -279,6 +282,73 @@ def context_budget_from_settings(settings: Any) -> ContextBudget:
     )
 
 
+class ToolOutputOffloadMiddleware(AgentMiddleware[Any, Any, Any]):
+    """Toglie dal prompt gli output tool lunghi, senza perdere il contenuto originale.
+
+    Il file vive nel workspace della sessione. Il ``ToolMessage`` e il suo ``tool_call_id``
+    restano al loro posto, quindi il protocollo tool del provider non viene alterato.
+    """
+
+    def __init__(
+        self,
+        workspace_dir: Path,
+        *,
+        soft_limit_tokens: int = 2_000,
+        event_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
+        super().__init__()
+        self._workspace = workspace_dir.resolve()
+        self._soft_limit = max(100, int(soft_limit_tokens))
+        self._emit = event_callback
+
+    def _reduce(self, request: ModelRequest) -> ModelRequest:
+        messages = list(request.messages)
+        changed = False
+        for index, message in enumerate(messages):
+            if not isinstance(message, ToolMessage) or _is_offloaded(message):
+                continue
+            content = _content_text(message)
+            original_tokens = token_estimate(content)
+            if original_tokens <= self._soft_limit:
+                continue
+            checksum = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+            relative = Path(".context") / "tool-output" / f"{checksum}.txt"
+            destination = self._workspace / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if not destination.exists():
+                destination.write_text(content, encoding="utf-8")
+            reference = f"/workspace/{relative.as_posix()}"
+            replacement = offload_tool_output(content, reference=reference)
+            messages[index] = message.model_copy(update={"content": replacement.render()})
+            changed = True
+            if self._emit is not None:
+                self._emit(
+                    {
+                        "type": "context.tool_output.offloaded",
+                        "tool": message.name or "tool",
+                        "reference": reference,
+                        "original_tokens": original_tokens,
+                        "retained_tokens": token_estimate(replacement.render()),
+                        "tokens_reclaimed": max(
+                            0, original_tokens - token_estimate(replacement.render())
+                        ),
+                    }
+                )
+        return request.override(messages=messages) if changed else request
+
+    def wrap_model_call(
+        self, request: ModelRequest, handler: Callable[[ModelRequest], ModelResponse]
+    ) -> ModelResponse:
+        return handler(self._reduce(request))
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        return await handler(self._reduce(request))
+
+
 class LiveUsageThrottle:
     """Lascia passare al massimo un evento ``usage.live`` per finestra temporale.
 
@@ -319,6 +389,7 @@ __all__ = [
     "LiveUsageThrottle",
     "OffloadedOutput",
     "StructuredSummary",
+    "ToolOutputOffloadMiddleware",
     "context_budget_from_settings",
     "drop_reconstructible",
     "offload_tool_output",

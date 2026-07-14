@@ -46,6 +46,9 @@ from langchain.agents.middleware import (
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage
 
+from agent_harness.model_errors import invoke_with_model_retry, model_error_details
+from agent_harness.run_budget import BudgetRate, RunBudgetTracker, estimate_request_tokens
+
 Tier = Literal["low", "mid", "high"]
 Override = Literal["auto", "low", "mid", "high"]
 
@@ -173,6 +176,8 @@ def build_model_router(
     *,
     session_override: Override = "auto",
     event_callback: Callable[[dict[str, Any]], None] | None = None,
+    budget_tracker: RunBudgetTracker | None = None,
+    budget_rates: dict[Tier, BudgetRate] | None = None,
 ) -> AgentMiddleware[Any, Any, Any]:
     """Instrada sulla scala e dichiara la scelta con un evento `model.selected`."""
 
@@ -209,6 +214,14 @@ def build_model_router(
         state["call"] += 1
         call_id = f"model-{state['call']}"
         started = time.monotonic()
+        reservation = None
+        tracker = budget_tracker
+        if tracker is not None and budget_rates is not None:
+            reservation = tracker.before_model_call(
+                kind=f"root:{decision.tier}",
+                rate=budget_rates[decision.tier],
+                estimated_input_tokens=estimate_request_tokens(request),
+            )
         if event_callback is not None:
             event_callback(
                 {
@@ -219,8 +232,20 @@ def build_model_router(
                 }
             )
         try:
-            response = await handler(request.override(model=chosen.model))
+            response = await invoke_with_model_retry(
+                lambda: handler(request.override(model=chosen.model)),
+                event_callback=event_callback,
+                call_kind=f"root:{decision.tier}",
+                model=chosen.name,
+                on_retry=(
+                    (lambda _exc, _details: tracker.record_retry_estimate(reservation))
+                    if reservation is not None and tracker is not None
+                    else None
+                ),
+            )
         except Exception as exc:
+            if reservation is not None and tracker is not None:
+                tracker.cancel_model_call(reservation)
             if event_callback is not None:
                 event_callback(
                     {
@@ -229,9 +254,12 @@ def build_model_router(
                         "model": chosen.name,
                         "elapsed_ms": round((time.monotonic() - started) * 1_000),
                         "error": str(exc)[:500],
+                        "error_details": model_error_details(exc),
                     }
                 )
             raise
+        if reservation is not None and tracker is not None:
+            tracker.complete_model_call(reservation, response.result)
         if event_callback is not None:
             event_callback(
                 {

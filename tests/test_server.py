@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 import agent_harness.server as server
 from agent_harness.config import Settings
@@ -109,6 +109,90 @@ async def test_incomplete_runner_result_is_persisted_as_failed_verification(
     events = server.store.list_events(run["id"])
     assert any(event["type"] == "run.failed_verification" for event in events)
     assert not any(event["type"] == "run.completed" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_budget_exceeded_during_preflight_is_persisted_with_budget_snapshot(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = client.post("/api/sessions", json={"title": "Preflight budget"}).json()
+    run = server.store.create_run(session["id"])
+
+    async def blocked_preflight(
+        *args: object,
+        budget_tracker: object | None = None,
+        **kwargs: object,
+    ) -> None:
+        del args, kwargs
+        assert budget_tracker is not None
+        budget_tracker.exceed("cost", "Preflight fuori budget.")  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(server.provider_cfg, "validate_overrides", lambda _: [])
+    monkeypatch.setattr(server, "preflight_tier_models", blocked_preflight)
+    monkeypatch.setattr(server, "load_subagent_specs", lambda _: ([], []))
+
+    await server.run_manager._execute(run["id"], session["id"], "Rispondi OK")
+
+    saved = server.store.get_run(run["id"])
+    assert saved["status"] == "budget_exceeded"
+    assert saved["error"] == "Preflight fuori budget."
+    assert saved["usage"]["budget"]["exceeded_dimension"] == "cost"
+    assert saved["usage"]["budget"]["exceeded"] is True
+    events = server.store.list_events(run["id"])
+    assert any(event["type"] == "run.budget_exceeded" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_provider_failure_preserves_usage_error_details_and_artifacts(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = client.post("/api/sessions", json={"title": "Provider failure"}).json()
+    run = server.store.create_run(session["id"])
+
+    async def no_preflight(*args: object, **kwargs: object) -> None:
+        return None
+
+    @asynccontextmanager
+    async def fake_build_harness(*args: object, **kwargs: object) -> object:
+        yield SimpleNamespace(completion_checks=[], budget_tracker=None)
+
+    class APIError(Exception):
+        def __init__(self) -> None:
+            super().__init__("Retry your request. Request ID req_preserved123")
+            self.body = {"type": "server_error", "code": "stream_failed"}
+            self.request_id = "req_preserved123"
+
+    class FakeGoalRunner:
+        def __init__(self, harness: object, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+            self.harness = harness
+            self.last_messages = [AIMessage(content="Lavoro quasi concluso")]
+
+        async def run(self, goal: str, *, thread_id: str) -> RunResult:
+            del goal
+            output = server.store.workspace_dir(thread_id) / "output" / "report.txt"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text("verified partial result", encoding="utf-8")
+            raise APIError()
+
+    monkeypatch.setattr(server.provider_cfg, "validate_overrides", lambda _: [])
+    monkeypatch.setattr(server, "preflight_tier_models", no_preflight)
+    monkeypatch.setattr(server, "load_subagent_specs", lambda _: ([], []))
+    monkeypatch.setattr(server, "build_harness", fake_build_harness)
+    monkeypatch.setattr(server, "GoalRunner", FakeGoalRunner)
+
+    await server.run_manager._execute(run["id"], session["id"], "Crea report")
+
+    saved = server.store.get_run(run["id"])
+    assert saved["status"] == "incomplete"
+    assert saved["usage"]
+    assert "req_preserved123" in saved["error"]
+    events = server.store.list_events(run["id"])
+    model_error = next(event for event in events if event["type"] == "model.error")
+    assert model_error["payload"]["request_id"] == "req_preserved123"
+    assert model_error["payload"]["provider_error_code"] == "stream_failed"
+    partial = next(event for event in events if event["type"] == "run.partial_result")
+    assert partial["payload"]["attachments"] == ["output/report.txt"]
 
 
 def test_status_exposes_the_three_rungs_with_their_price(client: TestClient) -> None:
@@ -601,6 +685,16 @@ def test_classify_run_error_gives_actionable_messages() -> None:
     assert "fallita" in server._classify_run_error(Exception("qualcosa di strano"))
 
 
+def test_classify_transient_provider_error_keeps_request_id() -> None:
+    api_error = type("APIError", (Exception,), {})
+    message = server._classify_run_error(
+        api_error("Retry your request. Request ID req_visible123")
+    )
+
+    assert "temporaneo" in message
+    assert "req_visible123" in message
+
+
 def test_trigger_auto_approve_persisted_and_applied_to_session(client: TestClient) -> None:
     trigger = client.post(
         "/api/triggers",
@@ -860,6 +954,50 @@ def test_compact_context_requires_valid_config(client: TestClient) -> None:
     resp = client.post(f"/api/sessions/{session['id']}/context/compact")
     assert resp.status_code == 202
     assert "run_id" in resp.json()
+
+
+def test_compaction_result_uses_tool_outcome_not_model_claim() -> None:
+    result = RunResult(
+        text="Contesto compattato.",
+        iterations=1,
+        completed=True,
+        messages=[
+            HumanMessage(content="compact"),
+            ToolMessage(
+                content="Nothing to compact yet — conversation is within the token budget.",
+                tool_call_id="compact-1",
+                name="compact_conversation",
+            ),
+            AIMessage(content="Contesto compattato."),
+        ],
+    )
+
+    state = server._classify_compaction_result(result)
+
+    assert state == "no_work"
+    assert result.completed is False
+    assert result.terminal_status == "no_work"
+    assert result.text == "Contesto già compatto; nessuna riduzione necessaria."
+
+
+def test_compaction_result_accepts_actual_summary() -> None:
+    result = RunResult(
+        text="ignored",
+        iterations=1,
+        completed=False,
+        messages=[
+            HumanMessage(content="compact"),
+            ToolMessage(
+                content="Conversation compacted. Summarized 42 messages into a concise summary.",
+                tool_call_id="compact-2",
+                name="compact_conversation",
+            ),
+        ],
+    )
+
+    assert server._classify_compaction_result(result) == "completed"
+    assert result.completed is True
+    assert result.text == "Contesto compattato."
 
 
 def test_mcp_config_roundtrip_and_validation(client: TestClient) -> None:

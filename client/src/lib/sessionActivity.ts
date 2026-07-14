@@ -50,8 +50,10 @@ export type RoutingActivity = {
   roster: string[];
   rationale: string;
   strategy: string;
+  decision: string;
   error: string;
   missingAgents: string[];
+  rejectedMatches: { agent: string; reason: string }[];
   tasks: RoutingTask[];
 };
 
@@ -107,8 +109,10 @@ export function deriveSubagentRouting(events: RunEvent[]): RoutingActivity | nul
         roster: strings(payload.agents),
         rationale: "",
         strategy: "",
+        decision: "",
         error: "",
         missingAgents: [],
+        rejectedMatches: [],
         tasks: [],
       };
       continue;
@@ -133,6 +137,15 @@ export function deriveSubagentRouting(events: RunEvent[]): RoutingActivity | nul
       routing.status = payload.delegate ? "planned" : "direct";
       routing.rationale = text(payload.rationale);
       routing.strategy = text(payload.strategy);
+      routing.decision = text(payload.decision);
+      routing.rejectedMatches = Array.isArray(payload.rejected_matches)
+        ? payload.rejected_matches.flatMap((raw): { agent: string; reason: string }[] => {
+            if (!raw || typeof raw !== "object") return [];
+            const item = raw as Record<string, unknown>;
+            const agent = text(item.agent);
+            return agent ? [{ agent, reason: text(item.reason) }] : [];
+          })
+        : [];
       continue;
     }
     if (event.type.startsWith("subagent.task.")) {

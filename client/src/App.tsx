@@ -51,6 +51,7 @@ export default function App() {
     setSidebarOpen,
     handleNew,
     handleSend,
+    handleCompact,
     handleUpload,
     handleComposerUpload,
     handleRemovePending,
@@ -105,6 +106,7 @@ export default function App() {
             onUpload={handleUpload}
             onDeleteFile={handleDeleteFile}
             onStopSandbox={handleStopSandbox}
+            onCompact={handleCompact}
           />
         ) : null
       }
@@ -216,6 +218,7 @@ export default function App() {
                 onUpload={handleUpload}
                 onDeleteFile={handleDeleteFile}
                 onStopSandbox={handleStopSandbox}
+                onCompact={handleCompact}
                 onClose={inspectorSheet.closeSheet}
               />
             </>

@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from langchain.agents.middleware import ModelRequest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agent_harness.config import Settings
@@ -10,6 +15,7 @@ from agent_harness.context_budget import (
     ContextBudgetManager,
     LiveUsageThrottle,
     StructuredSummary,
+    ToolOutputOffloadMiddleware,
     context_budget_from_settings,
     drop_reconstructible,
     offload_tool_output,
@@ -112,3 +118,49 @@ def test_context_budget_from_settings_applies_window() -> None:
     budget = context_budget_from_settings(settings)
     assert budget.max_tokens == 64_000
     assert budget.warning_ratio == settings.harness_context_warning_ratio
+
+
+@pytest.mark.asyncio
+async def test_long_tool_output_is_replaced_and_saved(tmp_path: Path) -> None:
+    middleware = ToolOutputOffloadMiddleware(tmp_path, soft_limit_tokens=100)
+    original = "scientific result\n" * 500
+    message = ToolMessage(content=original, tool_call_id="call-1", name="browser_read")
+    request = ModelRequest(  # type: ignore[arg-type]
+        model=SimpleNamespace(), messages=[message], tools=[]
+    )
+    captured: ModelRequest | None = None
+
+    async def handler(next_request: ModelRequest) -> object:
+        nonlocal captured
+        captured = next_request
+        return object()
+
+    await middleware.awrap_model_call(request, handler)  # type: ignore[arg-type]
+
+    assert captured is not None
+    reduced = captured.messages[0]
+    assert isinstance(reduced, ToolMessage)
+    assert reduced.tool_call_id == "call-1"
+    assert OFFLOAD_MARKER in str(reduced.content)
+    saved = list((tmp_path / ".context" / "tool-output").glob("*.txt"))
+    assert len(saved) == 1
+    assert saved[0].read_text(encoding="utf-8") == original
+
+
+@pytest.mark.asyncio
+async def test_short_or_already_offloaded_tool_output_is_untouched(tmp_path: Path) -> None:
+    middleware = ToolOutputOffloadMiddleware(tmp_path, soft_limit_tokens=100)
+    messages = [
+        _tool("short", "one"),
+        _tool(f"{OFFLOAD_MARKER} ref=/workspace/already", "two"),
+    ]
+    request = ModelRequest(  # type: ignore[arg-type]
+        model=SimpleNamespace(), messages=messages, tools=[]
+    )
+
+    async def handler(next_request: ModelRequest) -> object:
+        assert next_request is request
+        return object()
+
+    await middleware.awrap_model_call(request, handler)  # type: ignore[arg-type]
+    assert not (tmp_path / ".context").exists()

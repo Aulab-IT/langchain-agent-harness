@@ -74,27 +74,47 @@ class RuntimeField:
 # vincoli di `Settings`, perché `model_copy` NON rivalida: la validazione la fa `validate_runtime`.
 RUNTIME_FIELDS: dict[str, RuntimeField] = {
     "rubric_threshold": RuntimeField(
-        "harness_rubric_threshold", 0.0, 1.0, False, "Soglia obiettivo", "sotto → l'agente riprova"
+        "harness_rubric_threshold",
+        0.0,
+        1.0,
+        False,
+        "Soglia obiettivo",
+        "punteggio minimo per completare",
     ),
     "escalation_threshold": RuntimeField(
-        "harness_escalation_threshold", 0.0, 1.0, False, "Soglia escalation", "sotto → sale modello"
+        "harness_escalation_threshold",
+        0.0,
+        1.0,
+        False,
+        "Soglia escalation",
+        "sotto questo punteggio sale modello",
     ),
     "max_continuations": RuntimeField(
-        "harness_max_continuations", 1, 10, True, "Max continuazioni", "iterazioni per obiettivo"
+        "harness_max_continuations",
+        1,
+        10,
+        True,
+        "Continuazioni max",
+        "tentativi di completamento e verifica",
     ),
     "max_tool_calls": RuntimeField(
-        "harness_max_tool_calls", 1, 200, True, "Max tool call", "budget chiamate per run"
+        "harness_max_tool_calls", 1, 200, True, "Tool call max", "chiamate agente principale"
     ),
     "tool_output_limit": RuntimeField(
         "harness_tool_output_limit",
         1_000,
         100_000,
         True,
-        "Limite output tool",
-        "char prima offload",
+        "Output tool max",
+        "caratteri restituiti direttamente",
     ),
     "memory_max_chars": RuntimeField(
-        "harness_memory_max_chars", 1_000, 200_000, True, "Cap memoria", "char max di AGENTS.md"
+        "harness_memory_max_chars",
+        1_000,
+        200_000,
+        True,
+        "Memoria persistente max",
+        "caratteri massimi di AGENTS.md",
     ),
     "context_window": RuntimeField(
         "harness_context_window",
@@ -102,10 +122,15 @@ RUNTIME_FIELDS: dict[str, RuntimeField] = {
         2_000_000,
         True,
         "Finestra contesto",
-        "token di riferimento",
+        "token del singolo prompt, non del run",
     ),
     "context_warning_ratio": RuntimeField(
-        "harness_context_warning_ratio", 0.1, 1.0, False, "Warning contesto", "frazione finestra"
+        "harness_context_warning_ratio",
+        0.1,
+        1.0,
+        False,
+        "Warning contesto",
+        "quota finestra per avviso",
     ),
     "context_compaction_ratio": RuntimeField(
         "harness_context_compaction_ratio",
@@ -113,7 +138,74 @@ RUNTIME_FIELDS: dict[str, RuntimeField] = {
         1.0,
         False,
         "Compaction contesto",
-        "frazione finestra",
+        "quota finestra per riassunto automatico",
+    ),
+    "max_run_tokens": RuntimeField(
+        "harness_max_run_tokens",
+        1_000,
+        10_000_000,
+        True,
+        "Token max run",
+        "root + router + grader + subagent",
+    ),
+    "max_run_cost_usd": RuntimeField(
+        "harness_max_run_cost_usd",
+        0.0,
+        10_000.0,
+        False,
+        "Costo max run",
+        "stop preventivo in dollari",
+    ),
+    "max_run_seconds": RuntimeField(
+        "harness_max_run_seconds",
+        10,
+        86_400,
+        True,
+        "Durata max run",
+        "include modelli, tool e attese",
+    ),
+    "max_model_calls": RuntimeField(
+        "harness_max_model_calls",
+        1,
+        1_000,
+        True,
+        "Chiamate modello max",
+        "conteggio cumulativo di tutti gli agenti",
+    ),
+    "max_subagent_calls": RuntimeField(
+        "harness_max_subagent_calls", 0, 200, True, "Deleghe max", "subagent anche paralleli"
+    ),
+    "max_subagent_model_calls": RuntimeField(
+        "harness_max_subagent_model_calls",
+        1,
+        200,
+        True,
+        "Call modello per subagent",
+        "stop locale per una delega bloccata",
+    ),
+    "max_subagent_tokens": RuntimeField(
+        "harness_max_subagent_tokens",
+        1_000,
+        10_000_000,
+        True,
+        "Token per subagent",
+        "tetto cumulativo per singola delega",
+    ),
+    "budget_warning_ratio": RuntimeField(
+        "harness_budget_warning_ratio",
+        0.1,
+        1.0,
+        False,
+        "Warning budget",
+        "quota del primo limite raggiunto",
+    ),
+    "context_tool_output_tokens": RuntimeField(
+        "harness_context_tool_output_tokens",
+        100,
+        100_000,
+        True,
+        "Offload output nel contesto",
+        "token prima di sostituire con estratto e link",
     ),
 }
 

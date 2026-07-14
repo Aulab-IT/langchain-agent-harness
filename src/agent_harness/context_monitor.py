@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from langchain.agents.middleware import (
     AgentMiddleware,
@@ -130,12 +130,14 @@ class ContextMonitorMiddleware(AgentMiddleware[Any, Any, Any]):
         event_callback: EventSink | None = None,
         warning_ratio: float = 0.7,
         compaction_ratio: float = 0.8,
+        compaction_mode: Literal["automatic", "manual"] = "automatic",
     ) -> None:
         super().__init__()
         self._window = max(1, int(window_tokens))
         self._emit = event_callback
         self._warning_ratio = warning_ratio
         self._compaction_ratio = compaction_ratio
+        self._compaction_mode = compaction_mode
         self._peak_tokens = 0
         self._last_pressure: str | None = None
 
@@ -158,6 +160,7 @@ class ContextMonitorMiddleware(AgentMiddleware[Any, Any, Any]):
                     "tokens_after": snapshot.total_tokens,
                     "tokens_reclaimed": self._peak_tokens - snapshot.total_tokens,
                     "window_tokens": self._window,
+                    "mode": self._compaction_mode,
                 }
             )
             self._peak_tokens = snapshot.total_tokens

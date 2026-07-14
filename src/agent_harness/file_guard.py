@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import base64
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from langchain.agents.middleware import (
     AgentMiddleware,
@@ -87,7 +87,7 @@ class FileBlockGuardMiddleware(AgentMiddleware[Any, Any, Any]):
     ) -> ModelResponse:
         sanitized, cleaned = sanitize_messages(list(request.messages))
         if cleaned:
-            request = request.override(messages=sanitized)
+            request = request.override(messages=cast(Any, sanitized))
         return handler(request)
 
     async def awrap_model_call(
@@ -97,7 +97,7 @@ class FileBlockGuardMiddleware(AgentMiddleware[Any, Any, Any]):
     ) -> ModelResponse:
         sanitized, cleaned = sanitize_messages(list(request.messages))
         if cleaned:
-            request = request.override(messages=sanitized)
+            request = request.override(messages=cast(Any, sanitized))
         return await handler(request)
 
 
