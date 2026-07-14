@@ -64,6 +64,82 @@ def test_human_rejection_overrides_model_success() -> None:
     ) == ("blocked_needs_human", False, "Approvazione rifiutata.")
 
 
+@pytest.mark.parametrize(
+    ("emit_verification", "expected_status"),
+    [(True, "completed"), (False, "failed_verification")],
+)
+@pytest.mark.asyncio
+async def test_evidence_contract_gates_completed_runs(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    emit_verification: bool,
+    expected_status: str,
+) -> None:
+    session = client.post("/api/sessions", json={"title": "Evidence gate"}).json()
+    run = server.store.create_run(session["id"])
+
+    async def no_preflight(*args: object, **kwargs: object) -> None:
+        return None
+
+    @asynccontextmanager
+    async def fake_build_harness(*args: object, **kwargs: object) -> object:
+        if emit_verification:
+            callback = kwargs["event_callback"]
+            callback(
+                {
+                    "type": "tool.started",
+                    "tool": "docker_exec",
+                    "tool_call_id": "verify-1",
+                    "args": '{"command":"test -f report.txt"}',
+                }
+            )
+            callback(
+                {
+                    "type": "tool.completed",
+                    "tool": "docker_exec",
+                    "tool_call_id": "verify-1",
+                    "output": "exit_code=0 STDOUT: verified",
+                }
+            )
+        yield SimpleNamespace(completion_checks=[])
+
+    class FakeGoalRunner:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.last_messages: list[object] = []
+
+        async def run(self, goal: str, *, thread_id: str) -> RunResult:
+            del goal, thread_id
+            messages = [AIMessage(content="Report creato e verificato")]
+            self.last_messages = messages
+            return RunResult(
+                text="Report creato e verificato",
+                iterations=1,
+                completed=True,
+                messages=messages,
+            )
+
+    monkeypatch.setattr(server.provider_cfg, "validate_overrides", lambda _: [])
+    monkeypatch.setattr(server, "preflight_tier_models", no_preflight)
+    monkeypatch.setattr(server, "load_subagent_specs", lambda _: ([], []))
+    monkeypatch.setattr(server, "build_harness", fake_build_harness)
+    monkeypatch.setattr(server, "GoalRunner", FakeGoalRunner)
+
+    await server.run_manager._execute(run["id"], session["id"], "Crea un report")
+
+    saved = server.store.get_run(run["id"])
+    assert saved["status"] == expected_status
+    response = client.get(f"/api/runs/{run['id']}/evidence")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ready"
+    assert payload["manifest"]["contract"]["passed"] is emit_verification
+    assert payload["integrity"]["valid"] is True
+    assert any(
+        event["type"] == "evidence.manifest.created"
+        for event in server.store.list_events(run["id"])
+    )
+
+
 @pytest.mark.asyncio
 async def test_incomplete_runner_result_is_persisted_as_failed_verification(
     client: TestClient, monkeypatch: pytest.MonkeyPatch

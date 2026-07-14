@@ -15,6 +15,7 @@ import type {
   Rubric,
   RuntimeField,
   Run,
+  RunEvidence,
   RunEvent,
   PromotionResult,
   ProviderModels,
@@ -208,6 +209,10 @@ export function sendMessage(
 
 export function getRun(runId: string): Promise<Run> {
   return request(`/api/runs/${runId}`);
+}
+
+export function getRunEvidence(runId: string): Promise<RunEvidence> {
+  return request(`/api/runs/${runId}/evidence`);
 }
 
 export function getSessionEventPage(

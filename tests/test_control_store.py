@@ -30,6 +30,28 @@ def test_session_persists_messages_runs_and_events(tmp_path: Path) -> None:
     store.close()
 
 
+def test_run_evidence_is_immutable_and_deleted_with_run(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    session = store.create_session()
+    run = store.create_run(session["id"])
+    manifest = {
+        "run_id": run["id"],
+        "created_at": "2026-07-14T12:00:00+00:00",
+        "manifest_sha256": "abc",
+    }
+
+    store.save_run_evidence(run["id"], manifest)
+
+    assert store.get_run_evidence(run["id"]) == manifest
+    assert store.save_run_evidence(run["id"], manifest) == manifest
+    with pytest.raises(ValueError, match="immutabile"):
+        store.save_run_evidence(run["id"], {**manifest, "manifest_sha256": "changed"})
+
+    store.delete_session(session["id"])
+    assert store.get_run_evidence(run["id"]) is None
+    store.close()
+
+
 def test_event_history_is_paginated_and_excludes_streaming_deltas(tmp_path: Path) -> None:
     store = make_store(tmp_path)
     session = store.create_session()

@@ -28,6 +28,7 @@ export type View =
 
 export type InspectorTab =
   | "trace"
+  | "evidence"
   | "files"
   | "capabilities"
   | "memory"

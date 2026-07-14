@@ -11,6 +11,7 @@ import type {
   Usage,
 } from "../../types";
 import { ContextPanel } from "../inspector/ContextPanel";
+import { EvidencePanel } from "../inspector/EvidencePanel";
 import { FilesPanel } from "../inspector/FilesPanel";
 import { MemoryPanel } from "../inspector/MemoryPanel";
 import { RunTracePanel } from "../inspector/RunTracePanel";
@@ -19,6 +20,7 @@ import { SessionActivityPanel } from "../inspector/SessionActivityPanel";
 
 const TABS: Array<{ id: InspectorTab; label: string }> = [
   { id: "trace", label: "Trace" },
+  { id: "evidence", label: "Evidenze" },
   { id: "files", label: "File" },
   { id: "capabilities", label: "Attività" },
   { id: "memory", label: "Memoria" },
@@ -124,6 +126,7 @@ export function InspectorRail({
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         {tab === "trace" ? <RunTracePanel run={run} events={events} /> : null}
+        {tab === "evidence" ? <EvidencePanel run={run} /> : null}
         {tab === "files" ? (
           <FilesPanel
             sessionId={sessionId}

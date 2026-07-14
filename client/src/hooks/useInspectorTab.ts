@@ -8,6 +8,7 @@ export function useInspectorTab(defaultTab: InspectorTab = "files") {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (
       stored === "trace" ||
+      stored === "evidence" ||
       stored === "files" ||
       stored === "capabilities" ||
       stored === "memory" ||

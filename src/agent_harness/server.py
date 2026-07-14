@@ -38,6 +38,11 @@ from agent_harness.evaluation import (
     load_proposal_evaluation,
     save_proposal_evaluation,
 )
+from agent_harness.evidence import (
+    EvidenceManifest,
+    build_evidence_manifest,
+    verify_evidence_manifest,
+)
 from agent_harness.factory import (
     build_harness,
     build_judge_model,
@@ -81,7 +86,12 @@ from agent_harness.run_budget import (
     RunBudgetLimits,
     RunBudgetTracker,
 )
-from agent_harness.runner import GoalRunner, RunResult
+from agent_harness.runner import (
+    GoalRunner,
+    RunResult,
+    final_text,
+    requires_environment_verification,
+)
 from agent_harness.sandbox import (
     SandboxIdleReaper,
     cleanup_orphan_sandboxes,
@@ -985,6 +995,41 @@ class RunManager:
                     changed.append(name)
                     self._emit(run_id, session_id, "file.updated", metadata)
             return changed
+
+        def build_run_evidence(
+            terminal_status: str,
+            answer: str,
+            artifact_paths: list[str],
+        ) -> EvidenceManifest:
+            return build_evidence_manifest(
+                run_id=run_id,
+                session_id=session_id,
+                goal=content,
+                answer=answer,
+                terminal_status=terminal_status,
+                workspace=store.workspace_dir(session_id),
+                artifact_paths=artifact_paths,
+                events=store.list_events(run_id),
+                requires_runtime_verification=(
+                    not maintenance and requires_environment_verification(content)
+                ),
+            )
+
+        def persist_run_evidence(manifest: EvidenceManifest) -> None:
+            store.save_run_evidence(run_id, manifest.model_dump(mode="json"))
+            self._emit(
+                run_id,
+                session_id,
+                "evidence.manifest.created",
+                {
+                    "schema_version": manifest.schema_version,
+                    "manifest_sha256": manifest.manifest_sha256,
+                    "contract_passed": manifest.contract.passed,
+                    "artifacts": len(manifest.artifacts),
+                    "commands": len(manifest.commands),
+                    "verifiers": len(manifest.verifiers),
+                },
+            )
         # Il modello che ha davvero risposto. Resta None finché il router non lo dichiara:
         # meglio nessun badge che un badge sbagliato.
         selected_model: str | None = None
@@ -1346,6 +1391,20 @@ class RunManager:
                 terminal_hint,
                 terminal_hint_reason,
             )
+            evidence_manifest = build_run_evidence(final_status, clean_text, changed_files)
+            if effectively_completed and not evidence_manifest.contract.passed:
+                failed_requirements = [
+                    item.label
+                    for item in evidence_manifest.contract.requirements
+                    if item.required and not item.passed
+                ]
+                final_status = "failed_verification"
+                effectively_completed = False
+                failure_reason = "Evidenze obbligatorie mancanti: " + ", ".join(
+                    failed_requirements
+                )
+                evidence_manifest = build_run_evidence(final_status, clean_text, changed_files)
+            persist_run_evidence(evidence_manifest)
             store.update_run(
                 run_id,
                 status=final_status,
@@ -1405,6 +1464,14 @@ class RunManager:
                     cancelled_usage,
                     getattr(getattr(goal_runner, "harness", None), "budget_tracker", None),
                 )
+            cancelled_files = changed_session_files()
+            persist_run_evidence(
+                build_run_evidence(
+                    "cancelled",
+                    final_text(goal_runner.last_messages) if goal_runner is not None else "",
+                    cancelled_files,
+                )
+            )
             store.update_run(run_id, status="cancelled", usage=cancelled_usage)
             self._emit(run_id, session_id, "run.cancelled", {"status": "cancelled"})
             raise
@@ -1433,6 +1500,9 @@ class RunManager:
                 run_id=run_id,
                 attachments=attachments,
                 model=selected_model,
+            )
+            persist_run_evidence(
+                build_run_evidence("budget_exceeded", partial_text, changed_files)
             )
             store.update_run(
                 run_id,
@@ -1493,6 +1563,9 @@ class RunManager:
                 run_id=run_id,
                 attachments=attachments,
                 model=selected_model,
+            )
+            persist_run_evidence(
+                build_run_evidence("blocked_needs_human", partial_text, changed_files)
             )
             store.update_run(
                 run_id,
@@ -1558,6 +1631,7 @@ class RunManager:
                 attachments=attachments,
                 model=selected_model,
             )
+            persist_run_evidence(build_run_evidence(final_status, partial_text, changed_files))
             store.update_run(run_id, status=final_status, error=message, usage=usage)
             self._emit(run_id, session_id, "usage.updated", usage)
             self._emit(
@@ -2321,6 +2395,24 @@ async def session_event_history(
 @app.get("/api/runs/{run_id}")
 async def get_run(run_id: str) -> dict[str, Any]:
     return _require_run(run_id)
+
+
+@app.get("/api/runs/{run_id}/evidence")
+async def get_run_evidence(run_id: str) -> dict[str, Any]:
+    run = _require_run(run_id)
+    saved = store.get_run_evidence(run_id)
+    if saved is None:
+        return {"status": "pending", "manifest": None, "integrity": None}
+    manifest = EvidenceManifest.model_validate(saved)
+    integrity = verify_evidence_manifest(
+        manifest,
+        store.workspace_dir(str(run["session_id"])),
+    )
+    return {
+        "status": "ready",
+        "manifest": manifest.model_dump(mode="json"),
+        "integrity": integrity.model_dump(mode="json"),
+    }
 
 
 @app.get("/api/runs/{run_id}/event-history")

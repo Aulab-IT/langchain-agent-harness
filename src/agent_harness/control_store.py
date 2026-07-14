@@ -113,6 +113,12 @@ class ControlStore:
                     payload_json TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS run_evidence (
+                    run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+                    manifest_json TEXT NOT NULL,
+                    manifest_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS triggers (
                     id TEXT PRIMARY KEY,
                     kind TEXT NOT NULL CHECK(kind IN ('cron', 'webhook')),
@@ -525,6 +531,39 @@ class ControlStore:
                     run_id,
                 ),
             )
+
+    def save_run_evidence(self, run_id: str, manifest: dict[str, Any]) -> dict[str, Any]:
+        """Congela il manifest del run; una seconda scrittura diversa è rifiutata."""
+        encoded = json.dumps(manifest, ensure_ascii=False, sort_keys=True)
+        digest = str(manifest.get("manifest_sha256", ""))
+        created_at = str(manifest.get("created_at", utc_now()))
+        with self._lock, self._connection:
+            existing = self._connection.execute(
+                "SELECT manifest_json FROM run_evidence WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if existing is not None:
+                saved: dict[str, Any] = json.loads(existing["manifest_json"])
+                if saved != manifest:
+                    raise ValueError(f"Il manifest di evidenza del run {run_id} è immutabile.")
+                return saved
+            self._connection.execute(
+                """
+                INSERT INTO run_evidence(run_id, manifest_json, manifest_sha256, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (run_id, encoded, digest, created_at),
+            )
+        return manifest
+
+    def get_run_evidence(self, run_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT manifest_json FROM run_evidence WHERE run_id = ?", (run_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        result: dict[str, Any] = json.loads(row["manifest_json"])
+        return result
 
     def cost_summary(self, *, recent: int = 20) -> dict[str, Any]:
         """Costo totale, per sessione e dei run recenti, dal campo ``cost_usd`` nell'usage.

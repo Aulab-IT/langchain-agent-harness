@@ -200,6 +200,60 @@ export type Run = {
   usage: Usage;
 };
 
+export type EvidenceRequirement = {
+  id: string;
+  label: string;
+  required: boolean;
+  passed: boolean;
+  detail: string;
+};
+
+export type EvidenceManifest = {
+  schema_version: number;
+  run_id: string;
+  session_id: string;
+  created_at: string;
+  terminal_status: string;
+  input_sha256: string;
+  output_sha256: string;
+  environment: Record<string, string>;
+  contract: {
+    task_kind: string;
+    passed: boolean;
+    requirements: EvidenceRequirement[];
+  };
+  artifacts: Array<{ path: string; sha256: string; size: number }>;
+  commands: Array<{
+    tool: string;
+    tool_call_id: string;
+    arguments: string;
+    arguments_sha256: string;
+    result: string;
+    output_sha256: string;
+    exit_code: number | null;
+    elapsed_ms: number | null;
+    passed: boolean;
+  }>;
+  verifiers: Array<{
+    kind: string;
+    passed: boolean;
+    score: number | null;
+    event_id: number | null;
+    summary: string;
+  }>;
+  manifest_sha256: string;
+};
+
+export type RunEvidence = {
+  status: "pending" | "ready";
+  manifest: EvidenceManifest | null;
+  integrity: {
+    valid: boolean;
+    checked_at: string;
+    checks: Array<{ id: string; passed: boolean; detail: string }>;
+  } | null;
+};
+
 export type SessionSummary = {
   id: string;
   title: string;
