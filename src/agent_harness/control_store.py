@@ -119,6 +119,23 @@ class ControlStore:
                     manifest_sha256 TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS run_evidence_checks (
+                    run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+                    check_json TEXT NOT NULL,
+                    manifest_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS delivery_gate_decisions (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+                    manifest_sha256 TEXT NOT NULL,
+                    decision TEXT NOT NULL CHECK(decision IN ('approved', 'rejected')),
+                    note TEXT NOT NULL DEFAULT '',
+                    decided_by TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_delivery_gate_run
+                    ON delivery_gate_decisions(run_id, created_at);
                 CREATE TABLE IF NOT EXISTS triggers (
                     id TEXT PRIMARY KEY,
                     kind TEXT NOT NULL CHECK(kind IN ('cron', 'webhook')),
@@ -565,6 +582,97 @@ class ControlStore:
         result: dict[str, Any] = json.loads(row["manifest_json"])
         return result
 
+    def save_run_evidence_check(self, run_id: str, check: dict[str, Any]) -> dict[str, Any]:
+        """Salva una sola attestazione del checker, legata all'hash del manifest."""
+        encoded = json.dumps(check, ensure_ascii=False, sort_keys=True)
+        digest = str(check.get("manifest_sha256", ""))
+        created_at = str(check.get("checked_at", utc_now()))
+        with self._lock, self._connection:
+            existing = self._connection.execute(
+                "SELECT check_json FROM run_evidence_checks WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if existing is not None:
+                saved: dict[str, Any] = json.loads(existing["check_json"])
+                if saved != check:
+                    raise ValueError(f"L'esito checker del run {run_id} è immutabile.")
+                return saved
+            self._connection.execute(
+                """
+                INSERT INTO run_evidence_checks(
+                    run_id, check_json, manifest_sha256, created_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (run_id, encoded, digest, created_at),
+            )
+        return check
+
+    def get_run_evidence_check(self, run_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT check_json FROM run_evidence_checks WHERE run_id = ?", (run_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        result: dict[str, Any] = json.loads(row["check_json"])
+        return result
+
+    def record_delivery_gate(
+        self,
+        run_id: str,
+        *,
+        manifest_sha256: str,
+        decision: str,
+        note: str,
+        decided_by: str,
+    ) -> dict[str, Any]:
+        if decision not in {"approved", "rejected"}:
+            raise ValueError("Decisione delivery non valida.")
+        decision_id = str(uuid.uuid4())
+        created_at = utc_now()
+        with self._lock, self._connection:
+            count_row = self._connection.execute(
+                "SELECT COUNT(*) AS count FROM delivery_gate_decisions WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            if int(count_row["count"]) >= 100:
+                raise ValueError("Limite decisioni delivery raggiunto per questo run.")
+            self._connection.execute(
+                """
+                INSERT INTO delivery_gate_decisions(
+                    id, run_id, manifest_sha256, decision, note, decided_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    decision_id,
+                    run_id,
+                    manifest_sha256,
+                    decision,
+                    note[:500],
+                    decided_by[:120],
+                    created_at,
+                ),
+            )
+        return {
+            "id": decision_id,
+            "run_id": run_id,
+            "manifest_sha256": manifest_sha256,
+            "decision": decision,
+            "note": note[:500],
+            "decided_by": decided_by[:120],
+            "created_at": created_at,
+        }
+
+    def latest_delivery_gate(self, run_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT * FROM delivery_gate_decisions
+                WHERE run_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1
+                """,
+                (run_id,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
     def cost_summary(self, *, recent: int = 20) -> dict[str, Any]:
         """Costo totale, per sessione e dei run recenti, dal campo ``cost_usd`` nell'usage.
 
@@ -973,6 +1081,9 @@ class ControlStore:
 
     def workspace_dir(self, session_id: str) -> Path:
         return self.session_root(session_id) / "workspace"
+
+    def evidence_bundle_dir(self, session_id: str, run_id: str) -> Path:
+        return self.session_root(session_id) / "evidence" / run_id
 
     def prepare_session_root(self, session_id: str) -> Path:
         root = self.session_root(session_id)

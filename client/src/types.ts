@@ -217,6 +217,22 @@ export type EvidenceManifest = {
   input_sha256: string;
   output_sha256: string;
   environment: Record<string, string>;
+  provenance: {
+    repository: boolean;
+    branch: string;
+    commit: string;
+    dirty: boolean;
+    worktree_sha256: string;
+    ci_provider: string;
+    ci_status: string;
+    ci_run_id: string;
+    preview_url: string;
+  };
+  delivery: {
+    relevant: boolean;
+    requires_human_gate: boolean;
+    rollback_plan: string;
+  };
   contract: {
     task_kind: string;
     passed: boolean;
@@ -250,6 +266,28 @@ export type RunEvidence = {
   integrity: {
     valid: boolean;
     checked_at: string;
+    checks: Array<{ id: string; passed: boolean; detail: string }>;
+  } | null;
+  checker: {
+    checker: string;
+    manifest_sha256: string;
+    checked_at: string;
+    read_only: boolean;
+    passed: boolean;
+    checks: Array<{ id: string; passed: boolean; detail: string }>;
+  } | null;
+  delivery_gate: {
+    id: string;
+    run_id: string;
+    manifest_sha256: string;
+    decision: "approved" | "rejected";
+    note: string;
+    decided_by: string;
+    created_at: string;
+  } | null;
+  delivery: {
+    relevant: boolean;
+    ready: boolean;
     checks: Array<{ id: string; passed: boolean; detail: string }>;
   } | null;
 };

@@ -215,6 +215,17 @@ export function getRunEvidence(runId: string): Promise<RunEvidence> {
   return request(`/api/runs/${runId}/evidence`);
 }
 
+export function decideDeliveryGate(
+  runId: string,
+  decision: "approved" | "rejected",
+  note = "",
+): Promise<Pick<RunEvidence, "delivery_gate" | "delivery">> {
+  return request(
+    `/api/runs/${runId}/delivery-gate`,
+    jsonOptions("POST", { decision, note }),
+  );
+}
+
 export function getSessionEventPage(
   sessionId: string,
   before?: number,

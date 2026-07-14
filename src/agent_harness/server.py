@@ -39,8 +39,12 @@ from agent_harness.evaluation import (
     save_proposal_evaluation,
 )
 from agent_harness.evidence import (
+    EvidenceCheckerResult,
     EvidenceManifest,
+    assess_delivery_readiness,
     build_evidence_manifest,
+    create_evidence_bundle,
+    run_independent_checker,
     verify_evidence_manifest,
 )
 from agent_harness.factory import (
@@ -269,6 +273,11 @@ class MemoryUpdate(BaseModel):
 class ActionResponse(BaseModel):
     response: Annotated[str, Field(default="", max_length=8_000)] = ""
     cancel: bool = False
+
+
+class DeliveryGateDecision(BaseModel):
+    decision: Literal["approved", "rejected"]
+    note: Annotated[str, Field(default="", max_length=500)] = ""
 
 
 class MessageCreate(BaseModel):
@@ -1013,10 +1022,18 @@ class RunManager:
                 requires_runtime_verification=(
                     not maintenance and requires_environment_verification(content)
                 ),
+                project_root=settings.project_root,
             )
 
-        def persist_run_evidence(manifest: EvidenceManifest) -> None:
+        def persist_run_evidence(manifest: EvidenceManifest) -> EvidenceCheckerResult:
+            bundle = create_evidence_bundle(
+                manifest,
+                store.workspace_dir(session_id),
+                store.evidence_bundle_dir(session_id, run_id),
+            )
+            checker = run_independent_checker(bundle)
             store.save_run_evidence(run_id, manifest.model_dump(mode="json"))
+            store.save_run_evidence_check(run_id, checker.model_dump(mode="json"))
             self._emit(
                 run_id,
                 session_id,
@@ -1030,6 +1047,19 @@ class RunManager:
                     "verifiers": len(manifest.verifiers),
                 },
             )
+            self._emit(
+                run_id,
+                session_id,
+                "evidence.checker.completed",
+                {
+                    "checker": checker.checker,
+                    "manifest_sha256": checker.manifest_sha256,
+                    "passed": checker.passed,
+                    "read_only": checker.read_only,
+                    "checks": len(checker.checks),
+                },
+            )
+            return checker
         # Il modello che ha davvero risposto. Resta None finché il router non lo dichiara:
         # meglio nessun badge che un badge sbagliato.
         selected_model: str | None = None
@@ -2402,16 +2432,94 @@ async def get_run_evidence(run_id: str) -> dict[str, Any]:
     run = _require_run(run_id)
     saved = store.get_run_evidence(run_id)
     if saved is None:
-        return {"status": "pending", "manifest": None, "integrity": None}
+        return {
+            "status": "pending",
+            "manifest": None,
+            "integrity": None,
+            "checker": None,
+            "delivery_gate": None,
+            "delivery": None,
+        }
     manifest = EvidenceManifest.model_validate(saved)
     integrity = verify_evidence_manifest(
         manifest,
         store.workspace_dir(str(run["session_id"])),
     )
+    checker_payload = store.get_run_evidence_check(run_id)
+    checker = (
+        EvidenceCheckerResult.model_validate(checker_payload)
+        if checker_payload is not None
+        else None
+    )
+    gate = store.latest_delivery_gate(run_id)
+    delivery = assess_delivery_readiness(manifest, integrity, checker, gate)
     return {
         "status": "ready",
         "manifest": manifest.model_dump(mode="json"),
         "integrity": integrity.model_dump(mode="json"),
+        "checker": checker.model_dump(mode="json") if checker is not None else None,
+        "delivery_gate": gate,
+        "delivery": delivery.model_dump(mode="json"),
+    }
+
+
+@app.post("/api/runs/{run_id}/delivery-gate")
+async def decide_delivery_gate(
+    run_id: str,
+    payload: DeliveryGateDecision,
+) -> dict[str, Any]:
+    run = _require_run(run_id)
+    saved = store.get_run_evidence(run_id)
+    if saved is None:
+        raise HTTPException(status_code=409, detail="Manifest evidenze non ancora disponibile.")
+    manifest = EvidenceManifest.model_validate(saved)
+    if not manifest.delivery.requires_human_gate:
+        raise HTTPException(status_code=409, detail="Questo run non richiede un gate di delivery.")
+    integrity = verify_evidence_manifest(
+        manifest,
+        store.workspace_dir(str(run["session_id"])),
+    )
+    checker_payload = store.get_run_evidence_check(run_id)
+    checker = (
+        EvidenceCheckerResult.model_validate(checker_payload)
+        if checker_payload is not None
+        else None
+    )
+    if payload.decision == "approved":
+        if run["status"] != "completed":
+            raise HTTPException(
+                status_code=409,
+                detail="Solo un run completato può essere approvato.",
+            )
+        if not integrity.valid or checker is None or not checker.passed:
+            raise HTTPException(
+                status_code=409,
+                detail="Integrità e checker indipendente devono essere validi.",
+            )
+    try:
+        gate = store.record_delivery_gate(
+            run_id,
+            manifest_sha256=manifest.manifest_sha256,
+            decision=payload.decision,
+            note=payload.note,
+            decided_by="local-user",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    run_manager._emit(
+        run_id,
+        str(run["session_id"]),
+        "delivery.gate.resolved",
+        {
+            "decision": payload.decision,
+            "manifest_sha256": manifest.manifest_sha256,
+            "decided_by": "local-user",
+        },
+    )
+    readiness = assess_delivery_readiness(manifest, integrity, checker, gate)
+    return {
+        "delivery_gate": gate,
+        "delivery": readiness.model_dump(mode="json"),
     }
 
 

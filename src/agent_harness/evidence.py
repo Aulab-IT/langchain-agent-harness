@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import platform
 import re
+import shutil
+import stat
+import subprocess
+import tempfile
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _TERMINAL_STATUSES = {
     "completed",
     "incomplete",
@@ -24,6 +30,11 @@ _TERMINAL_STATUSES = {
     "cancelled",
 }
 _EXIT_CODE = re.compile(r"\bexit_code\s*=\s*(-?\d+)\b", re.IGNORECASE)
+_SENSITIVE_VALUE = re.compile(
+    r"(?i)(\b(?:api[_-]?key|token|secret|password|authorization)\b[\"']?\s*[:=]\s*)"
+    r"([\"']?)([^\s,}\"']+)([\"']?)"
+)
+_BEARER_TOKEN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*")
 
 
 def _utc_now() -> str:
@@ -36,6 +47,11 @@ def _sha256_bytes(value: bytes) -> str:
 
 def _sha256_text(value: str) -> str:
     return _sha256_bytes(value.encode("utf-8"))
+
+
+def _redact_sensitive(value: str) -> str:
+    redacted = _BEARER_TOKEN.sub("Bearer ***", value)
+    return _SENSITIVE_VALUE.sub(r"\1\2***\4", redacted)
 
 
 def _canonical_json(value: dict[str, Any]) -> bytes:
@@ -94,6 +110,24 @@ class EvidenceContract(BaseModel):
     requirements: list[EvidenceRequirement]
 
 
+class SourceProvenance(BaseModel):
+    repository: bool = False
+    branch: str = ""
+    commit: str = ""
+    dirty: bool = False
+    worktree_sha256: str = ""
+    ci_provider: str = "local"
+    ci_status: str = "local"
+    ci_run_id: str = ""
+    preview_url: str = ""
+
+
+class DeliveryBoundary(BaseModel):
+    relevant: bool = False
+    requires_human_gate: bool = False
+    rollback_plan: str = "Non applicabile: il run non esegue delivery."
+
+
 class EvidenceManifest(BaseModel):
     schema_version: int = SCHEMA_VERSION
     run_id: str
@@ -103,6 +137,8 @@ class EvidenceManifest(BaseModel):
     input_sha256: str
     output_sha256: str
     environment: dict[str, str]
+    provenance: SourceProvenance = Field(default_factory=SourceProvenance)
+    delivery: DeliveryBoundary = Field(default_factory=DeliveryBoundary)
     contract: EvidenceContract
     artifacts: list[ArtifactEvidence]
     commands: list[CommandEvidence]
@@ -116,10 +152,103 @@ class IntegrityCheck(BaseModel):
     detail: str
 
 
+class EvidenceCheckerResult(BaseModel):
+    checker: str = "deterministic-read-only-v1"
+    manifest_sha256: str
+    checked_at: str
+    read_only: bool
+    passed: bool
+    checks: list[IntegrityCheck]
+
+
+class DeliveryReadiness(BaseModel):
+    relevant: bool
+    ready: bool
+    checks: list[IntegrityCheck]
+
+
 class EvidenceIntegrity(BaseModel):
     valid: bool
     checked_at: str
     checks: list[IntegrityCheck]
+
+
+def _manifest_payload(manifest: EvidenceManifest) -> dict[str, Any]:
+    payload = manifest.model_dump(mode="json", exclude={"manifest_sha256"})
+    if manifest.schema_version < 2:
+        payload.pop("provenance", None)
+        payload.pop("delivery", None)
+    return payload
+
+
+def _git_value(project_root: Path, *arguments: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", *arguments],
+            cwd=project_root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _safe_preview_url() -> str:
+    raw = (os.getenv("DEPLOYMENT_URL") or os.getenv("VERCEL_URL") or "").strip()[:500]
+    if raw and "://" not in raw:
+        raw = f"https://{raw}"
+    parsed = urlparse(raw)
+    return raw if parsed.scheme in {"http", "https"} and parsed.netloc else ""
+
+
+def collect_source_provenance(project_root: Path | None) -> SourceProvenance:
+    if project_root is None:
+        return SourceProvenance()
+    root = project_root.resolve()
+    commit = _git_value(root, "rev-parse", "HEAD")
+    branch = _git_value(root, "branch", "--show-current")
+    status_output = _git_value(root, "status", "--porcelain=v1")
+    ci_provider = "github-actions" if os.getenv("GITHUB_ACTIONS") == "true" else "local"
+    if os.getenv("GITLAB_CI") == "true":
+        ci_provider = "gitlab-ci"
+    ci_active = os.getenv("CI", "").lower() == "true"
+    ci_status = (os.getenv("CI_JOB_STATUS") or ("running" if ci_active else "local"))[:40]
+    ci_run_id = (os.getenv("GITHUB_RUN_ID") or os.getenv("CI_PIPELINE_ID") or "")[:120]
+    return SourceProvenance(
+        repository=bool(commit),
+        branch=branch[:200],
+        commit=commit[:64],
+        dirty=bool(status_output),
+        worktree_sha256=_sha256_text(str(root)),
+        ci_provider=ci_provider,
+        ci_status=ci_status,
+        ci_run_id=ci_run_id,
+        preview_url=_safe_preview_url(),
+    )
+
+
+_DELIVERY_INTENT = re.compile(
+    r"\b(deploy|deployment|rilasci[ao]|pubblica|pubblicare|merge|pull request|"
+    r"migrazion[ei]|migrate|rollback)\b",
+    re.IGNORECASE,
+)
+
+
+def delivery_boundary(goal: str, provenance: SourceProvenance) -> DeliveryBoundary:
+    relevant = bool(_DELIVERY_INTENT.search(goal))
+    rollback = "Non applicabile: il run non esegue delivery."
+    if relevant and provenance.commit:
+        rollback = f"Ripristinare con git revert {provenance.commit}."
+    elif relevant:
+        rollback = "Ripristinare l'ultima versione approvata prima di qualunque deploy."
+    return DeliveryBoundary(
+        relevant=relevant,
+        requires_human_gate=relevant,
+        rollback_plan=rollback,
+    )
 
 
 def _artifact_evidence(
@@ -185,9 +314,9 @@ def _command_evidence(events: list[dict[str, Any]]) -> list[CommandEvidence]:
             CommandEvidence(
                 tool=tool,
                 tool_call_id=call_id,
-                arguments=arguments,
+                arguments=_redact_sensitive(arguments),
                 arguments_sha256=_sha256_text(arguments) if arguments else "",
-                result=output,
+                result=_redact_sensitive(output),
                 output_sha256=_sha256_text(output) if output else "",
                 exit_code=exit_code,
                 elapsed_ms=(
@@ -236,6 +365,7 @@ def build_evidence_manifest(
     artifact_paths: list[str],
     events: list[dict[str, Any]],
     requires_runtime_verification: bool,
+    project_root: Path | None = None,
     created_at: str | None = None,
 ) -> EvidenceManifest:
     artifacts, missing_artifacts = _artifact_evidence(workspace, artifact_paths)
@@ -278,6 +408,7 @@ def build_evidence_manifest(
         ),
     ]
     required_passed = all(item.passed for item in requirements if item.required)
+    provenance = collect_source_provenance(project_root)
     manifest = EvidenceManifest(
         run_id=run_id,
         session_id=session_id,
@@ -290,6 +421,8 @@ def build_evidence_manifest(
             "python": platform.python_version(),
             "platform": platform.system().lower(),
         },
+        provenance=provenance,
+        delivery=delivery_boundary(goal, provenance),
         contract=EvidenceContract(
             task_kind="workspace_mutation" if requires_runtime_verification else "general",
             passed=required_passed,
@@ -299,14 +432,12 @@ def build_evidence_manifest(
         commands=commands,
         verifiers=_verifier_evidence(events),
     )
-    digest_payload = manifest.model_dump(mode="json", exclude={"manifest_sha256"})
-    manifest.manifest_sha256 = _sha256_bytes(_canonical_json(digest_payload))
+    manifest.manifest_sha256 = _sha256_bytes(_canonical_json(_manifest_payload(manifest)))
     return manifest
 
 
 def verify_evidence_manifest(manifest: EvidenceManifest, workspace: Path) -> EvidenceIntegrity:
-    digest_payload = manifest.model_dump(mode="json", exclude={"manifest_sha256"})
-    computed_manifest_hash = _sha256_bytes(_canonical_json(digest_payload))
+    computed_manifest_hash = _sha256_bytes(_canonical_json(_manifest_payload(manifest)))
     checks = [
         IntegrityCheck(
             id="manifest",
@@ -339,5 +470,178 @@ def verify_evidence_manifest(manifest: EvidenceManifest, workspace: Path) -> Evi
     return EvidenceIntegrity(
         valid=all(check.passed for check in checks),
         checked_at=_utc_now(),
+        checks=checks,
+    )
+
+
+def create_evidence_bundle(
+    manifest: EvidenceManifest,
+    workspace: Path,
+    bundle_root: Path,
+) -> Path:
+    """Crea una copia separata degli artefatti e la rende read-only per il checker."""
+    expected_manifest = manifest.model_dump_json(indent=2) + "\n"
+    manifest_path = bundle_root / "manifest.json"
+    if bundle_root.exists():
+        try:
+            if manifest_path.read_text(encoding="utf-8") == expected_manifest:
+                return bundle_root
+        except OSError:
+            pass
+        raise ValueError(f"Bundle evidenze già presente ma non coerente per {manifest.run_id}.")
+
+    parent = bundle_root.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=f".{manifest.run_id}-", dir=parent))
+    workspace_root = workspace.resolve()
+    artifacts_root = temporary / "artifacts"
+    artifacts_root.mkdir()
+    try:
+        for artifact in manifest.artifacts:
+            source = (workspace_root / artifact.path).resolve()
+            if (
+                not source.is_relative_to(workspace_root)
+                or source == workspace_root
+                or not source.is_file()
+                or source.is_symlink()
+            ):
+                raise ValueError(f"Artefatto non valido nel bundle: {artifact.path}")
+            destination = artifacts_root / artifact.path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+            destination.chmod(0o444)
+        manifest_path_tmp = temporary / "manifest.json"
+        manifest_path_tmp.write_text(expected_manifest, encoding="utf-8")
+        manifest_path_tmp.chmod(0o444)
+        for directory in sorted(
+            (path for path in temporary.rglob("*") if path.is_dir()),
+            key=lambda path: len(path.parts),
+            reverse=True,
+        ):
+            directory.chmod(0o555)
+        temporary.chmod(0o555)
+        os.replace(temporary, bundle_root)
+    except Exception:
+        for path in temporary.rglob("*"):
+            if path.is_dir():
+                path.chmod(0o755)
+            else:
+                path.chmod(0o644)
+        temporary.chmod(0o755)
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    return bundle_root
+
+
+def run_independent_checker(bundle_root: Path) -> EvidenceCheckerResult:
+    """Controlla il bundle senza ricevere accesso al workspace scrivibile del maker."""
+    manifest_path = bundle_root / "manifest.json"
+    manifest = EvidenceManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    integrity = verify_evidence_manifest(manifest, bundle_root / "artifacts")
+    writable_mask = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
+    paths = [bundle_root, manifest_path, *(bundle_root / "artifacts").rglob("*")]
+    read_only = all(not (path.stat().st_mode & writable_mask) for path in paths)
+    checks = [
+        *integrity.checks,
+        IntegrityCheck(
+            id="contract",
+            passed=manifest.contract.passed,
+            detail=(
+                "contratto delle evidenze soddisfatto"
+                if manifest.contract.passed
+                else "contratto delle evidenze non soddisfatto"
+            ),
+        ),
+        IntegrityCheck(
+            id="read_only_bundle",
+            passed=read_only,
+            detail="bundle read-only" if read_only else "bundle ancora scrivibile",
+        ),
+    ]
+    return EvidenceCheckerResult(
+        manifest_sha256=manifest.manifest_sha256,
+        checked_at=_utc_now(),
+        read_only=read_only,
+        passed=all(check.passed for check in checks),
+        checks=checks,
+    )
+
+
+def assess_delivery_readiness(
+    manifest: EvidenceManifest,
+    integrity: EvidenceIntegrity,
+    checker: EvidenceCheckerResult | None,
+    gate: dict[str, Any] | None,
+) -> DeliveryReadiness:
+    if not manifest.delivery.relevant:
+        return DeliveryReadiness(relevant=False, ready=True, checks=[])
+    provenance = manifest.provenance
+    ci_passed = provenance.ci_status.casefold() in {"success", "passed", "succeeded"}
+    approved = bool(
+        gate
+        and gate.get("decision") == "approved"
+        and gate.get("manifest_sha256") == manifest.manifest_sha256
+    )
+    checks = [
+        IntegrityCheck(
+            id="integrity",
+            passed=integrity.valid,
+            detail="evidenze integre" if integrity.valid else "evidenze alterate o mancanti",
+        ),
+        IntegrityCheck(
+            id="independent_checker",
+            passed=bool(checker and checker.passed),
+            detail=(
+                "checker indipendente superato"
+                if checker and checker.passed
+                else "checker indipendente non superato"
+            ),
+        ),
+        IntegrityCheck(
+            id="isolated_branch",
+            passed=bool(
+                provenance.repository
+                and provenance.branch
+                and provenance.branch not in {"main", "master"}
+            ),
+            detail=provenance.branch or "branch Git non rilevato",
+        ),
+        IntegrityCheck(
+            id="clean_worktree",
+            passed=provenance.repository and not provenance.dirty,
+            detail=(
+                "worktree pulito"
+                if provenance.repository and not provenance.dirty
+                else "worktree con modifiche o non rilevato"
+            ),
+        ),
+        IntegrityCheck(
+            id="ci_green",
+            passed=ci_passed,
+            detail=f"{provenance.ci_provider}: {provenance.ci_status}",
+        ),
+        IntegrityCheck(
+            id="preview_environment",
+            passed=bool(provenance.preview_url),
+            detail=provenance.preview_url or "preview non configurata",
+        ),
+        IntegrityCheck(
+            id="rollback_plan",
+            passed=bool(manifest.delivery.rollback_plan),
+            detail=manifest.delivery.rollback_plan,
+        ),
+        IntegrityCheck(
+            id="human_gate",
+            passed=approved,
+            detail=(
+                "approvato da " + str(gate.get("decided_by", "utente"))
+                if approved and gate
+                else "approvazione umana mancante"
+            ),
+        ),
+    ]
+    return DeliveryReadiness(
+        relevant=True,
+        ready=all(check.passed for check in checks),
         checks=checks,
     )

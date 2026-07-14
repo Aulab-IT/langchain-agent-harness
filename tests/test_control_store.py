@@ -41,14 +41,39 @@ def test_run_evidence_is_immutable_and_deleted_with_run(tmp_path: Path) -> None:
     }
 
     store.save_run_evidence(run["id"], manifest)
+    checker = {
+        "manifest_sha256": "abc",
+        "checked_at": "2026-07-14T12:01:00+00:00",
+        "passed": True,
+    }
+    store.save_run_evidence_check(run["id"], checker)
+    approved = store.record_delivery_gate(
+        run["id"],
+        manifest_sha256="abc",
+        decision="approved",
+        note="review completata",
+        decided_by="tester",
+    )
+    rejected = store.record_delivery_gate(
+        run["id"],
+        manifest_sha256="abc",
+        decision="rejected",
+        note="CI rossa",
+        decided_by="tester",
+    )
 
     assert store.get_run_evidence(run["id"]) == manifest
+    assert store.get_run_evidence_check(run["id"]) == checker
+    assert approved["decision"] == "approved"
+    assert store.latest_delivery_gate(run["id"]) == rejected
     assert store.save_run_evidence(run["id"], manifest) == manifest
     with pytest.raises(ValueError, match="immutabile"):
         store.save_run_evidence(run["id"], {**manifest, "manifest_sha256": "changed"})
 
     store.delete_session(session["id"])
     assert store.get_run_evidence(run["id"]) is None
+    assert store.get_run_evidence_check(run["id"]) is None
+    assert store.latest_delivery_gate(run["id"]) is None
     store.close()
 
 
@@ -77,6 +102,30 @@ def test_event_history_is_paginated_and_excludes_streaming_deltas(tmp_path: Path
         index for index in range(23) if index not in {3, 11, 19}
     ]
     assert store.delete_run_events(run["id"], {"assistant.delta"}) == 3
+    store.close()
+
+
+def test_delivery_gate_decisions_are_capped_per_run(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    session = store.create_session()
+    run = store.create_run(session["id"])
+    for index in range(100):
+        store.record_delivery_gate(
+            run["id"],
+            manifest_sha256="abc",
+            decision="approved" if index % 2 == 0 else "rejected",
+            note=str(index),
+            decided_by="tester",
+        )
+
+    with pytest.raises(ValueError, match="Limite decisioni"):
+        store.record_delivery_gate(
+            run["id"],
+            manifest_sha256="abc",
+            decision="approved",
+            note="troppo",
+            decided_by="tester",
+        )
     store.close()
 
 

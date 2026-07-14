@@ -1,6 +1,7 @@
 import {
   CheckCircle2,
   FileCheck2,
+  GitBranch,
   Hash,
   RefreshCw,
   ShieldCheck,
@@ -8,7 +9,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { getRunEvidence } from "../../api";
+import { decideDeliveryGate, getRunEvidence } from "../../api";
 import { formatFileSize } from "../../lib/format";
 import type { Run, RunEvidence } from "../../types";
 import { PanelEmpty, Spinner } from "../shared/PanelEmpty";
@@ -32,6 +33,8 @@ function StateIcon({ passed }: { passed: boolean }) {
 export function EvidencePanel({ run }: { run: Run | null }) {
   const [evidence, setEvidence] = useState<RunEvidence | null>(null);
   const [loading, setLoading] = useState(false);
+  const [gateBusy, setGateBusy] = useState(false);
+  const [gateNote, setGateNote] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -59,7 +62,19 @@ export function EvidencePanel({ run }: { run: Run | null }) {
     return <PanelEmpty>Il manifest verrà congelato quando il run raggiunge uno stato terminale.</PanelEmpty>;
   }
 
-  const { manifest, integrity } = evidence;
+  const { manifest, integrity, checker, delivery, delivery_gate: deliveryGate } = evidence;
+  const decideGate = async (decision: "approved" | "rejected") => {
+    setGateBusy(true);
+    try {
+      await decideDeliveryGate(run.id, decision, gateNote.trim());
+      setGateNote("");
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Decisione delivery fallita");
+    } finally {
+      setGateBusy(false);
+    }
+  };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
@@ -67,13 +82,14 @@ export function EvidencePanel({ run }: { run: Run | null }) {
           <div className="flex items-center gap-2">
             <ShieldCheck
               size={17}
-              className={manifest.contract.passed && integrity.valid ? "text-success" : "text-danger"}
+              className={manifest.contract.passed && integrity.valid && checker?.passed ? "text-success" : "text-danger"}
             />
             <h3 className="text-sm font-semibold">Dossier del run</h3>
           </div>
           <p className="mt-1 text-xs text-muted">
             Contratto {manifest.contract.passed ? "soddisfatto" : "non soddisfatto"} · integrità{" "}
-            {integrity.valid ? "confermata" : "compromessa"}
+            {integrity.valid ? "confermata" : "compromessa"} · checker{" "}
+            {checker?.passed ? "superato" : "non superato"}
           </p>
         </div>
         <button
@@ -107,6 +123,91 @@ export function EvidencePanel({ run }: { run: Run | null }) {
             ))}
           </div>
         </section>
+
+        <section className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+              Checker indipendente
+            </h4>
+            {checker ? (
+              <div className="rounded-lg border border-border bg-surface px-3 py-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <StateIcon passed={checker.passed} />
+                  <strong>{checker.checker}</strong>
+                </div>
+                <div className="mt-1 text-muted">
+                  snapshot {checker.read_only ? "read-only" : "scrivibile"} · {checker.checks.length} controlli
+                </div>
+              </div>
+            ) : <p className="text-xs text-muted">Checker non disponibile.</p>}
+          </div>
+          <div>
+            <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
+              <GitBranch size={14} /> Provenienza
+            </h4>
+            <div className="rounded-lg border border-border bg-surface px-3 py-2 text-xs">
+              <div className="font-medium">{manifest.provenance.branch || "nessun repository"}</div>
+              <div className="mt-1 text-muted">
+                {manifest.provenance.commit ? <ShortHash value={manifest.provenance.commit} /> : "commit non rilevato"}
+                {manifest.provenance.repository ? ` · ${manifest.provenance.dirty ? "dirty" : "pulito"}` : ""}
+              </div>
+              <div className="mt-1 text-muted">
+                CI {manifest.provenance.ci_provider} · {manifest.provenance.ci_status}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {manifest.delivery.relevant && delivery ? (
+          <section>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Delivery gate · {delivery.ready ? "pronto" : "bloccato"}
+              </h4>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg border border-success/40 px-2.5 py-1 text-xs text-success disabled:opacity-40"
+                  onClick={() => decideGate("approved")}
+                  disabled={gateBusy}
+                >
+                  Approva
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-danger/40 px-2.5 py-1 text-xs text-danger disabled:opacity-40"
+                  onClick={() => decideGate("rejected")}
+                  disabled={gateBusy}
+                >
+                  Rifiuta
+                </button>
+              </div>
+            </div>
+            {deliveryGate ? (
+              <p className="mb-2 text-xs text-muted">
+                Ultima decisione: {deliveryGate.decision} · {deliveryGate.decided_by}
+                {deliveryGate.note ? ` · ${deliveryGate.note}` : ""}
+              </p>
+            ) : null}
+            <input
+              className="mb-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs outline-none focus:border-muted"
+              value={gateNote}
+              maxLength={500}
+              onChange={(event) => setGateNote(event.target.value)}
+              placeholder="Nota della decisione (opzionale)"
+              aria-label="Nota della decisione delivery"
+            />
+            <div className="grid gap-2 md:grid-cols-2">
+              {delivery.checks.map((check) => (
+                <div key={check.id} className="flex items-start gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs">
+                  <StateIcon passed={check.passed} />
+                  <div><div className="font-medium">{check.id}</div><div className="text-muted">{check.detail}</div></div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-muted">Rollback: {manifest.delivery.rollback_plan}</p>
+          </section>
+        ) : null}
 
         <section>
           <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">

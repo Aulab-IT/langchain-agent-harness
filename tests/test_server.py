@@ -124,7 +124,9 @@ async def test_evidence_contract_gates_completed_runs(
     monkeypatch.setattr(server, "build_harness", fake_build_harness)
     monkeypatch.setattr(server, "GoalRunner", FakeGoalRunner)
 
-    await server.run_manager._execute(run["id"], session["id"], "Crea un report")
+    await server.run_manager._execute(
+        run["id"], session["id"], "Crea un report per il deploy"
+    )
 
     saved = server.store.get_run(run["id"])
     assert saved["status"] == expected_status
@@ -134,6 +136,32 @@ async def test_evidence_contract_gates_completed_runs(
     assert payload["status"] == "ready"
     assert payload["manifest"]["contract"]["passed"] is emit_verification
     assert payload["integrity"]["valid"] is True
+    assert payload["checker"]["passed"] is emit_verification
+    assert payload["manifest"]["delivery"]["relevant"] is True
+    if emit_verification:
+        decision = client.post(
+            f"/api/runs/{run['id']}/delivery-gate",
+            json={"decision": "approved", "note": "Review umana completata"},
+        )
+        assert decision.status_code == 200
+        assert decision.json()["delivery_gate"]["decision"] == "approved"
+        assert decision.json()["delivery"]["ready"] is False
+        assert next(
+            check
+            for check in decision.json()["delivery"]["checks"]
+            if check["id"] == "human_gate"
+        )["passed"] is True
+        oversized = client.post(
+            f"/api/runs/{run['id']}/delivery-gate",
+            json={"decision": "approved", "note": "x" * 501},
+        )
+        assert oversized.status_code == 422
+    else:
+        decision = client.post(
+            f"/api/runs/{run['id']}/delivery-gate",
+            json={"decision": "approved"},
+        )
+        assert decision.status_code == 409
     assert any(
         event["type"] == "evidence.manifest.created"
         for event in server.store.list_events(run["id"])
