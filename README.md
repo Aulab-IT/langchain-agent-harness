@@ -11,8 +11,8 @@ contesto, pianificazione, subagenti, middleware, approvazione umana e verifica.
 - `src/agent_harness`: applicazione finale (CLI, control plane FastAPI, runner, tool,
   sandbox, self-improvement).
 - `client`: dashboard React (Control Center) che parla con il control plane via REST/SSE.
-- `steps`: snapshot incrementali. Ogni cartella contiene codice e una guida di replica.
-- `notebooks`: micro-esempi LangChain autocontenuti con modelli OpenAI reali.
+- `steps`: 20 snapshot incrementali. Ogni cartella contiene codice, guida e changelog.
+- `notebooks`: 12 laboratori autonomi; 01–06 LangChain live, 07–12 offline standard-library.
 - `skills`: istruzioni caricate su richiesta dall'agente (progressive disclosure).
 - `memories`: memoria continua tra sessioni (`AGENTS.md`), sempre caricata nel prompt.
 - `evals`: eval set versionato (`cases.json`) usato dal loop di self-improvement.
@@ -25,6 +25,10 @@ contesto, pianificazione, subagenti, middleware, approvazione umana e verifica.
 La matrice completa tra articolo e implementazione si trova in
 [`docs/HARNESS_COMPONENTS.md`](docs/HARNESS_COMPONENTS.md); il diagramma dei componenti
 in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+La spiegazione didattica end-to-end è in
+[`docs/GUIDA_DIDATTICA_COMPLETA.md`](docs/GUIDA_DIDATTICA_COMPLETA.md); la copertura
+feature → step → notebook → test in
+[`docs/MATRICE_COPERTURA_DIDATTICA.md`](docs/MATRICE_COPERTURA_DIDATTICA.md).
 
 ## Avvio rapido
 
@@ -232,7 +236,7 @@ make install    # dipendenze Python + client React
 make test       # test offline
 make lint       # analisi statica
 make format     # ruff format + fix automatico
-make notebooks       # struttura e compilazione celle, senza chiamate API
+make notebooks       # compila 01–12 ed esegue davvero gli offline 07–12
 make notebooks-live  # esecuzione end-to-end con OPENAI_API_KEY
 make sandbox-image # immagine Docker riproducibile
 make run        # API + Control Center insieme
@@ -242,14 +246,16 @@ make smoke      # run singolo di verifica end-to-end
 
 ## Percorso consigliato
 
-1. Seguire le cartelle `steps` in ordine, dallo `00` al `13` (14 step totali).
+1. Seguire le cartelle `steps` in ordine, dallo `00` al `19` (20 step totali).
 2. Ricostruire manualmente ogni avanzamento usando `GUIDA.md`.
-3. Aprire i notebook per riprodurre micro-esempi LangChain completi e autocontenuti.
+3. Aprire i notebook 01–06 per LangChain live e 07–12 per governance offline.
 4. Leggere `src/agent_harness` per vedere come i componenti vengono assemblati.
 
 Lo step 13 introduce il loop engineering (trigger cron/webhook e hill-climbing),
 descritto in [*The Art of Loop Engineering*](https://www.langchain.com/blog/the-art-of-loop-engineering)
 e mappato in [`docs/HARNESS_COMPONENTS.md`](docs/HARNESS_COMPONENTS.md).
+Gli step 14–19 aggiungono provider-neutral runtime, budget, durabilità, governance subagenti,
+evidence contract, delivery gate e Control Center completo.
 
 ## Tracing
 

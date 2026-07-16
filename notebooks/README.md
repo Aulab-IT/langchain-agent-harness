@@ -1,14 +1,25 @@
 # Notebook didattici autonomi
 
-Sei notebook pensati per **capire un concetto alla volta**. Ogni notebook è:
+Dodici notebook pensati per **capire un concetto alla volta**. Ogni notebook è:
 
 - **autonomo**: definisce da sé configurazione, tool e agente; non importa nulla dal progetto
   (`src`, `steps`), quindi può essere eseguito da solo;
 - **granulare**: celle piccole, un'idea per cella, con spiegazioni prima di ogni passo;
 - **commentato**: il codice ha commenti che spiegano riga per riga cosa succede.
 
-Tutti usano `OPENAI_API_KEY` e `OPENAI_MODEL` dal file `.env`; il notebook 04 usa anche
-`OPENAI_STRONG_MODEL` per mostrare il routing del modello.
+Ogni notebook applica inoltre un contratto didattico uniforme:
+
+- obiettivi, prerequisiti e durata indicativa all'inizio;
+- una spiegazione dedicata immediatamente prima di **ogni** blocco codice;
+- una sezione **Output atteso** immediatamente dopo ogni blocco, con invarianti e parti
+  non deterministiche chiaramente distinte;
+- almeno due esempi aggiuntivi, incluso un caso limite, errore o controllo negativo;
+- riepilogo e troubleshooting finale.
+
+I notebook 01-06 usano LangChain e modelli reali: richiedono ambiente Python del progetto,
+`OPENAI_API_KEY` e `OPENAI_MODEL` dal file `.env`; il 04 usa anche `OPENAI_STRONG_MODEL`.
+I notebook 07-12 usano **solo Python standard library**: nessuna chiave, rete, API o import dal
+progetto. “Autonomo” significa anche che nessun notebook importa un altro notebook o uno step.
 
 ## Percorso
 
@@ -43,6 +54,26 @@ Tutti usano `OPENAI_API_KEY` e `OPENAI_MODEL` dal file `.env`; il notebook 04 us
    - Loop 3: trigger a eventi (match di un'espressione cron);
    - Loop 4: hill climbing, da un report a una proposta (propose-only).
 
+### Mini-serie avanzata · governance operativa, offline
+
+7. `07_provider_capability_e_costi.ipynb`
+   - contratti provider-neutral, capability preflight, costi e tassonomia errori.
+
+8. `08_budget_contesto_e_run.ipynb`
+   - misura contesto, offload recuperabile, prenotazione e riconciliazione budget.
+
+9. `09_esecuzione_durevole_e_hitl.ipynb`
+   - state machine SQLite, idempotenza, lease concettuale, interrupt attraverso restart.
+
+10. `10_governance_subagenti.ipynb`
+    - roster, least privilege, fallback compatibile, cicli, review indipendente e prove.
+
+11. `11_manifest_e_delivery_gate.ipynb`
+    - manifest canonico, tamper detection, snapshot read-only e gate delivery.
+
+12. `12_eval_canary_e_rollback.ipynb`
+    - eval paired, regression gate, canary stabile, promotion e rollback append-only.
+
 ## Configurazione
 
 ```dotenv
@@ -53,10 +84,23 @@ OPENAI_STRONG_MODEL=gpt-5.5
 
 ## Validazione
 
-Controllo strutturale (compila le celle, senza chiamate API):
+Controllo strutturale più esecuzione reale dei notebook offline 07-12:
 
 ```bash
 make notebooks
+```
+
+Solo controllo strutturale di tutti i notebook:
+
+```bash
+uv run python scripts/validate_notebooks.py
+```
+
+Il validatore rifiuta notebook privi di spiegazione, output atteso o esempi aggiuntivi. Per
+riapplicare in modo idempotente il contratto didattico dopo modifiche manuali:
+
+```bash
+uv run python scripts/enrich_notebooks.py
 ```
 
 Esecuzione completa con modelli reali (effettua chiamate OpenAI, può generare costi):

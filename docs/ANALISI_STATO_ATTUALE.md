@@ -1,5 +1,9 @@
 # Analisi dello stato attuale del LangChain Agent Harness
 
+> Snapshot storico dell’11 luglio 2026, conservato per mostrare evoluzione e finding iniziali.
+> Per architettura e copertura correnti usare `GUIDA_DIDATTICA_COMPLETA.md` e
+> `MATRICE_COPERTURA_DIDATTICA.md`.
+
 **Data analisi:** 11 luglio 2026  
 **Commit osservato:** `3ccda6a` (`feat(router): escalate on measured failure instead of guessing from keywords`)  
 **Branch:** `feat/tools-and-skills`  

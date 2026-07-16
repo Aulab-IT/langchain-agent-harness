@@ -29,6 +29,16 @@ meccanismo concreto presente nel progetto.
 | Ralph-style continuation | reiniezione obiettivo in contesto nuovo e limitato | 11 |
 | Osservabilità | stream eventi e tracing LangSmith opzionale | 12 |
 | Audit hook | middleware JSONL senza argomenti o segreti | 11, 12 |
+| Provider abstraction | registry, capability e tassonomia errori | 14 |
+| Pricing e usage | catalogo provider-neutral e costo normalizzato | 14 |
+| Context budget | misura, offload, summary strutturato, hard stop | 15 |
+| Run budget | prenotazioni concorrenti per token/costo/call/tempo | 15 |
+| Durable execution | state machine, idempotenza, lease, retry, interrupt | 16 |
+| Subagent governance | roster dinamico, piano validato, least privilege | 17 |
+| Evidence contract | manifest hashato e checker su snapshot read-only | 18 |
+| Delivery gate | CI, preview, rollback e approval legata al manifest | 18, 19 |
+| Control plane | REST/SSE, sessioni, file, trace, impostazioni | 19 |
+| Control Center | UI React per chat, inspector e governance | 19 |
 
 ## Confini intenzionali
 
@@ -67,3 +77,5 @@ Gli override ammessi sono `system_prompt_addendum` e `harness_max_tool_calls`; r
 restano congelate per impedire reward hacking.
 La finestra usa un numero di run, non un numero di eventi: delta streaming e audit storici
 non falsano più statistiche, error rate o feedback analizzati.
+
+Matrice didattica completa: [`MATRICE_COPERTURA_DIDATTICA.md`](MATRICE_COPERTURA_DIDATTICA.md).
