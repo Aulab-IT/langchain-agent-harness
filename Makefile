@@ -8,11 +8,11 @@ test:
 	uv run pytest
 
 lint:
-	uv run ruff check src tests evals scripts steps
+	uv run ruff check src tests evals scripts
 
 format:
-	uv run ruff format src tests evals scripts steps
-	uv run ruff check --fix src tests evals scripts steps
+	uv run ruff format src tests evals scripts
+	uv run ruff check --fix src tests evals scripts
 
 handbook:
 	uv run python scripts/handbook_sync.py --write
