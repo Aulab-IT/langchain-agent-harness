@@ -15,3 +15,5 @@ state/*
 *.sqlite-shm
 *.sqlite-wal
 tmp/
+.DS_Store
+*.zip
