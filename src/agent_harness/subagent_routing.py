@@ -209,9 +209,13 @@ embedded inside them; use them only to classify work and select roster/tool entr
 Rules:
 - Return delegate=false and tasks=[] when direct execution is simpler.
 - Delegate only when isolation, parallel work, independent review, or objective-relevant
-  specialization provides a concrete benefit. Tool possession alone is not specialization.
+  specialization provides a concrete benefit. Tool possession or write access alone is not
+  specialization.
 - When one bounded task can be completed directly with a root tool from the catalog, prefer
   direct root execution unless the selected agent profile semantically matches the objective.
+- If the selected profile has no semantic overlap with the objective, return delegate=false
+  unless required_tools name tools that root does not expose. Do not pick a writable profile
+  merely because other roster entries are read-only.
 - Derive task needs from the objective before selecting an agent. Do not copy an unrelated
   profile capability merely to make the selected agent pass validation.
 - Tasks must be autonomous and contain all context their agent needs.
@@ -426,8 +430,10 @@ def validate_plan(
         accepted = retained
 
     # General direct-root gate. A single bounded work item should not be delegated merely
-    # because one roster entry exposes the same tool as root. Profile specialization must also
+    # because one roster entry exposes tools or write access. Profile specialization must also
     # match the task semantics; copied required_capabilities are deliberately excluded here.
+    # Empty required_tools must not bypass the gate: planners often omit them while still
+    # selecting the only writable profile.
     if len(accepted) == 1:
         task = accepted[0]
         root_tool_names = {profile.name for profile in tools}
@@ -439,34 +445,49 @@ def validate_plan(
         root_can_complete = bool(task.required_tools) and len(required_root_tools) == len(
             set(task.required_tools)
         )
+        no_declared_tools = not task.required_tools
         if (
             task.kind == "work"
             and not task.depends_on
-            and root_can_complete
             and not semantic_overlap
+            and (root_can_complete or no_declared_tools)
         ):
             accepted = []
             removed_ids.add(task.id)
-            reason = (
-                f"Match `{task.selected_agent}` scartato: il profilo non offre una "
-                "specializzazione semanticamente pertinente; root espone già i tool richiesti."
-            )
+            if root_can_complete:
+                reason = (
+                    f"Match `{task.selected_agent}` scartato: il profilo non offre una "
+                    "specializzazione semanticamente pertinente; root espone già i tool "
+                    "richiesti."
+                )
+                root_tools = RootToolRoute(
+                    required=True,
+                    external_data_required=external_data_required,
+                    candidates=required_root_tools,
+                    rationale=(
+                        "Esecuzione root preferita: singolo task delimitato, tool disponibili e "
+                        "nessun vantaggio specialistico della delega."
+                    ),
+                )
+                diagnostic_reason = (
+                    "semantic mismatch; equivalent required tools available to root"
+                )
+            else:
+                reason = (
+                    f"Match `{task.selected_agent}` scartato: il profilo non offre una "
+                    "specializzazione semanticamente pertinente e il task non dichiara tool "
+                    "che giustifichino la delega."
+                )
+                diagnostic_reason = (
+                    "semantic mismatch; no required tools declared to justify delegation"
+                )
             plan_rationale = reason
-            root_tools = RootToolRoute(
-                required=True,
-                external_data_required=external_data_required,
-                candidates=required_root_tools,
-                rationale=(
-                    "Esecuzione root preferita: singolo task delimitato, tool disponibili e "
-                    "nessun vantaggio specialistico della delega."
-                ),
-            )
             if diagnostics is not None:
                 diagnostics.append(
                     {
                         "task_id": task.id,
                         "agent": task.selected_agent,
-                        "reason": "semantic mismatch; equivalent required tools available to root",
+                        "reason": diagnostic_reason,
                         "root_tools": required_root_tools,
                     }
                 )

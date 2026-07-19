@@ -93,7 +93,7 @@ def task(
     task_id: str,
     agent: str,
     *,
-    objective: str = "Crea artefatto",
+    objective: str = "Trasforma le note sorgente in una sintesi strutturata",
     depends_on: list[str] | None = None,
 ) -> RoutedTask:
     return RoutedTask(
@@ -103,7 +103,7 @@ def task(
         alternatives=["worker-b", "invented", agent],
         reason="Profilo compatibile",
         depends_on=depends_on or [],
-        expected_output="artefatto",
+        expected_output="sintesi strutturata verificabile",
         kind="work",
         required_tools=[],
         required_capabilities=[],
@@ -137,7 +137,7 @@ def test_routing_prompt_contains_dynamic_contract_not_name_rules() -> None:
     assert '"mcp:service"' in prompt
     assert "particular server or" in prompt
     assert "workspace artifacts" in prompt
-    assert "Tool possession alone is not specialization" in prompt
+    assert "Tool possession or write access alone is not" in prompt
 
 
 def test_validate_plan_requires_known_runtime_tool_independently_from_external_state() -> None:
@@ -231,6 +231,45 @@ def test_single_tool_task_with_irrelevant_agent_is_redirected_to_root() -> None:
     assert validated.root_tools.candidates == ["docker_exec"]
     assert diagnostics[0]["agent"] == presenter.name
     assert "semantic mismatch" in diagnostics[0]["reason"]
+
+
+def test_undeclared_tools_with_irrelevant_agent_is_redirected_to_root() -> None:
+    """Gate must not require non-empty required_tools; planners often omit them."""
+    writer = SubagentProfile(
+        name="artifact-writer",
+        description="Produce slide deck and visual storytelling artifacts.",
+        capabilities=["storyboard design", "visual slide composition"],
+        outputs=["verified presentation file"],
+        tools=["docker_exec", "count_text"],
+        read_only=False,
+    )
+    generic_work = RoutedTask(
+        id="workspace-setup",
+        objective="Prepara l'ambiente e applica i pacchetti contenuti nell'archivio workspace.",
+        selected_agent=writer.name,
+        alternatives=[],
+        reason="Unico profilo con write access",
+        depends_on=[],
+        expected_output="ambiente aggiornato",
+        kind="work",
+        required_tools=[],
+        required_capabilities=[],
+        requires_write=True,
+        success_criteria=["Operazione applicata e verificata"],
+    )
+    diagnostics: list[dict[str, Any]] = []
+
+    validated = validate_plan(
+        DelegationPlan(delegate=True, rationale="delegate", tasks=[generic_work]),
+        [writer],
+        [tool_profile("docker_exec"), tool_profile("count_text")],
+        diagnostics=diagnostics,
+    )
+
+    assert validated.delegate is False
+    assert validated.tasks == []
+    assert diagnostics[0]["agent"] == writer.name
+    assert "no required tools declared" in diagnostics[0]["reason"]
 
 
 def test_single_tool_task_keeps_objective_relevant_specialist() -> None:
