@@ -1,0 +1,4718 @@
+{
+  "docs/handbook/L1_SISTEMA.md|src/agent_harness/cli.py|77-83": {
+    "doc": "docs/handbook/L1_SISTEMA.md",
+    "file": "src/agent_harness/cli.py",
+    "head": "async def execute_goal(goal: str, thread_id: str) -> None:",
+    "head_offset": 0,
+    "tail": "console.print(f\"[yellow]Run fermato per budget: {exc}[/yellow]\")",
+    "tail_offset": 0,
+    "last_seen": [
+      77,
+      83
+    ]
+  },
+  "docs/handbook/L1_SISTEMA.md|src/agent_harness/factory.py|1031-1050": {
+    "doc": "docs/handbook/L1_SISTEMA.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "graph = create_deep_agent(",
+    "head_offset": 0,
+    "tail": "settings=settings,",
+    "tail_offset": 0,
+    "last_seen": [
+      1031,
+      1050
+    ]
+  },
+  "docs/handbook/L1_SISTEMA.md|src/agent_harness/factory.py|1032-1035": {
+    "doc": "docs/handbook/L1_SISTEMA.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "# Il modello del grafo è solo il punto di partenza: il router lo scavalca a ogni",
+    "head_offset": 0,
+    "tail": "model=tiers[\"low\"].model,",
+    "tail_offset": 1,
+    "last_seen": [
+      1032,
+      1035
+    ]
+  },
+  "docs/handbook/L1_SISTEMA.md|src/agent_harness/runner.py|129-155": {
+    "doc": "docs/handbook/L1_SISTEMA.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "async def _invoke_graph(",
+    "head_offset": 0,
+    "tail": "return latest",
+    "tail_offset": 0,
+    "last_seen": [
+      129,
+      155
+    ]
+  },
+  "docs/handbook/L1_SISTEMA.md|src/agent_harness/runner.py|200-334": {
+    "doc": "docs/handbook/L1_SISTEMA.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "async def run(self, goal: str, *, thread_id: str) -> RunResult:",
+    "head_offset": 0,
+    "tail": "raise AssertionError(\"Ciclo di continuazione terminato in stato impossibile.\")",
+    "tail_offset": 1,
+    "last_seen": [
+      200,
+      334
+    ]
+  },
+  "docs/handbook/L1_SISTEMA.md|src/agent_harness/server.py|1322-1322": {
+    "doc": "docs/handbook/L1_SISTEMA.md",
+    "file": "src/agent_harness/server.py",
+    "head": "goal_runner = GoalRunner(harness, approval, agent_event, interaction)",
+    "head_offset": 0,
+    "tail": "goal_runner = GoalRunner(harness, approval, agent_event, interaction)",
+    "tail_offset": 0,
+    "last_seen": [
+      1322,
+      1322
+    ]
+  },
+  "docs/handbook/L1_SISTEMA.md|src/agent_harness/server.py|1676-1691": {
+    "doc": "docs/handbook/L1_SISTEMA.md",
+    "file": "src/agent_harness/server.py",
+    "head": "# Chiude eventuali interrupt durevoli rimasti pendenti (es. run annullato mentre",
+    "head_offset": 0,
+    "tail": "_LOGGER.exception(\"chiusura interrupt durevoli fallita\", extra={\"run_id\": run_id})",
+    "tail_offset": 0,
+    "last_seen": [
+      1676,
+      1691
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|client/src/App.tsx|231-239": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "client/src/App.tsx",
+    "head": "{approval && run ? (",
+    "head_offset": 0,
+    "tail": "onCancel={handleStop}",
+    "tail_offset": 2,
+    "last_seen": [
+      231,
+      239
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|client/src/components/shared/ApprovalDialog.tsx|107-258": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "client/src/components/shared/ApprovalDialog.tsx",
+    "head": "export function ApprovalDialog({",
+    "head_offset": 0,
+    "tail": ");",
+    "tail_offset": 1,
+    "last_seen": [
+      107,
+      258
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|client/src/components/shared/ApprovalDialog.tsx|134-137": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "client/src/components/shared/ApprovalDialog.tsx",
+    "head": "const review = asReview(payload.review);",
+    "head_offset": 0,
+    "tail": "const warnings = review?.warnings ?? [];",
+    "tail_offset": 0,
+    "last_seen": [
+      134,
+      137
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/cli.py|36-60": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/cli.py",
+    "head": "def render_approval(summary: dict[str, Any]) -> str:",
+    "head_offset": 0,
+    "tail": "return \"\\n\".join(lines)",
+    "tail_offset": 0,
+    "last_seen": [
+      36,
+      60
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/cli.py|36-76": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/cli.py",
+    "head": "def render_approval(summary: dict[str, Any]) -> str:",
+    "head_offset": 0,
+    "tail": "return typer.confirm(\"Approvare questa operazione?\", default=False)",
+    "tail_offset": 2,
+    "last_seen": [
+      36,
+      76
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/cli.py|63-76": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/cli.py",
+    "head": "async def ask_approval(payload: dict[str, Any]) -> bool:",
+    "head_offset": 0,
+    "tail": "return typer.confirm(\"Approvare questa operazione?\", default=False)",
+    "tail_offset": 2,
+    "last_seen": [
+      63,
+      76
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/cli.py|64-64": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/cli.py",
+    "head": "summary = build_approval_summary(payload)",
+    "head_offset": 0,
+    "tail": "summary = build_approval_summary(payload)",
+    "tail_offset": 0,
+    "last_seen": [
+      64,
+      64
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/cli.py|70-75": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/cli.py",
+    "head": "\"[yellow]Concede accesso rete temporaneo al container, solo per questo \"",
+    "head_offset": 0,
+    "tail": "return typer.confirm(\"Approvare questa operazione?\", default=False)",
+    "tail_offset": 1,
+    "last_seen": [
+      70,
+      75
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/command_review.py|164-191": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/command_review.py",
+    "head": "def payload_wants_network(value: Any) -> bool:",
+    "head_offset": 0,
+    "tail": "return found",
+    "tail_offset": 2,
+    "last_seen": [
+      164,
+      191
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/command_review.py|193-225": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/command_review.py",
+    "head": "def build_approval_summary(payload: Any) -> dict[str, Any]:",
+    "head_offset": 0,
+    "tail": "return summary",
+    "tail_offset": 1,
+    "last_seen": [
+      193,
+      225
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/command_review.py|221-222": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/command_review.py",
+    "head": "# Classificazione statica: dice all'utente cosa fa il comando prima che lo approvi.",
+    "head_offset": 0,
+    "tail": "# Non è un'autorizzazione, è una spiegazione.",
+    "tail_offset": 0,
+    "last_seen": [
+      221,
+      222
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/command_review.py|227-227": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/command_review.py",
+    "head": "def review_command(command: str) -> CommandReview:",
+    "head_offset": 0,
+    "tail": "def review_command(command: str) -> CommandReview:",
+    "tail_offset": 0,
+    "last_seen": [
+      227,
+      227
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/command_review.py|227-260": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/command_review.py",
+    "head": "def review_command(command: str) -> CommandReview:",
+    "head_offset": 0,
+    "tail": "parsed=parsed,",
+    "tail_offset": 1,
+    "last_seen": [
+      227,
+      260
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/config.py|144-144": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/config.py",
+    "head": "harness_require_approval: bool = True",
+    "head_offset": 0,
+    "tail": "harness_require_approval: bool = True",
+    "tail_offset": 0,
+    "last_seen": [
+      144,
+      144
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/durable.py|207-224": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "CREATE TABLE IF NOT EXISTS interrupts (",
+    "head_offset": 0,
+    "tail": "ON interrupts(run_id, status);",
+    "tail_offset": 0,
+    "last_seen": [
+      207,
+      224
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/durable.py|42-42": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "WAITING_APPROVAL = \"waiting_approval\"",
+    "head_offset": 0,
+    "tail": "WAITING_APPROVAL = \"waiting_approval\"",
+    "tail_offset": 0,
+    "last_seen": [
+      42,
+      42
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/durable.py|528-564": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def record_interrupt(",
+    "head_offset": 0,
+    "tail": "return interrupt",
+    "tail_offset": 0,
+    "last_seen": [
+      528,
+      564
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/durable.py|528-608": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def record_interrupt(",
+    "head_offset": 0,
+    "tail": "return resolved",
+    "tail_offset": 0,
+    "last_seen": [
+      528,
+      608
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/durable.py|566-608": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def resolve_interrupt(",
+    "head_offset": 0,
+    "tail": "return resolved",
+    "tail_offset": 0,
+    "last_seen": [
+      566,
+      608
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/durable.py|610-617": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def all_pending_interrupts(self) -> list[Interrupt]:",
+    "head_offset": 0,
+    "tail": "\"SELECT * FROM interrupts WHERE status = 'pending' ORDER BY created_at\"",
+    "tail_offset": 2,
+    "last_seen": [
+      610,
+      617
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/factory.py|1043-1043": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "interrupt_on=interrupt_on,",
+    "head_offset": 0,
+    "tail": "interrupt_on=interrupt_on,",
+    "tail_offset": 0,
+    "last_seen": [
+      1043,
+      1043
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/factory.py|781-798": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "interrupt_on: dict[str, bool | InterruptOnConfig] = {",
+    "head_offset": 0,
+    "tail": "\"when\": lambda req: True,",
+    "tail_offset": 1,
+    "last_seen": [
+      781,
+      798
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/factory.py|790-797": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "# Aggiungere un server MCP cambia i privilegi dell'host (uno stdio gira fuori dalla",
+    "head_offset": 1,
+    "tail": "\"when\": lambda req: True,",
+    "tail_offset": 0,
+    "last_seen": [
+      790,
+      797
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/factory.py|85-90": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "def docker_exec_requires_approval(",
+    "head_offset": 0,
+    "tail": "return bool(args.get(\"with_network\")) or (require_approval and not auto_approve)",
+    "tail_offset": 1,
+    "last_seen": [
+      85,
+      90
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/factory.py|89-89": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "return bool(args.get(\"with_network\")) or (require_approval and not auto_approve)",
+    "head_offset": 0,
+    "tail": "return bool(args.get(\"with_network\")) or (require_approval and not auto_approve)",
+    "tail_offset": 0,
+    "last_seen": [
+      89,
+      89
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/runner.py|157-198": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "async def _invoke_with_approval(",
+    "head_offset": 0,
+    "tail": "return result",
+    "tail_offset": 0,
+    "last_seen": [
+      157,
+      198
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/runner.py|175-176": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "if self.approval_callback is None:",
+    "head_offset": 0,
+    "tail": "raise RuntimeError(\"Esecuzione sospesa: manca un callback di approvazione.\")",
+    "tail_offset": 0,
+    "last_seen": [
+      175,
+      176
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/runner.py|186-197": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "# HumanInTheLoopMiddleware sospende con UN interrupt per turno, ma i tool",
+    "head_offset": 0,
+    "tail": "Command(resume={\"decisions\": [decision] * decisions_count}),",
+    "tail_offset": 2,
+    "last_seen": [
+      186,
+      197
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/runner.py|192-196": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "pending = payload.get(\"action_requests\") if isinstance(payload, dict) else None",
+    "head_offset": 0,
+    "tail": "Command(resume={\"decisions\": [decision] * decisions_count}),",
+    "tail_offset": 1,
+    "last_seen": [
+      192,
+      196
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1150-1150": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "mcp_request = _extract_mcp_proposal(payload)",
+    "head_offset": 0,
+    "tail": "mcp_request = _extract_mcp_proposal(payload)",
+    "tail_offset": 0,
+    "last_seen": [
+      1150,
+      1150
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1150-1188": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "mcp_request = _extract_mcp_proposal(payload)",
+    "head_offset": 0,
+    "tail": "terminal_hint_reason = \"Approvazione MCP rifiutata o scaduta.\"",
+    "tail_offset": 1,
+    "last_seen": [
+      1150,
+      1188
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1152-1164": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "# Aggiunta di un server MCP: gira sull'host, fuori dalla sandbox. Va sempre",
+    "head_offset": 0,
+    "tail": "self.approvals[run_id] = mcp_future",
+    "tail_offset": 0,
+    "last_seen": [
+      1152,
+      1164
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1192-1192": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "safe_payload = build_approval_summary(payload)",
+    "head_offset": 0,
+    "tail": "safe_payload = build_approval_summary(payload)",
+    "tail_offset": 0,
+    "last_seen": [
+      1192,
+      1192
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1192-1224": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "safe_payload = build_approval_summary(payload)",
+    "head_offset": 0,
+    "tail": "{\"approved\": approved},",
+    "tail_offset": 0,
+    "last_seen": [
+      1192,
+      1224
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1194-1199": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "# Letto live a ogni richiesta: se la sessione lavora in autonomia, l'agente",
+    "head_offset": 0,
+    "tail": "self._emit(run_id, session_id, \"approval.auto\", safe_payload)",
+    "tail_offset": 0,
+    "last_seen": [
+      1194,
+      1199
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1199-1199": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "self._emit(run_id, session_id, \"approval.auto\", safe_payload)",
+    "head_offset": 0,
+    "tail": "self._emit(run_id, session_id, \"approval.auto\", safe_payload)",
+    "tail_offset": 0,
+    "last_seen": [
+      1199,
+      1199
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1203-1203": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "store.update_run(run_id, status=\"waiting_approval\")",
+    "head_offset": 0,
+    "tail": "store.update_run(run_id, status=\"waiting_approval\")",
+    "tail_offset": 0,
+    "last_seen": [
+      1203,
+      1203
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1204-1204": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "interrupt = self._record_interrupt(run_id, \"approval\", safe_payload[\"description\"])",
+    "head_offset": 0,
+    "tail": "interrupt = self._record_interrupt(run_id, \"approval\", safe_payload[\"description\"])",
+    "tail_offset": 0,
+    "last_seen": [
+      1204,
+      1204
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1205-1210": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "f\"«{self._session_label(session_id)}» — serve la tua approvazione\",",
+    "head_offset": 2,
+    "tail": "run_id,",
+    "tail_offset": 1,
+    "last_seen": [
+      1205,
+      1210
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1211-1211": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "self._emit(run_id, session_id, \"approval.requested\", safe_payload)",
+    "head_offset": 0,
+    "tail": "self._emit(run_id, session_id, \"approval.requested\", safe_payload)",
+    "tail_offset": 0,
+    "last_seen": [
+      1211,
+      1211
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1213-1213": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "approved = await asyncio.wait_for(approval_future, timeout=600)",
+    "head_offset": 0,
+    "tail": "approved = await asyncio.wait_for(approval_future, timeout=600)",
+    "tail_offset": 0,
+    "last_seen": [
+      1213,
+      1213
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1218-1218": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "self._resolve_interrupt(interrupt, {\"approved\": approved})",
+    "head_offset": 0,
+    "tail": "self._resolve_interrupt(interrupt, {\"approved\": approved})",
+    "tail_offset": 0,
+    "last_seen": [
+      1218,
+      1218
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1223-1223": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "\"approval.resolved\",",
+    "head_offset": 0,
+    "tail": "\"approval.resolved\",",
+    "tail_offset": 0,
+    "last_seen": [
+      1223,
+      1223
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1676-1691": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "# Chiude eventuali interrupt durevoli rimasti pendenti (es. run annullato mentre",
+    "head_offset": 0,
+    "tail": "_LOGGER.exception(\"chiusura interrupt durevoli fallita\", extra={\"run_id\": run_id})",
+    "tail_offset": 0,
+    "last_seen": [
+      1676,
+      1691
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1693-1698": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "async def resolve_approval(self, run_id: str, approved: bool) -> None:",
+    "head_offset": 0,
+    "tail": "future.set_result(approved)",
+    "tail_offset": 0,
+    "last_seen": [
+      1693,
+      1698
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|1708-1712": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "if run[\"status\"] in _TERMINAL_RUN_STATES:",
+    "head_offset": 1,
+    "tail": "if future is not None and not future.done():",
+    "tail_offset": 0,
+    "last_seen": [
+      1708,
+      1712
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|2011-2024": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "@app.get(\"/api/durable/interrupts\")",
+    "head_offset": 0,
+    "tail": "\"id\": item.id,",
+    "tail_offset": 0,
+    "last_seen": [
+      2011,
+      2024
+    ]
+  },
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/server.py|2539-2549": {
+    "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
+    "file": "src/agent_harness/server.py",
+    "head": "@app.post(\"/api/runs/{run_id}/approve\", status_code=status.HTTP_202_ACCEPTED)",
+    "head_offset": 0,
+    "tail": "return {\"status\": \"rejected\"}",
+    "tail_offset": 1,
+    "last_seen": [
+      2539,
+      2549
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|client/src/App.tsx|241-245": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "client/src/App.tsx",
+    "head": "{actionRequest && run && session ? (",
+    "head_offset": 0,
+    "tail": "payload={actionRequest}",
+    "tail_offset": 0,
+    "last_seen": [
+      241,
+      245
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|client/src/components/shared/UserActionDialog.tsx|1-184": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "client/src/components/shared/UserActionDialog.tsx",
+    "head": "import { useRef, useState } from \"react\";",
+    "head_offset": 0,
+    "tail": ");",
+    "tail_offset": 1,
+    "last_seen": [
+      1,
+      184
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/interaction.py|18-18": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/interaction.py",
+    "head": "ResponseKind = Literal[\"confirm\", \"value\", \"file\"]",
+    "head_offset": 0,
+    "tail": "ResponseKind = Literal[\"confirm\", \"value\", \"file\"]",
+    "tail_offset": 0,
+    "last_seen": [
+      18,
+      18
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/interaction.py|21-47": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/interaction.py",
+    "head": "class UserActionInput(BaseModel):",
+    "head_offset": 0,
+    "tail": "description=\"Link opzionale da aprire (es. URL di consenso OAuth).\",",
+    "tail_offset": 1,
+    "last_seen": [
+      21,
+      47
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/interaction.py|50-76": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/interaction.py",
+    "head": "def request_user_action(",
+    "head_offset": 0,
+    "tail": "return str(result)",
+    "tail_offset": 0,
+    "last_seen": [
+      50,
+      76
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/interaction.py|57-65": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/interaction.py",
+    "head": "result: Any = interrupt(",
+    "head_offset": 0,
+    "tail": "}",
+    "tail_offset": 1,
+    "last_seen": [
+      57,
+      65
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/interaction.py|66-76": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/interaction.py",
+    "head": "if isinstance(result, dict):",
+    "head_offset": 0,
+    "tail": "return str(result)",
+    "tail_offset": 0,
+    "last_seen": [
+      66,
+      76
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/interaction.py|79-93": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/interaction.py",
+    "head": "def user_action_tool() -> BaseTool:",
+    "head_offset": 0,
+    "tail": "args_schema=UserActionInput,",
+    "tail_offset": 1,
+    "last_seen": [
+      79,
+      93
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/interaction.py|83-91": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/interaction.py",
+    "head": "\"Fermati e chiedi all'utente di compiere un'azione che solo lui può fare \"",
+    "head_offset": 1,
+    "tail": "\"with_network=true.\"",
+    "tail_offset": 1,
+    "last_seen": [
+      83,
+      91
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/runner.py|169-174": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "if isinstance(payload, dict) and payload.get(\"type\") == \"user_action\":",
+    "head_offset": 0,
+    "tail": "continue",
+    "tail_offset": 0,
+    "last_seen": [
+      169,
+      174
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/runner.py|170-171": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "if self.interaction_callback is None:",
+    "head_offset": 0,
+    "tail": "raise RuntimeError(\"Azione utente richiesta ma manca il callback.\")",
+    "tail_offset": 0,
+    "last_seen": [
+      170,
+      171
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1231-1269": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "async def interaction(payload: dict[str, Any]) -> dict[str, Any]:",
+    "head_offset": 0,
+    "tail": "return resolved",
+    "tail_offset": 0,
+    "last_seen": [
+      1231,
+      1269
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1232-1233": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "# Azione umana sbloccante: si attende SEMPRE l'utente (l'autonomia non può",
+    "head_offset": 1,
+    "tail": "# Azione umana sbloccante: si attende SEMPRE l'utente (l'autonomia non può",
+    "tail_offset": 0,
+    "last_seen": [
+      1232,
+      1233
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1235-1240": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "safe_payload: dict[str, Any] = {",
+    "head_offset": 0,
+    "tail": "\"url\": payload.get(\"url\"),",
+    "tail_offset": 1,
+    "last_seen": [
+      1235,
+      1240
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1243-1243": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "store.update_run(run_id, status=\"waiting_action\")",
+    "head_offset": 0,
+    "tail": "store.update_run(run_id, status=\"waiting_action\")",
+    "tail_offset": 0,
+    "last_seen": [
+      1243,
+      1243
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1244-1244": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "interrupt = self._record_interrupt(run_id, \"user_action\", str(safe_payload[\"title\"]))",
+    "head_offset": 0,
+    "tail": "interrupt = self._record_interrupt(run_id, \"user_action\", str(safe_payload[\"title\"]))",
+    "tail_offset": 0,
+    "last_seen": [
+      1244,
+      1244
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1245-1250": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "\"needs_action\",",
+    "head_offset": 1,
+    "tail": "run_id,",
+    "tail_offset": 1,
+    "last_seen": [
+      1245,
+      1250
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1251-1251": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "self._emit(run_id, session_id, \"action.requested\", safe_payload)",
+    "head_offset": 0,
+    "tail": "self._emit(run_id, session_id, \"action.requested\", safe_payload)",
+    "tail_offset": 0,
+    "last_seen": [
+      1251,
+      1251
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1254-1254": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "except TimeoutError:",
+    "head_offset": 0,
+    "tail": "except TimeoutError:",
+    "tail_offset": 0,
+    "last_seen": [
+      1254,
+      1254
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1258-1259": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "self._resolve_interrupt(interrupt, {\"cancelled\": bool(resolved.get(\"cancelled\"))})",
+    "head_offset": 0,
+    "tail": "self._resolve_interrupt(interrupt, {\"cancelled\": bool(resolved.get(\"cancelled\"))})",
+    "tail_offset": 1,
+    "last_seen": [
+      1258,
+      1259
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1266-1268": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "if resolved.get(\"cancelled\"):",
+    "head_offset": 0,
+    "tail": "terminal_hint_reason = \"Azione utente richiesta annullata o scaduta.\"",
+    "tail_offset": 0,
+    "last_seen": [
+      1266,
+      1268
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1700-1706": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "async def resolve_action(self, run_id: str, response: str, cancel: bool) -> None:",
+    "head_offset": 0,
+    "tail": "future.set_result({\"cancelled\": True} if cancel else {\"response\": response})",
+    "tail_offset": 1,
+    "last_seen": [
+      1700,
+      1706
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|1714-1716": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "action_future = self.interactions.get(run_id)",
+    "head_offset": 0,
+    "tail": "action_future.set_result({\"cancelled\": True})",
+    "tail_offset": 0,
+    "last_seen": [
+      1714,
+      1716
+    ]
+  },
+  "docs/handbook/L3/azione-utente-sbloccante.md|src/agent_harness/server.py|2551-2555": {
+    "doc": "docs/handbook/L3/azione-utente-sbloccante.md",
+    "file": "src/agent_harness/server.py",
+    "head": "@app.post(\"/api/runs/{run_id}/action\", status_code=status.HTTP_202_ACCEPTED)",
+    "head_offset": 0,
+    "tail": "return {\"status\": \"resolved\"}",
+    "tail_offset": 1,
+    "last_seen": [
+      2551,
+      2555
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|110-115": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "class ContextBudgetManager:",
+    "head_offset": 0,
+    "tail": "permette al runner di emettere l'azione come evento prima di applicarla.",
+    "tail_offset": 1,
+    "last_seen": [
+      110,
+      115
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|110-144": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "class ContextBudgetManager:",
+    "head_offset": 0,
+    "tail": "reconstructible_tokens=reconstructible,",
+    "tail_offset": 1,
+    "last_seen": [
+      110,
+      144
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|146-177": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "def decide(self, snapshot: ContextSnapshot, budget: ContextBudget) -> ContextAction:",
+    "head_offset": 0,
+    "tail": "# Se la storia è quasi solo prompt di sistema non c'è niente da comprimere.",
+    "tail_offset": 0,
+    "last_seen": [
+      146,
+      177
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|158-158": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "# In zona warning si interviene solo se c'è un recupero facile da fare.",
+    "head_offset": 0,
+    "tail": "# In zona warning si interviene solo se c'è un recupero facile da fare.",
+    "tail_offset": 0,
+    "last_seen": [
+      158,
+      158
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|168-169": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "# Neanche riducendo si rientra e non c'è nulla di comprimibile: meglio una",
+    "head_offset": 0,
+    "tail": "# continuazione fresca che sbattere contro il rifiuto del provider a metà run.",
+    "tail_offset": 0,
+    "last_seen": [
+      168,
+      169
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|202-240": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "class OffloadedOutput:",
+    "head_offset": 1,
+    "tail": "original_tokens=token_estimate(content),",
+    "tail_offset": 2,
+    "last_seen": [
+      202,
+      240
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|227-228": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "Il checksum lega il riferimento al contenuto esatto: se il file cambia, il checksum non",
+    "head_offset": 0,
+    "tail": "combacia più e il modello sa che l'estratto potrebbe non riflettere l'originale.",
+    "tail_offset": 0,
+    "last_seen": [
+      227,
+      228
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|242-259": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "def drop_reconstructible(messages: list[BaseMessage]) -> list[BaseMessage]:",
+    "head_offset": 0,
+    "tail": "return kept",
+    "tail_offset": 0,
+    "last_seen": [
+      242,
+      259
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|262-302": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "@dataclass",
+    "head_offset": 0,
+    "tail": "return \"\\n\".join(lines)",
+    "tail_offset": 0,
+    "last_seen": [
+      262,
+      302
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|266-267": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "Obiettivo, vincoli, decisioni, errori aperti e prove non si buttano mai; le chiacchiere",
+    "head_offset": 0,
+    "tail": "intermedie sì. Lo schema è quello del piano (§5.3) così la UI può renderizzarlo e il",
+    "tail_offset": 0,
+    "last_seen": [
+      266,
+      267
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|28-37": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "class ContextAction(StrEnum):",
+    "head_offset": 0,
+    "tail": "REJECT_OVER_BUDGET = \"reject_over_budget\"",
+    "tail_offset": 1,
+    "last_seen": [
+      28,
+      37
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|305-313": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "def context_budget_from_settings(settings: Any) -> ContextBudget:",
+    "head_offset": 0,
+    "tail": "compaction_ratio=float(getattr(settings, \"harness_context_compaction_ratio\", 0.8)),",
+    "tail_offset": 1,
+    "last_seen": [
+      305,
+      313
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|316-381": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "class ToolOutputOffloadMiddleware(AgentMiddleware[Any, Any, Any]):",
+    "head_offset": 0,
+    "tail": "return await handler(self._reduce(request))",
+    "tail_offset": 1,
+    "last_seen": [
+      316,
+      381
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|319-321": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "Il file vive nel workspace della sessione. Il ``ToolMessage`` e il suo ``tool_call_id``",
+    "head_offset": 0,
+    "tail": "restano al loro posto, quindi il protocollo tool del provider non viene alterato.",
+    "tail_offset": 1,
+    "last_seen": [
+      319,
+      321
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|383-396": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "class LiveUsageThrottle:",
+    "head_offset": 0,
+    "tail": "self._pending: dict[str, Any] | None = None",
+    "tail_offset": 1,
+    "last_seen": [
+      383,
+      396
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|39-88": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "class ContextBudget:",
+    "head_offset": 1,
+    "tail": "return max(1, self.max_tokens - self.reserved_output_tokens)",
+    "tail_offset": 1,
+    "last_seen": [
+      39,
+      88
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|54-58": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "max_tokens: int",
+    "head_offset": 0,
+    "tail": "hard_ratio: float = 0.95",
+    "tail_offset": 0,
+    "last_seen": [
+      54,
+      58
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|54-88": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "max_tokens: int",
+    "head_offset": 0,
+    "tail": "return max(1, self.max_tokens - self.reserved_output_tokens)",
+    "tail_offset": 1,
+    "last_seen": [
+      54,
+      88
+    ]
+  },
+  "docs/handbook/L3/budget-di-contesto.md|src/agent_harness/context_budget.py|86-88": {
+    "doc": "docs/handbook/L3/budget-di-contesto.md",
+    "file": "src/agent_harness/context_budget.py",
+    "head": "def usable_tokens(self) -> int:",
+    "head_offset": 0,
+    "tail": "return max(1, self.max_tokens - self.reserved_output_tokens)",
+    "tail_offset": 1,
+    "last_seen": [
+      86,
+      88
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/cli.py|82-83": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/cli.py",
+    "head": "except BudgetExceededError as exc:",
+    "head_offset": 0,
+    "tail": "console.print(f\"[yellow]Run fermato per budget: {exc}[/yellow]\")",
+    "tail_offset": 0,
+    "last_seen": [
+      82,
+      83
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/pricing.py|139-221": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/pricing.py",
+    "head": "class PricingCatalog:",
+    "head_offset": 0,
+    "tail": "return str(input_cost + output_cost + reasoning_cost)",
+    "tail_offset": 2,
+    "last_seen": [
+      139,
+      221
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|1-6": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "\"\"\"Budget hard provider-neutral per singolo run.",
+    "head_offset": 0,
+    "tail": "\"\"\"",
+    "tail_offset": 0,
+    "last_seen": [
+      1,
+      6
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|113-121": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "class BudgetReservation:",
+    "head_offset": 1,
+    "tail": "cost_usd: Decimal",
+    "tail_offset": 1,
+    "last_seen": [
+      113,
+      121
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|123-144": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "class RunBudgetSnapshot:",
+    "head_offset": 1,
+    "tail": "return asdict(self)",
+    "tail_offset": 1,
+    "last_seen": [
+      123,
+      144
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|157-199": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "def estimate_request_tokens(request: ModelRequest) -> int:",
+    "head_offset": 0,
+    "tail": "return input_tokens, output_tokens, reasoning_tokens, provider_usage",
+    "tail_offset": 1,
+    "last_seen": [
+      157,
+      199
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|201-303": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "class RunBudgetTracker:",
+    "head_offset": 0,
+    "tail": "raise BudgetExceededError(self._exceeded_dimension, self._exceeded_reason)",
+    "tail_offset": 0,
+    "last_seen": [
+      201,
+      303
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|208-208": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "self._lock = threading.RLock()",
+    "head_offset": 0,
+    "tail": "self._lock = threading.RLock()",
+    "tail_offset": 0,
+    "last_seen": [
+      208,
+      208
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|29-35": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "class BudgetExceededError(RuntimeError):",
+    "head_offset": 0,
+    "tail": "self.dimension = dimension",
+    "tail_offset": 1,
+    "last_seen": [
+      29,
+      35
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|303-303": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "raise BudgetExceededError(self._exceeded_dimension, self._exceeded_reason)",
+    "head_offset": 0,
+    "tail": "raise BudgetExceededError(self._exceeded_dimension, self._exceeded_reason)",
+    "tail_offset": 0,
+    "last_seen": [
+      303,
+      303
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|37-52": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "class SubagentProgressState:",
+    "head_offset": 0,
+    "tail": "return dict(self._outcomes)",
+    "tail_offset": 1,
+    "last_seen": [
+      37,
+      52
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|435-435": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "\"\"\"Conta conservativamente l'input di un tentativo provider fallito durante stream.\"\"\"",
+    "head_offset": 0,
+    "tail": "\"\"\"Conta conservativamente l'input di un tentativo provider fallito durante stream.\"\"\"",
+    "tail_offset": 0,
+    "last_seen": [
+      435,
+      435
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|54-84": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "class BudgetRate:",
+    "head_offset": 1,
+    "tail": ") / _MILLION",
+    "tail_offset": 1,
+    "last_seen": [
+      54,
+      84
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|601-601": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "\"\"\"Registra uno stop esterno (per esempio il timeout dell'intero coroutine run).\"\"\"",
+    "head_offset": 0,
+    "tail": "\"\"\"Registra uno stop esterno (per esempio il timeout dell'intero coroutine run).\"\"\"",
+    "tail_offset": 0,
+    "last_seen": [
+      601,
+      601
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|606-614": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "def build_fixed_model_budget_middleware(",
+    "head_offset": 0,
+    "tail": "\"\"\"Budget subagent con pressione precoce e ultima call riservata alla consegna.\"\"\"",
+    "tail_offset": 0,
+    "last_seen": [
+      606,
+      614
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|606-620": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "def build_fixed_model_budget_middleware(",
+    "head_offset": 0,
+    "tail": "used_calls = int(snapshot.by_call_kind.get(kind, {}).get(\"model_calls\", 0))",
+    "tail_offset": 0,
+    "last_seen": [
+      606,
+      620
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|64-77": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "cls,",
+    "head_offset": 0,
+    "tail": "output_per_million=Decimal(str(output_per_million)),",
+    "tail_offset": 1,
+    "last_seen": [
+      64,
+      77
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|79-84": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "def cost(self, input_tokens: int, output_tokens: int) -> Decimal:",
+    "head_offset": 0,
+    "tail": ") / _MILLION",
+    "tail_offset": 1,
+    "last_seen": [
+      79,
+      84
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|80-84": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "return (",
+    "head_offset": 0,
+    "tail": ") / _MILLION",
+    "tail_offset": 1,
+    "last_seen": [
+      80,
+      84
+    ]
+  },
+  "docs/handbook/L3/budget-di-run.md|src/agent_harness/run_budget.py|86-111": {
+    "doc": "docs/handbook/L3/budget-di-run.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "class RunBudgetLimits:",
+    "head_offset": 1,
+    "tail": "warning_ratio=float(settings.harness_budget_warning_ratio),",
+    "tail_offset": 2,
+    "last_seen": [
+      86,
+      111
+    ]
+  },
+  "docs/handbook/L3/confinamento-filesystem.md|src/agent_harness/config.py|19-20": {
+    "doc": "docs/handbook/L3/confinamento-filesystem.md",
+    "file": "src/agent_harness/config.py",
+    "head": "SANDBOX_WORKSPACE_MOUNT = \"/workspace\"",
+    "head_offset": 0,
+    "tail": "SANDBOX_SKILLS_MOUNT = \"/skills\"",
+    "tail_offset": 0,
+    "last_seen": [
+      19,
+      20
+    ]
+  },
+  "docs/handbook/L3/confinamento-filesystem.md|src/agent_harness/control_store.py|1082-1083": {
+    "doc": "docs/handbook/L3/confinamento-filesystem.md",
+    "file": "src/agent_harness/control_store.py",
+    "head": "def workspace_dir(self, session_id: str) -> Path:",
+    "head_offset": 0,
+    "tail": "return self.session_root(session_id) / \"workspace\"",
+    "tail_offset": 0,
+    "last_seen": [
+      1082,
+      1083
+    ]
+  },
+  "docs/handbook/L3/confinamento-filesystem.md|src/agent_harness/control_store.py|1082-1094": {
+    "doc": "docs/handbook/L3/confinamento-filesystem.md",
+    "file": "src/agent_harness/control_store.py",
+    "head": "def workspace_dir(self, session_id: str) -> Path:",
+    "head_offset": 0,
+    "tail": "# si riflettono nel run successivo. Il lock è di processo e serializza le copie: due",
+    "tail_offset": 0,
+    "last_seen": [
+      1082,
+      1094
+    ]
+  },
+  "docs/handbook/L3/confinamento-filesystem.md|src/agent_harness/control_store.py|1088-1092": {
+    "doc": "docs/handbook/L3/confinamento-filesystem.md",
+    "file": "src/agent_harness/control_store.py",
+    "head": "def prepare_session_root(self, session_id: str) -> Path:",
+    "head_offset": 0,
+    "tail": "(root / \"memories\").mkdir(exist_ok=True)",
+    "tail_offset": 0,
+    "last_seen": [
+      1088,
+      1092
+    ]
+  },
+  "docs/handbook/L3/confinamento-filesystem.md|src/agent_harness/control_store.py|1093-1094": {
+    "doc": "docs/handbook/L3/confinamento-filesystem.md",
+    "file": "src/agent_harness/control_store.py",
+    "head": "# Ricopia le skill da zero a ogni run, così modifiche ed eliminazioni dal pannello",
+    "head_offset": 0,
+    "tail": "# si riflettono nel run successivo. Il lock è di processo e serializza le copie: due",
+    "tail_offset": 0,
+    "last_seen": [
+      1093,
+      1094
+    ]
+  },
+  "docs/handbook/L3/confinamento-filesystem.md|src/agent_harness/factory.py|111-135": {
+    "doc": "docs/handbook/L3/confinamento-filesystem.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "def build_workspace_permissions() -> list[FilesystemPermission]:",
+    "head_offset": 0,
+    "tail": "FilesystemPermission(operations=[\"read\", \"write\"], paths=[\"/**\"], mode=\"deny\"),",
+    "tail_offset": 1,
+    "last_seen": [
+      111,
+      135
+    ]
+  },
+  "docs/handbook/L3/confinamento-filesystem.md|src/agent_harness/factory.py|138-152": {
+    "doc": "docs/handbook/L3/confinamento-filesystem.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "def _read_only_permissions() -> list[FilesystemPermission]:",
+    "head_offset": 0,
+    "tail": "FilesystemPermission(operations=[\"read\"], paths=[\"/**\"], mode=\"deny\"),",
+    "tail_offset": 1,
+    "last_seen": [
+      138,
+      152
+    ]
+  },
+  "docs/handbook/L3/confinamento-filesystem.md|src/agent_harness/factory.py|186-186": {
+    "doc": "docs/handbook/L3/confinamento-filesystem.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "\"permissions\": _read_only_permissions(),",
+    "head_offset": 0,
+    "tail": "\"permissions\": _read_only_permissions(),",
+    "tail_offset": 0,
+    "last_seen": [
+      186,
+      186
+    ]
+  },
+  "docs/handbook/L3/confinamento-filesystem.md|src/agent_harness/factory.py|220-220": {
+    "doc": "docs/handbook/L3/confinamento-filesystem.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "resolved[\"permissions\"] = _read_only_permissions()",
+    "head_offset": 0,
+    "tail": "resolved[\"permissions\"] = _read_only_permissions()",
+    "tail_offset": 0,
+    "last_seen": [
+      220,
+      220
+    ]
+  },
+  "docs/handbook/L3/confinamento-filesystem.md|src/agent_harness/factory.py|775-775": {
+    "doc": "docs/handbook/L3/confinamento-filesystem.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "backend = FilesystemBackend(root_dir=active_backend_root, virtual_mode=True)",
+    "head_offset": 0,
+    "tail": "backend = FilesystemBackend(root_dir=active_backend_root, virtual_mode=True)",
+    "tail_offset": 0,
+    "last_seen": [
+      775,
+      775
+    ]
+  },
+  "docs/handbook/L3/confinamento-filesystem.md|src/agent_harness/factory.py|775-776": {
+    "doc": "docs/handbook/L3/confinamento-filesystem.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "backend = FilesystemBackend(root_dir=active_backend_root, virtual_mode=True)",
+    "head_offset": 0,
+    "tail": "permissions = build_workspace_permissions()",
+    "tail_offset": 0,
+    "last_seen": [
+      775,
+      776
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|125-127": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "def _delegated_environment_verified(self) -> bool:",
+    "head_offset": 0,
+    "tail": "return bool(check()) if callable(check) else False",
+    "tail_offset": 0,
+    "last_seen": [
+      125,
+      127
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|200-215": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "async def run(self, goal: str, *, thread_id: str) -> RunResult:",
+    "head_offset": 0,
+    "tail": "maximum = self.harness.settings.harness_max_continuations",
+    "tail_offset": 0,
+    "last_seen": [
+      200,
+      215
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|200-332": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "async def run(self, goal: str, *, thread_id: str) -> RunResult:",
+    "head_offset": 0,
+    "tail": "{\"messages\": [{\"role\": \"user\", \"content\": continuation}]},",
+    "tail_offset": 2,
+    "last_seen": [
+      200,
+      332
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|201-203": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "clean_goal = goal.strip()",
+    "head_offset": 0,
+    "tail": "raise ValueError(\"L'obiettivo deve contenere da 1 a 20.000 caratteri.\")",
+    "tail_offset": 0,
+    "last_seen": [
+      201,
+      203
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|205-207": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "\"configurable\": {\"thread_id\": thread_id},",
+    "head_offset": 0,
+    "tail": "\"recursion_limit\": 200,",
+    "tail_offset": 1,
+    "last_seen": [
+      205,
+      207
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|209-211": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "# non per la sessione. Un compito difficile non rende caro quello che viene dopo.",
+    "head_offset": 0,
+    "tail": "self.harness.ladder.reset()",
+    "tail_offset": 1,
+    "last_seen": [
+      209,
+      211
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|232-250": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "response_only_retry = False",
+    "head_offset": 1,
+    "tail": "if not heuristic_ok:",
+    "tail_offset": 0,
+    "last_seen": [
+      232,
+      250
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|244-246": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "for check in getattr(self.harness, \"completion_checks\", []):",
+    "head_offset": 1,
+    "tail": "checks.append(check(clean_goal, messages))",
+    "tail_offset": 0,
+    "last_seen": [
+      244,
+      246
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|252-254": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "last_failure_reason = feedback or \"Verifica finale non superata.\"",
+    "head_offset": 0,
+    "tail": "# soglia di escalation dice che il gradino non ce la fa. Fra le due, l'agente",
+    "tail_offset": 0,
+    "last_seen": [
+      252,
+      254
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|252-277": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "last_failure_reason = feedback or \"Verifica finale non superata.\"",
+    "head_offset": 0,
+    "tail": "and not response_only_retry",
+    "tail_offset": 0,
+    "last_seen": [
+      252,
+      277
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|256-256": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "fallimento_netto = not heuristic_ok",
+    "head_offset": 0,
+    "tail": "fallimento_netto = not heuristic_ok",
+    "tail_offset": 0,
+    "last_seen": [
+      256,
+      256
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|270-277": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "response_only_retry = bool(",
+    "head_offset": 0,
+    "tail": "and not response_only_retry",
+    "tail_offset": 0,
+    "last_seen": [
+      270,
+      277
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|278-288": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "if iteration == maximum:",
+    "head_offset": 1,
+    "tail": "failure_reason=last_failure_reason,",
+    "tail_offset": 0,
+    "last_seen": [
+      278,
+      288
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|289-301": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "if feedback and response_only_retry:",
+    "head_offset": 1,
+    "tail": "feedback=feedback,",
+    "tail_offset": 2,
+    "last_seen": [
+      289,
+      301
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|289-311": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "if feedback and response_only_retry:",
+    "head_offset": 1,
+    "tail": "continuation = CONTINUATION_PROMPT.format(",
+    "tail_offset": 1,
+    "last_seen": [
+      289,
+      311
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|312-314": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "# Il gradino ha fallito nettamente: la continuazione la fa il gradino sopra. È il",
+    "head_offset": 2,
+    "tail": "# Il gradino ha fallito nettamente: la continuazione la fa il gradino sopra. È il",
+    "tail_offset": 0,
+    "last_seen": [
+      312,
+      314
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|312-326": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "# Il gradino ha fallito nettamente: la continuazione la fa il gradino sopra. È il",
+    "head_offset": 2,
+    "tail": "# Confine tra iterazioni: la UI accumula i delta di streaming e senza questo",
+    "tail_offset": 0,
+    "last_seen": [
+      312,
+      326
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|316-323": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "salito = self.harness.ladder.escalate() if fallimento_netto else False",
+    "head_offset": 0,
+    "tail": "\"tier\": self.harness.ladder.current,",
+    "tail_offset": 1,
+    "last_seen": [
+      316,
+      323
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|324-326": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "# Confine tra iterazioni: la UI accumula i delta di streaming e senza questo",
+    "head_offset": 2,
+    "tail": "# Confine tra iterazioni: la UI accumula i delta di streaming e senza questo",
+    "tail_offset": 0,
+    "last_seen": [
+      324,
+      326
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|332-332": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": ")",
+    "head_offset": 0,
+    "tail": ")",
+    "tail_offset": 0,
+    "last_seen": [
+      332,
+      332
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|335-387": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "async def _grade(self, goal: str, answer: str, evidence: str = \"\") -> GradeResult | None:",
+    "head_offset": 0,
+    "tail": "return grade",
+    "tail_offset": 1,
+    "last_seen": [
+      335,
+      387
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|45-50": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "def final_text(messages: list[BaseMessage]) -> str:",
+    "head_offset": 0,
+    "tail": "return \"\"",
+    "tail_offset": 1,
+    "last_seen": [
+      45,
+      50
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|52-55": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "# Verbi che segnalano un compito di produzione/modifica di artefatti, quindi da verificare in",
+    "head_offset": 0,
+    "tail": "_VERIFICATION_VERBS: tuple[str, ...] = (",
+    "tail_offset": 0,
+    "last_seen": [
+      52,
+      55
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|53-77": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "# sandbox. Coperte le due lingue del progetto: come il router, non privilegia l'italiano —",
+    "head_offset": 0,
+    "tail": "return any(verb in normalized for verb in _VERIFICATION_VERBS)",
+    "tail_offset": 0,
+    "last_seen": [
+      53,
+      77
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|80-91": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "def _current_turn_messages(messages: list[BaseMessage]) -> list[BaseMessage]:",
+    "head_offset": 0,
+    "tail": "return messages",
+    "tail_offset": 1,
+    "last_seen": [
+      80,
+      91
+    ]
+  },
+  "docs/handbook/L3/continuazione-e-verifica.md|src/agent_harness/runner.py|93-103": {
+    "doc": "docs/handbook/L3/continuazione-e-verifica.md",
+    "file": "src/agent_harness/runner.py",
+    "head": "def has_successful_verification(messages: list[BaseMessage]) -> bool:",
+    "head_offset": 0,
+    "tail": "\"\"\"Aggiunge approvazione e continuazione limitata al graph dell'agente.\"\"\"",
+    "tail_offset": 0,
+    "last_seen": [
+      93,
+      103
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/factory.py|156-228": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "\"researcher\": {",
+    "head_offset": 1,
+    "tail": ") -> list[SubagentProfile]:",
+    "tail_offset": 0,
+    "last_seen": [
+      156,
+      228
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/factory.py|165-170": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "\"confronta le fonti e restituisci una sintesi concisa con URL.\"",
+    "head_offset": 0,
+    "tail": "if tool.name in {\"web_search\", \"browser_read\", \"current_utc_time\"}",
+    "tail_offset": 0,
+    "last_seen": [
+      165,
+      170
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/factory.py|186-186": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "\"permissions\": _read_only_permissions(),",
+    "head_offset": 0,
+    "tail": "\"permissions\": _read_only_permissions(),",
+    "tail_offset": 0,
+    "last_seen": [
+      186,
+      186
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/factory.py|220-220": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "resolved[\"permissions\"] = _read_only_permissions()",
+    "head_offset": 0,
+    "tail": "resolved[\"permissions\"] = _read_only_permissions()",
+    "tail_offset": 0,
+    "last_seen": [
+      220,
+      220
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/factory.py|780-780": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "subagent_semaphore = asyncio.Semaphore(settings.harness_subagents_max_parallel)",
+    "head_offset": 0,
+    "tail": "subagent_semaphore = asyncio.Semaphore(settings.harness_subagents_max_parallel)",
+    "tail_offset": 0,
+    "last_seen": [
+      780,
+      780
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/run_budget.py|606-614": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/run_budget.py",
+    "head": "def build_fixed_model_budget_middleware(",
+    "head_offset": 0,
+    "tail": "\"\"\"Budget subagent con pressione precoce e ultima call riservata alla consegna.\"\"\"",
+    "tail_offset": 0,
+    "last_seen": [
+      606,
+      614
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|129-155": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "class RoutedTask(BaseModel):",
+    "head_offset": 0,
+    "tail": "root_tools: RootToolRoute = Field(default_factory=_empty_root_tool_route)",
+    "tail_offset": 1,
+    "last_seen": [
+      129,
+      155
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|157-173": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "class DelegationExecution:",
+    "head_offset": 1,
+    "tail": "resumed: bool = False",
+    "tail_offset": 1,
+    "last_seen": [
+      157,
+      173
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|157-183": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "class DelegationExecution:",
+    "head_offset": 1,
+    "tail": "assigned: asyncio.Event = field(default_factory=asyncio.Event)",
+    "tail_offset": 1,
+    "last_seen": [
+      157,
+      183
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|185-282": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def routing_prompt(",
+    "head_offset": 0,
+    "tail": "\"\"\"",
+    "tail_offset": 2,
+    "last_seen": [
+      185,
+      282
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|283-291": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def validate_plan(",
+    "head_offset": 0,
+    "tail": "\"\"\"Rimuove agent/ID/dipendenze inventati e rifiuta grafi ciclici.\"\"\"",
+    "tail_offset": 0,
+    "last_seen": [
+      283,
+      291
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|283-508": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def validate_plan(",
+    "head_offset": 0,
+    "tail": ")",
+    "tail_offset": 2,
+    "last_seen": [
+      283,
+      508
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|295-297": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "routed_candidates = [",
+    "head_offset": 0,
+    "tail": "name for name in dict.fromkeys(plan.root_tools.candidates) if name in allowed_tools",
+    "tail_offset": 1,
+    "last_seen": [
+      295,
+      297
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|313-320": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def supports(task: RoutedTask, agent_name: str) -> bool:",
+    "head_offset": 0,
+    "tail": "and not (task.requires_write and profile.read_only)",
+    "tail_offset": 0,
+    "last_seen": [
+      313,
+      320
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|323-323": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "for task in plan.tasks[:max_tasks]:",
+    "head_offset": 0,
+    "tail": "for task in plan.tasks[:max_tasks]:",
+    "tail_offset": 0,
+    "last_seen": [
+      323,
+      323
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|323-325": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "for task in plan.tasks[:max_tasks]:",
+    "head_offset": 0,
+    "tail": "objective = task.objective.strip()",
+    "tail_offset": 0,
+    "last_seen": [
+      323,
+      325
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|325-325": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "objective = task.objective.strip()",
+    "head_offset": 0,
+    "tail": "objective = task.objective.strip()",
+    "tail_offset": 0,
+    "last_seen": [
+      325,
+      325
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|33-33": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "_ARTIFACT_PATH = re.compile(r\"(?:/workspace/)?(?:output|work)/[^\\s`'\\\"<>]+\")",
+    "head_offset": 0,
+    "tail": "_ARTIFACT_PATH = re.compile(r\"(?:/workspace/)?(?:output|work)/[^\\s`'\\\"<>]+\")",
+    "tail_offset": 0,
+    "last_seen": [
+      33,
+      33
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|33-40": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "_ARTIFACT_PATH = re.compile(r\"(?:/workspace/)?(?:output|work)/[^\\s`'\\\"<>]+\")",
+    "head_offset": 0,
+    "tail": "\"cannot proceed\",",
+    "tail_offset": 0,
+    "last_seen": [
+      33,
+      40
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|35-40": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "_BLOCKER_PHRASES = (",
+    "head_offset": 0,
+    "tail": "\"cannot proceed\",",
+    "tail_offset": 0,
+    "last_seen": [
+      35,
+      40
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|531-549": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def _has_cycle(tasks: Sequence[RoutedTask]) -> bool:",
+    "head_offset": 0,
+    "tail": "return any(visit(task_id) for task_id in dependencies)",
+    "tail_offset": 1,
+    "last_seen": [
+      531,
+      549
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|551-621": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def render_plan(plan: DelegationPlan) -> str:",
+    "head_offset": 0,
+    "tail": "return DelegationPlan.model_validate(json.loads(text[start : end + 1]))",
+    "tail_offset": 1,
+    "last_seen": [
+      551,
+      621
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|623-900": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "class SubagentRouterMiddleware(AgentMiddleware[Any, Any, Any]):",
+    "head_offset": 0,
+    "tail": "def _reported_status(output: str) -> str | None:",
+    "tail_offset": 1,
+    "last_seen": [
+      623,
+      900
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|79-127": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "class SubagentProfile(BaseModel):",
+    "head_offset": 0,
+    "tail": "required.append(\"root_tools\")",
+    "tail_offset": 1,
+    "last_seen": [
+      79,
+      127
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagents.py|182-200": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagents.py",
+    "head": "def load_subagent_specs(directory: Path) -> tuple[list[dict[str, Any]], list[str]]:",
+    "head_offset": 0,
+    "tail": "\"system_prompt\",",
+    "tail_offset": 0,
+    "last_seen": [
+      182,
+      200
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagents.py|23-34": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagents.py",
+    "head": "def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:",
+    "head_offset": 0,
+    "tail": "return (front if isinstance(front, dict) else {}), parts[2].lstrip(\"\\n\")",
+    "tail_offset": 1,
+    "last_seen": [
+      23,
+      34
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagents.py|23-85": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagents.py",
+    "head": "def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:",
+    "head_offset": 0,
+    "tail": "return errors",
+    "tail_offset": 2,
+    "last_seen": [
+      23,
+      85
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagents.py|46-85": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagents.py",
+    "head": "def validate_subagent(spec: dict[str, Any], *, file_name: str | None = None) -> list[str]:",
+    "head_offset": 0,
+    "tail": "return errors",
+    "tail_offset": 2,
+    "last_seen": [
+      46,
+      85
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|113-128": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def ensure_network(self, name: str) -> None:",
+    "head_offset": 0,
+    "tail": "timeout=15,",
+    "tail_offset": 1,
+    "last_seen": [
+      113,
+      128
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|124-124": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "[\"docker\", \"network\", \"create\", \"--internal\", \"--driver\", \"bridge\", name],",
+    "head_offset": 0,
+    "tail": "[\"docker\", \"network\", \"create\", \"--internal\", \"--driver\", \"bridge\", name],",
+    "tail_offset": 0,
+    "last_seen": [
+      124,
+      124
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|160-188": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def docker_available(self) -> bool:",
+    "head_offset": 0,
+    "tail": "return ok",
+    "tail_offset": 0,
+    "last_seen": [
+      160,
+      188
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|22-45": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "class DockerExecInput(BaseModel):",
+    "head_offset": 0,
+    "tail": "),",
+    "tail_offset": 2,
+    "last_seen": [
+      22,
+      45
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|227-246": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def _connect_network(self, container: str, network: str) -> None:",
+    "head_offset": 0,
+    "tail": "timeout=15,",
+    "tail_offset": 1,
+    "last_seen": [
+      227,
+      246
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|293-356": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def run_flags(",
+    "head_offset": 0,
+    "tail": "\"/workspace\",",
+    "tail_offset": 1,
+    "last_seen": [
+      293,
+      356
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|300-305": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "\"\"\"Flag di sicurezza per `docker run`, SENZA l'immagine.",
+    "head_offset": 0,
+    "tail": "queste opzioni e l'immagine, mai dopo).",
+    "tail_offset": 0,
+    "last_seen": [
+      300,
+      305
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|306-311": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "`isolated_network` è la rete di base del container: una rete `--internal`",
+    "head_offset": 1,
+    "tail": "`none`, impedendo la concessione temporanea di internet per gli install.",
+    "tail_offset": 1,
+    "last_seen": [
+      306,
+      311
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|328-332": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "\"no-new-privileges\",",
+    "head_offset": 0,
+    "tail": "# build, e «No space left on device» era il risultato. Restano limiti fermi.",
+    "tail_offset": 0,
+    "last_seen": [
+      328,
+      332
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|359-406": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def ensure_running(",
+    "head_offset": 0,
+    "tail": "raise RuntimeError(\"Container sandbox non risulta in esecuzione dopo l'avvio.\")",
+    "tail_offset": 1,
+    "last_seen": [
+      359,
+      406
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|359-419": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def ensure_running(",
+    "head_offset": 0,
+    "tail": "self.forget(session_id)",
+    "tail_offset": 0,
+    "last_seen": [
+      359,
+      419
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|403-404": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "raise RuntimeError(f\"Avvio sandbox sessione fallito:\\n{detail}\")",
+    "head_offset": 0,
+    "tail": "if not self.is_running(session_id):",
+    "tail_offset": 0,
+    "last_seen": [
+      403,
+      404
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|408-419": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def stop(self, session_id: str) -> None:",
+    "head_offset": 0,
+    "tail": "self.forget(session_id)",
+    "tail_offset": 0,
+    "last_seen": [
+      408,
+      419
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|421-472": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def execute(",
+    "head_offset": 0,
+    "tail": "return _offload_or_truncate(combined, workspace, output_limit)",
+    "tail_offset": 1,
+    "last_seen": [
+      421,
+      472
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|434-434": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "if \"\\x00\" in command:",
+    "head_offset": 0,
+    "tail": "if \"\\x00\" in command:",
+    "tail_offset": 0,
+    "last_seen": [
+      434,
+      434
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|436-458": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "self.touch(session_id)",
+    "head_offset": 0,
+    "tail": "self._disconnect_network(container, network)",
+    "tail_offset": 0,
+    "last_seen": [
+      436,
+      458
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|439-443": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "# Concessione per-comando: collega la rete solo per questo exec e la",
+    "head_offset": 1,
+    "tail": "# ancora presente (errore ignorato con check=False); il finally la ripulisce.",
+    "tail_offset": 0,
+    "last_seen": [
+      439,
+      443
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|446-449": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "# Niente `text=True`: farebbe una decodifica UTF-8 STRETTA di stdout/stderr, e",
+    "head_offset": 0,
+    "tail": "# noi con `errors=\"replace\"`, così l'output è sempre una stringa valida.",
+    "tail_offset": 0,
+    "last_seen": [
+      446,
+      449
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|456-458": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "finally:",
+    "head_offset": 0,
+    "tail": "self._disconnect_network(container, network)",
+    "tail_offset": 0,
+    "last_seen": [
+      456,
+      458
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|459-465": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "except FileNotFoundError:",
+    "head_offset": 0,
+    "tail": "return f\"ERRORE: {exc}\"",
+    "tail_offset": 1,
+    "last_seen": [
+      459,
+      465
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|474-485": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def _decode_output(data: bytes | str | None) -> str:",
+    "head_offset": 0,
+    "tail": "return data",
+    "tail_offset": 0,
+    "last_seen": [
+      474,
+      485
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|488-519": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def _offload_or_truncate(combined: str, workspace: Path, output_limit: int) -> str:",
+    "head_offset": 0,
+    "tail": "tail = combined[-output_limit // 2 :]",
+    "tail_offset": 0,
+    "last_seen": [
+      488,
+      519
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|489-498": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "\"\"\"Un output di tool troppo lungo: salva l'integrale su file, tieni in contesto un estratto.",
+    "head_offset": 0,
+    "tail": "fa perdere del tutto l'output.",
+    "tail_offset": 0,
+    "last_seen": [
+      489,
+      498
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|516-519": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "return offloaded.render()",
+    "head_offset": 0,
+    "tail": "tail = combined[-output_limit // 2 :]",
+    "tail_offset": 0,
+    "last_seen": [
+      516,
+      519
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|556-563": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "class SandboxIdleReaper:",
+    "head_offset": 0,
+    "tail": "di un container che magari sta per essere riusato).",
+    "tail_offset": 1,
+    "last_seen": [
+      556,
+      563
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|556-616": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "class SandboxIdleReaper:",
+    "head_offset": 0,
+    "tail": "self._task = None",
+    "tail_offset": 1,
+    "last_seen": [
+      556,
+      616
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|586-595": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "stopped: list[str] = []",
+    "head_offset": 0,
+    "tail": "stopped.append(session_id)",
+    "tail_offset": 0,
+    "last_seen": [
+      586,
+      595
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|598-604": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "async def _loop(self) -> None:",
+    "head_offset": 0,
+    "tail": "await asyncio.sleep(self.tick_seconds)",
+    "tail_offset": 0,
+    "last_seen": [
+      598,
+      604
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|668-681": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def as_tool(self) -> BaseTool:",
+    "head_offset": 0,
+    "tail": "args_schema=DockerExecInput,",
+    "tail_offset": 0,
+    "last_seen": [
+      668,
+      681
+    ]
+  },
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|76-78": {
+    "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "def _session_lock(self, session_id: str) -> threading.Lock:",
+    "head_offset": 0,
+    "tail": "return self._locks.setdefault(session_id, threading.Lock())",
+    "tail_offset": 0,
+    "last_seen": [
+      76,
+      78
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|20-20": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "SCHEMA_VERSION = 2",
+    "head_offset": 0,
+    "tail": "SCHEMA_VERSION = 2",
+    "tail_offset": 0,
+    "last_seen": [
+      20,
+      20
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|20-37": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "SCHEMA_VERSION = 2",
+    "head_offset": 0,
+    "tail": "_BEARER_TOKEN = re.compile(r\"(?i)\\bBearer\\s+[A-Za-z0-9._~+/-]+=*\")",
+    "tail_offset": 0,
+    "last_seen": [
+      20,
+      37
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|207-238": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def collect_source_provenance(project_root: Path | None) -> SourceProvenance:",
+    "head_offset": 0,
+    "tail": "re.IGNORECASE,",
+    "tail_offset": 2,
+    "last_seen": [
+      207,
+      238
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|207-252": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def collect_source_provenance(project_root: Path | None) -> SourceProvenance:",
+    "head_offset": 0,
+    "tail": "rollback_plan=rollback,",
+    "tail_offset": 2,
+    "last_seen": [
+      207,
+      252
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|240-252": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def delivery_boundary(goal: str, provenance: SourceProvenance) -> DeliveryBoundary:",
+    "head_offset": 0,
+    "tail": "rollback_plan=rollback,",
+    "tail_offset": 2,
+    "last_seen": [
+      240,
+      252
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|254-283": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def _artifact_evidence(",
+    "head_offset": 0,
+    "tail": "return artifacts, missing",
+    "tail_offset": 1,
+    "last_seen": [
+      254,
+      283
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|254-355": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def _artifact_evidence(",
+    "head_offset": 0,
+    "tail": "return result",
+    "tail_offset": 1,
+    "last_seen": [
+      254,
+      355
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|285-331": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def _command_evidence(events: list[dict[str, Any]]) -> list[CommandEvidence]:",
+    "head_offset": 0,
+    "tail": "return commands",
+    "tail_offset": 1,
+    "last_seen": [
+      285,
+      331
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|317-317": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "arguments=_redact_sensitive(arguments),",
+    "head_offset": 0,
+    "tail": "arguments=_redact_sensitive(arguments),",
+    "tail_offset": 0,
+    "last_seen": [
+      317,
+      317
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|319-319": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "result=_redact_sensitive(output),",
+    "head_offset": 0,
+    "tail": "result=_redact_sensitive(output),",
+    "tail_offset": 0,
+    "last_seen": [
+      319,
+      319
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|32-32": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "_EXIT_CODE = re.compile(r\"\\bexit_code\\s*=\\s*(-?\\d+)\\b\", re.IGNORECASE)",
+    "head_offset": 0,
+    "tail": "_EXIT_CODE = re.compile(r\"\\bexit_code\\s*=\\s*(-?\\d+)\\b\", re.IGNORECASE)",
+    "tail_offset": 0,
+    "last_seen": [
+      32,
+      32
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|33-36": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "_SENSITIVE_VALUE = re.compile(",
+    "head_offset": 0,
+    "tail": "r\"([\\\"']?)([^\\s,}\\\"']+)([\\\"']?)\"",
+    "tail_offset": 1,
+    "last_seen": [
+      33,
+      36
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|333-355": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def _verifier_evidence(events: list[dict[str, Any]]) -> list[VerifierEvidence]:",
+    "head_offset": 0,
+    "tail": "return result",
+    "tail_offset": 1,
+    "last_seen": [
+      333,
+      355
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|357-437": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def build_evidence_manifest(",
+    "head_offset": 0,
+    "tail": "return manifest",
+    "tail_offset": 1,
+    "last_seen": [
+      357,
+      437
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|37-37": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "_BEARER_TOKEN = re.compile(r\"(?i)\\bBearer\\s+[A-Za-z0-9._~+/-]+=*\")",
+    "head_offset": 0,
+    "tail": "_BEARER_TOKEN = re.compile(r\"(?i)\\bBearer\\s+[A-Za-z0-9._~+/-]+=*\")",
+    "tail_offset": 0,
+    "last_seen": [
+      37,
+      37
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|373-373": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "sandbox_passed = any(command.tool == \"docker_exec\" and command.passed for command in commands)",
+    "head_offset": 0,
+    "tail": "sandbox_passed = any(command.tool == \"docker_exec\" and command.passed for command in commands)",
+    "tail_offset": 0,
+    "last_seen": [
+      373,
+      373
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|376-437": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "id=\"terminal_outcome\",",
+    "head_offset": 0,
+    "tail": "return manifest",
+    "tail_offset": 1,
+    "last_seen": [
+      376,
+      437
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|435-435": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "manifest.manifest_sha256 = _sha256_bytes(_canonical_json(_manifest_payload(manifest)))",
+    "head_offset": 0,
+    "tail": "manifest.manifest_sha256 = _sha256_bytes(_canonical_json(_manifest_payload(manifest)))",
+    "tail_offset": 0,
+    "last_seen": [
+      435,
+      435
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|439-475": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def verify_evidence_manifest(manifest: EvidenceManifest, workspace: Path) -> EvidenceIntegrity:",
+    "head_offset": 0,
+    "tail": "checks=checks,",
+    "tail_offset": 2,
+    "last_seen": [
+      439,
+      475
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|458-462": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "content = b\"\"",
+    "head_offset": 1,
+    "tail": "passed = valid_path and current_hash == artifact.sha256 and len(content) == artifact.size",
+    "tail_offset": 0,
+    "last_seen": [
+      458,
+      462
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|477-534": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def create_evidence_bundle(",
+    "head_offset": 0,
+    "tail": "raise",
+    "tail_offset": 2,
+    "last_seen": [
+      477,
+      534
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|52-55": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def _redact_sensitive(value: str) -> str:",
+    "head_offset": 0,
+    "tail": "return _SENSITIVE_VALUE.sub(r\"\\1\\2***\\4\", redacted)",
+    "tail_offset": 1,
+    "last_seen": [
+      52,
+      55
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|52-64": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def _redact_sensitive(value: str) -> str:",
+    "head_offset": 0,
+    "tail": ").encode(\"utf-8\")",
+    "tail_offset": 1,
+    "last_seen": [
+      52,
+      64
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|536-568": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def run_independent_checker(bundle_root: Path) -> EvidenceCheckerResult:",
+    "head_offset": 0,
+    "tail": "checks=checks,",
+    "tail_offset": 2,
+    "last_seen": [
+      536,
+      568
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|541-544": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "writable_mask = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH",
+    "head_offset": 0,
+    "tail": "read_only = all(not (path.stat().st_mode & writable_mask) for path in paths)",
+    "tail_offset": 1,
+    "last_seen": [
+      541,
+      544
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|57-64": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def _canonical_json(value: dict[str, Any]) -> bytes:",
+    "head_offset": 0,
+    "tail": ").encode(\"utf-8\")",
+    "tail_offset": 1,
+    "last_seen": [
+      57,
+      64
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|570-647": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "def assess_delivery_readiness(",
+    "head_offset": 0,
+    "tail": "ready=all(check.passed for check in checks),",
+    "tail_offset": 2,
+    "last_seen": [
+      570,
+      647
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|581-586": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "gate",
+    "head_offset": 0,
+    "tail": "checks = [",
+    "tail_offset": 1,
+    "last_seen": [
+      581,
+      586
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/evidence.py|73-174": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/evidence.py",
+    "head": "class EvidenceRequirement(BaseModel):",
+    "head_offset": 0,
+    "tail": "checked_at: str",
+    "tail_offset": 2,
+    "last_seen": [
+      73,
+      174
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/server.py|2389-2423": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/server.py",
+    "head": "@app.get(\"/api/runs/{run_id}/evidence\")",
+    "head_offset": 0,
+    "tail": "\"delivery\": delivery.model_dump(mode=\"json\"),",
+    "tail_offset": 2,
+    "last_seen": [
+      2389,
+      2423
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/server.py|2425-2483": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/server.py",
+    "head": "@app.post(\"/api/runs/{run_id}/delivery-gate\")",
+    "head_offset": 0,
+    "tail": "\"delivery\": readiness.model_dump(mode=\"json\"),",
+    "tail_offset": 2,
+    "last_seen": [
+      2425,
+      2483
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/server.py|2436-2437": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/server.py",
+    "head": "raise HTTPException(status_code=409, detail=\"Questo run non richiede un gate di delivery.\")",
+    "head_offset": 0,
+    "tail": "raise HTTPException(status_code=409, detail=\"Questo run non richiede un gate di delivery.\")",
+    "tail_offset": 1,
+    "last_seen": [
+      2436,
+      2437
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/server.py|2448-2452": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/server.py",
+    "head": "if run[\"status\"] != \"completed\":",
+    "head_offset": 0,
+    "tail": "detail=\"Solo un run completato può essere approvato.\",",
+    "tail_offset": 1,
+    "last_seen": [
+      2448,
+      2452
+    ]
+  },
+  "docs/handbook/L3/evidenza-e-delivery-gate.md|src/agent_harness/server.py|2453-2458": {
+    "doc": "docs/handbook/L3/evidenza-e-delivery-gate.md",
+    "file": "src/agent_harness/server.py",
+    "head": "if not integrity.valid or checker is None or not checker.passed:",
+    "head_offset": 0,
+    "tail": "detail=\"Integrità e checker indipendente devono essere validi.\",",
+    "tail_offset": 2,
+    "last_seen": [
+      2453,
+      2458
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/factory.py|982-982": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "FileBlockGuardMiddleware(),",
+    "head_offset": 0,
+    "tail": "FileBlockGuardMiddleware(),",
+    "tail_offset": 0,
+    "last_seen": [
+      982,
+      982
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|1-14": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "\"\"\"Guardia sui blocchi-file inviati al modello: scarta i binari malformati prima del provider.",
+    "head_offset": 0,
+    "tail": "il resto invariato.",
+    "tail_offset": 0,
+    "last_seen": [
+      1,
+      14
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|30-33": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "# Byte iniziali attesi per i formati che sappiamo validare. Un file che dichiara questo",
+    "head_offset": 0,
+    "tail": "\"application/pdf\": b\"%PDF\",",
+    "tail_offset": 0,
+    "last_seen": [
+      30,
+      33
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|30-35": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "# Byte iniziali attesi per i formati che sappiamo validare. Un file che dichiara questo",
+    "head_offset": 0,
+    "tail": "}",
+    "tail_offset": 1,
+    "last_seen": [
+      30,
+      35
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|36-36": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "_REMOVED_NOTE = \"[file non valido rimosso: il contenuto non corrisponde al tipo dichiarato]\"",
+    "head_offset": 0,
+    "tail": "_REMOVED_NOTE = \"[file non valido rimosso: il contenuto non corrisponde al tipo dichiarato]\"",
+    "tail_offset": 0,
+    "last_seen": [
+      36,
+      36
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|39-53": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "def _is_corrupt_file_block(block: Any) -> bool:",
+    "head_offset": 0,
+    "tail": "return head != magic",
+    "tail_offset": 0,
+    "last_seen": [
+      39,
+      53
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|44-46": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "data = block.get(\"base64\")",
+    "head_offset": 0,
+    "tail": "if magic is None or not isinstance(data, str):",
+    "tail_offset": 0,
+    "last_seen": [
+      44,
+      46
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|47-51": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "try:",
+    "head_offset": 1,
+    "tail": "# base64 illeggibile: è comunque un blocco che il provider rifiuterebbe.",
+    "tail_offset": 0,
+    "last_seen": [
+      47,
+      51
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|47-52": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "try:",
+    "head_offset": 1,
+    "tail": "return True",
+    "tail_offset": 0,
+    "last_seen": [
+      47,
+      52
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|53-53": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "return head != magic",
+    "head_offset": 0,
+    "tail": "return head != magic",
+    "tail_offset": 0,
+    "last_seen": [
+      53,
+      53
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|56-60": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "def sanitize_messages(messages: list[BaseMessage]) -> tuple[list[BaseMessage], int]:",
+    "head_offset": 0,
+    "tail": "non si ricostruisce inutilmente l'intera lista a ogni chiamata.",
+    "tail_offset": 0,
+    "last_seen": [
+      56,
+      60
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|56-79": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "def sanitize_messages(messages: list[BaseMessage]) -> tuple[list[BaseMessage], int]:",
+    "head_offset": 0,
+    "tail": "return result, cleaned",
+    "tail_offset": 0,
+    "last_seen": [
+      56,
+      79
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|82-102": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "class FileBlockGuardMiddleware(AgentMiddleware[Any, Any, Any]):",
+    "head_offset": 0,
+    "tail": "return await handler(request)",
+    "tail_offset": 1,
+    "last_seen": [
+      82,
+      102
+    ]
+  },
+  "docs/handbook/L3/igiene-blocchi-file.md|src/agent_harness/file_guard.py|88-90": {
+    "doc": "docs/handbook/L3/igiene-blocchi-file.md",
+    "file": "src/agent_harness/file_guard.py",
+    "head": "sanitized, cleaned = sanitize_messages(list(request.messages))",
+    "head_offset": 0,
+    "tail": "request = request.override(messages=cast(Any, sanitized))",
+    "tail_offset": 0,
+    "last_seen": [
+      88,
+      90
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|1-17": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "\"\"\"Lavoro durevole: state machine di run, coda con lease, interrupt persistenti (Fase 3).",
+    "head_offset": 0,
+    "tail": "rispondere a un'approvazione due volte non produce due esecuzioni.",
+    "tail_offset": 1,
+    "last_seen": [
+      1,
+      17
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|107-118": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "class InvalidTransition(Exception):",
+    "head_offset": 0,
+    "tail": "raise InvalidTransition(f\"{current.value} → {target.value} non ammessa\")",
+    "tail_offset": 1,
+    "last_seen": [
+      107,
+      118
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|11-17": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "Due garanzie centrali:",
+    "head_offset": 0,
+    "tail": "rispondere a un'approvazione due volte non produce due esecuzioni.",
+    "tail_offset": 1,
+    "last_seen": [
+      11,
+      17
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|111-118": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def can_transition(current: RunState, target: RunState) -> bool:",
+    "head_offset": 0,
+    "tail": "raise InvalidTransition(f\"{current.value} → {target.value} non ammessa\")",
+    "tail_offset": 1,
+    "last_seen": [
+      111,
+      118
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|120-123": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def idempotency_key(*parts: str | int) -> str:",
+    "head_offset": 0,
+    "tail": "return \"|\".join(str(part) for part in parts)",
+    "tail_offset": 1,
+    "last_seen": [
+      120,
+      123
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|185-229": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def _setup(self) -> None:",
+    "head_offset": 0,
+    "tail": "# ---- coda di lavoro ------------------------------------------------------",
+    "tail_offset": 1,
+    "last_seen": [
+      185,
+      229
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|207-224": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "CREATE TABLE IF NOT EXISTS interrupts (",
+    "head_offset": 0,
+    "tail": "ON interrupts(run_id, status);",
+    "tail_offset": 0,
+    "last_seen": [
+      207,
+      224
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|277-328": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def claim_once(",
+    "head_offset": 0,
+    "tail": "return True",
+    "tail_offset": 1,
+    "last_seen": [
+      277,
+      328
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|294-295": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "Il controllo e l'inserimento avvengono sotto lo stesso lock, quindi non c'è finestra fra",
+    "head_offset": 0,
+    "tail": "«esiste?» e «inserisci» in cui due chiamate possano entrambe vedere la chiave assente.",
+    "tail_offset": 0,
+    "last_seen": [
+      294,
+      295
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|308-309": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "idempotency_key, attempts, max_attempts, available_at,",
+    "head_offset": 0,
+    "tail": "created_at, updated_at",
+    "tail_offset": 0,
+    "last_seen": [
+      308,
+      309
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|32-54": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "class RunState(StrEnum):",
+    "head_offset": 0,
+    "tail": "CANCELLED = \"cancelled\"",
+    "tail_offset": 1,
+    "last_seen": [
+      32,
+      54
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|329-368": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def claim(",
+    "head_offset": 0,
+    "tail": "return self._require(row[\"id\"])",
+    "tail_offset": 1,
+    "last_seen": [
+      329,
+      368
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|329-385": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def claim(",
+    "head_offset": 0,
+    "tail": "return updated.rowcount > 0",
+    "tail_offset": 1,
+    "last_seen": [
+      329,
+      385
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|34-37": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "``COMPLETED`` e ``INCOMPLETE`` sono distinti di proposito: oggi un run tecnicamente",
+    "head_offset": 1,
+    "tail": "elimina quel mismatch (§7.2 del piano).",
+    "tail_offset": 0,
+    "last_seen": [
+      34,
+      37
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|369-385": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def heartbeat(",
+    "head_offset": 0,
+    "tail": "return updated.rowcount > 0",
+    "tail_offset": 1,
+    "last_seen": [
+      369,
+      385
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|386-425": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def transition(",
+    "head_offset": 0,
+    "tail": "return self._require(item_id)",
+    "tail_offset": 0,
+    "last_seen": [
+      386,
+      425
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|427-464": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def schedule_retry(",
+    "head_offset": 0,
+    "tail": "return self._require(item_id)",
+    "tail_offset": 1,
+    "last_seen": [
+      427,
+      464
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|448-461": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "if item.version != expected_version:",
+    "head_offset": 1,
+    "tail": "(error, available, _iso(moment), item_id, expected_version),",
+    "tail_offset": 0,
+    "last_seen": [
+      448,
+      461
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|465-493": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def reclaim_expired(self, *, now: datetime | None = None) -> list[str]:",
+    "head_offset": 0,
+    "tail": "return ids",
+    "tail_offset": 1,
+    "last_seen": [
+      465,
+      493
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|528-564": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def record_interrupt(",
+    "head_offset": 0,
+    "tail": "return interrupt",
+    "tail_offset": 0,
+    "last_seen": [
+      528,
+      564
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|528-626": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def record_interrupt(",
+    "head_offset": 0,
+    "tail": "(run_id,),",
+    "tail_offset": 2,
+    "last_seen": [
+      528,
+      626
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|566-608": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def resolve_interrupt(",
+    "head_offset": 0,
+    "tail": "return resolved",
+    "tail_offset": 0,
+    "last_seen": [
+      566,
+      608
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|6-9": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "Prima iterazione su SQLite (il piano, §7.3, la prevede esplicitamente): claim atomico con",
+    "head_offset": 1,
+    "tail": "Postgres/Redis sostituisce lo storage senza toccare l'application service.",
+    "tail_offset": 0,
+    "last_seen": [
+      6,
+      9
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|610-617": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def all_pending_interrupts(self) -> list[Interrupt]:",
+    "head_offset": 0,
+    "tail": "\"SELECT * FROM interrupts WHERE status = 'pending' ORDER BY created_at\"",
+    "tail_offset": 2,
+    "last_seen": [
+      610,
+      617
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/durable.py|619-626": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def pending_interrupts(self, run_id: str) -> list[Interrupt]:",
+    "head_offset": 0,
+    "tail": "(run_id,),",
+    "tail_offset": 2,
+    "last_seen": [
+      619,
+      626
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/server.py|2011-2024": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/server.py",
+    "head": "@app.get(\"/api/durable/interrupts\")",
+    "head_offset": 0,
+    "tail": "\"id\": item.id,",
+    "tail_offset": 0,
+    "last_seen": [
+      2011,
+      2024
+    ]
+  },
+  "docs/handbook/L3/lavoro-durevole.md|src/agent_harness/server.py|2015-2017": {
+    "doc": "docs/handbook/L3/lavoro-durevole.md",
+    "file": "src/agent_harness/server.py",
+    "head": "Dopo un riavvio del backend questo elenco mostra cosa era in attesa dell'utente e non è mai",
+    "head_offset": 0,
+    "tail": "Future in memoria. Nessun dato sensibile: solo run, tipo e descrizione.",
+    "tail_offset": 0,
+    "last_seen": [
+      2015,
+      2017
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/control_store.py|1093-1094": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/control_store.py",
+    "head": "# Ricopia le skill da zero a ogni run, così modifiche ed eliminazioni dal pannello",
+    "head_offset": 0,
+    "tail": "# si riflettono nel run successivo. Il lock è di processo e serializza le copie: due",
+    "tail_offset": 0,
+    "last_seen": [
+      1093,
+      1094
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/factory.py|1039-1039": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "skills=[f\"{SANDBOX_SKILLS_MOUNT}/\"],",
+    "head_offset": 0,
+    "tail": "skills=[f\"{SANDBOX_SKILLS_MOUNT}/\"],",
+    "tail_offset": 0,
+    "last_seen": [
+      1039,
+      1039
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|120-127": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def confine_to_directory(base_dir: Path, relative_name: str) -> Path:",
+    "head_offset": 0,
+    "tail": "raise ValueError(\"Percorso non valido.\")",
+    "tail_offset": 2,
+    "last_seen": [
+      120,
+      127
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|120-134": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def confine_to_directory(base_dir: Path, relative_name: str) -> Path:",
+    "head_offset": 0,
+    "tail": "return confine_to_directory(skills_dir, name)",
+    "tail_offset": 1,
+    "last_seen": [
+      120,
+      134
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|129-134": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def _skill_dir(skills_dir: Path, name: str) -> Path:",
+    "head_offset": 0,
+    "tail": "return confine_to_directory(skills_dir, name)",
+    "tail_offset": 1,
+    "last_seen": [
+      129,
+      134
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|150-173": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def _atomic_write(target: Path, content: str | bytes) -> None:",
+    "head_offset": 0,
+    "tail": "temporary.unlink(missing_ok=True)",
+    "tail_offset": 1,
+    "last_seen": [
+      150,
+      173
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|201-214": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def _resolve_within(base: Path, relpath: str) -> Path:",
+    "head_offset": 0,
+    "tail": "return candidate",
+    "tail_offset": 1,
+    "last_seen": [
+      201,
+      214
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|291-337": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def _installs_log(skills_dir: Path) -> Path:",
+    "head_offset": 0,
+    "tail": "# Installazione da fonti esterne: archivio, git, registry",
+    "tail_offset": 2,
+    "last_seen": [
+      291,
+      337
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|339-360": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def _guard_external_host(url: str) -> None:",
+    "head_offset": 0,
+    "tail": "raise ValueError(f\"Host non permesso (link-local/metadata): {ip}\")",
+    "tail_offset": 1,
+    "last_seen": [
+      339,
+      360
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|342-345": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "Non blocca loopback/RFC1918: questo è un harness locale in cui l'operatore incolla",
+    "head_offset": 0,
+    "tail": "cloud su 169.254.169.254 (coperto da link-local) — resta chiuso.",
+    "tail_offset": 1,
+    "last_seen": [
+      342,
+      345
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|362-376": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "class _GuardedRedirectHandler(urllib.request.HTTPRedirectHandler):",
+    "head_offset": 0,
+    "tail": "return super().redirect_request(req, fp, code, msg, headers, newurl)",
+    "tail_offset": 1,
+    "last_seen": [
+      362,
+      376
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|378-387": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def _download_bytes(url: str, max_bytes: int = _MAX_DOWNLOAD_BYTES) -> bytes:",
+    "head_offset": 0,
+    "tail": "return bytes(data)",
+    "tail_offset": 1,
+    "last_seen": [
+      378,
+      387
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|378-400": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def _download_bytes(url: str, max_bytes: int = _MAX_DOWNLOAD_BYTES) -> bytes:",
+    "head_offset": 0,
+    "tail": "raise ValueError(\"Formato archivio non riconosciuto (attesi .zip o .tar.gz).\")",
+    "tail_offset": 1,
+    "last_seen": [
+      378,
+      400
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|389-400": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def _sniff_archive_fmt(data: bytes, url: str = \"\") -> str:",
+    "head_offset": 0,
+    "tail": "raise ValueError(\"Formato archivio non riconosciuto (attesi .zip o .tar.gz).\")",
+    "tail_offset": 1,
+    "last_seen": [
+      389,
+      400
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|402-440": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def _extract_archive(data: bytes, fmt: str, dest: Path) -> None:",
+    "head_offset": 0,
+    "tail": "with extracted as src, target.open(\"wb\") as out:",
+    "tail_offset": 2,
+    "last_seen": [
+      402,
+      440
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|41-54": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:",
+    "head_offset": 0,
+    "tail": "return front, parts[2].lstrip(\"\\n\")",
+    "tail_offset": 0,
+    "last_seen": [
+      41,
+      54
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|502-612": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def install_skill_from_archive(",
+    "head_offset": 0,
+    "tail": "registry_url: str = \"\",",
+    "tail_offset": 1,
+    "last_seen": [
+      502,
+      612
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|57-80": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/skills.py",
+    "head": "def validate_skill(name: Any, dir_name: str, front: dict[str, Any]) -> list[str]:",
+    "head_offset": 0,
+    "tail": "return errors",
+    "tail_offset": 0,
+    "last_seen": [
+      57,
+      80
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/factory.py|1032-1035": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "# Il modello del grafo è solo il punto di partenza: il router lo scavalca a ogni",
+    "head_offset": 0,
+    "tail": "model=tiers[\"low\"].model,",
+    "tail_offset": 1,
+    "last_seen": [
+      1032,
+      1035
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/factory.py|82-82": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/factory.py",
+    "head": "_REGISTRY: ProviderRegistry = default_registry()",
+    "head_offset": 0,
+    "tail": "_REGISTRY: ProviderRegistry = default_registry()",
+    "tail_offset": 0,
+    "last_seen": [
+      82,
+      82
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/middleware.py|141-171": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/middleware.py",
+    "head": "def decide_tier(",
+    "head_offset": 0,
+    "tail": "return RouteDecision(\"low\", \"primo tentativo, gradino più economico\", \"default\")",
+    "tail_offset": 1,
+    "last_seen": [
+      141,
+      171
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/middleware.py|52-58": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/middleware.py",
+    "head": "Tier = Literal[\"low\", \"mid\", \"high\"]",
+    "head_offset": 0,
+    "tail": "TIER_LABELS: dict[Tier, str] = {\"low\": \"basso\", \"mid\": \"medio\", \"high\": \"alto\"}",
+    "tail_offset": 0,
+    "last_seen": [
+      52,
+      58
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/middleware.py|83-119": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/middleware.py",
+    "head": "class RouteDecision:",
+    "head_offset": 0,
+    "tail": "return True",
+    "tail_offset": 1,
+    "last_seen": [
+      83,
+      119
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/middleware.py|83-87": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/middleware.py",
+    "head": "class RouteDecision:",
+    "head_offset": 0,
+    "tail": "source: Literal[\"message_override\", \"session_override\", \"escalation\", \"default\"]",
+    "tail_offset": 1,
+    "last_seen": [
+      83,
+      87
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/middleware.py|98-119": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/middleware.py",
+    "head": "class TierLadder:",
+    "head_offset": 0,
+    "tail": "return True",
+    "tail_offset": 1,
+    "last_seen": [
+      98,
+      119
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/model_errors.py|58-110": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/model_errors.py",
+    "head": "def is_transient_model_error(exc: Exception) -> bool:",
+    "head_offset": 0,
+    "tail": "async def invoke_with_model_retry(",
+    "tail_offset": 0,
+    "last_seen": [
+      58,
+      110
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|119-136": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class ModelDescriptor:",
+    "head_offset": 1,
+    "tail": "return self.pricing_key or self.model",
+    "tail_offset": 1,
+    "last_seen": [
+      119,
+      136
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|12-13": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "solo perché espone ``/v1``: le differenze si dichiarano nelle capability e si verificano con",
+    "head_offset": 0,
+    "tail": "un capability probe, non si danno per scontate.",
+    "tail_offset": 0,
+    "last_seen": [
+      12,
+      13
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|122-124": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "``pricing_key`` collega il descriptor al catalogo prezzi (Fase 0) ed è distinto dal nome",
+    "head_offset": 1,
+    "tail": "vendor, così un alias di config non deve coincidere col nome tecnico del modello.",
+    "tail_offset": 0,
+    "last_seen": [
+      122,
+      124
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|151-164": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class ProviderError(Exception):",
+    "head_offset": 0,
+    "tail": "self.retryable = retryable",
+    "tail_offset": 2,
+    "last_seen": [
+      151,
+      164
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|166-183": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class ModelProvider(Protocol):",
+    "head_offset": 0,
+    "tail": "def classify_error(self, exc: Exception) -> ProviderError: ...",
+    "tail_offset": 1,
+    "last_seen": [
+      166,
+      183
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|185-205": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "def _classify_by_text(exc: Exception) -> ProviderError:",
+    "head_offset": 0,
+    "tail": "return ProviderError(\"unknown\", str(exc), retryable=False)",
+    "tail_offset": 1,
+    "last_seen": [
+      185,
+      205
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|231-294": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class OpenAIProviderAdapter(_BaseAdapter):",
+    "head_offset": 0,
+    "tail": "max_retries=options.max_retries,",
+    "tail_offset": 2,
+    "last_seen": [
+      231,
+      294
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|250-250": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "raise ProviderError(\"auth\", \"OPENAI_API_KEY non configurata.\", retryable=False)",
+    "head_offset": 0,
+    "tail": "raise ProviderError(\"auth\", \"OPENAI_API_KEY non configurata.\", retryable=False)",
+    "tail_offset": 0,
+    "last_seen": [
+      250,
+      250
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|284-284": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "raise ProviderError(\"auth\", \"ANTHROPIC_API_KEY non configurata.\", retryable=False)",
+    "head_offset": 0,
+    "tail": "raise ProviderError(\"auth\", \"ANTHROPIC_API_KEY non configurata.\", retryable=False)",
+    "tail_offset": 0,
+    "last_seen": [
+      284,
+      284
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|296-353": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class _OpenAICompatibleLocalAdapter(_BaseAdapter):",
+    "head_offset": 0,
+    "tail": "name = \"mlx\"",
+    "tail_offset": 2,
+    "last_seen": [
+      296,
+      353
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|355-379": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class ConformanceProviderAdapter(_BaseAdapter):",
+    "head_offset": 0,
+    "tail": "return _classify_by_text(exc)",
+    "tail_offset": 1,
+    "last_seen": [
+      355,
+      379
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|36-43": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class ModelCapabilities:",
+    "head_offset": 1,
+    "tail": "metà run; qui la capacità è nota a startup e la si può rifiutare prima di partire.",
+    "tail_offset": 2,
+    "last_seen": [
+      36,
+      43
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|36-60": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class ModelCapabilities:",
+    "head_offset": 1,
+    "tail": "\"supports_parallel_tools\": self.supports_parallel_tools,",
+    "tail_offset": 0,
+    "last_seen": [
+      36,
+      60
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|381-416": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class ProviderRegistry:",
+    "head_offset": 0,
+    "tail": "return self.get(descriptor.provider).normalize_usage(descriptor, usage_metadata, catalog)",
+    "tail_offset": 1,
+    "last_seen": [
+      381,
+      416
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|381-426": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class ProviderRegistry:",
+    "head_offset": 0,
+    "tail": "return registry",
+    "tail_offset": 1,
+    "last_seen": [
+      381,
+      426
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|383-386": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "Rimuove il ``ChatOpenAI`` cablato nella factory: ogni ruolo (tier, grader, reviewer,",
+    "head_offset": 1,
+    "tail": "confinato all'adattatore.",
+    "tail_offset": 0,
+    "last_seen": [
+      383,
+      386
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|399-402": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "raise ProviderError(",
+    "head_offset": 0,
+    "tail": ") from None",
+    "tail_offset": 1,
+    "last_seen": [
+      399,
+      402
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|418-426": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "def default_registry() -> ProviderRegistry:",
+    "head_offset": 0,
+    "tail": "return registry",
+    "tail_offset": 1,
+    "last_seen": [
+      418,
+      426
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|463-477": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class CapabilityProbeResult:",
+    "head_offset": 1,
+    "tail": "return self.verified.get(capability) is False",
+    "tail_offset": 1,
+    "last_seen": [
+      463,
+      477
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|463-490": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "class CapabilityProbeResult:",
+    "head_offset": 1,
+    "tail": "verified={},",
+    "tail_offset": 2,
+    "last_seen": [
+      463,
+      490
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|475-476": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "def unsupported(self, capability: str) -> bool:",
+    "head_offset": 0,
+    "tail": "return self.verified.get(capability) is False",
+    "tail_offset": 0,
+    "last_seen": [
+      475,
+      476
+    ]
+  },
+  "docs/handbook/L3/registry-provider-e-ladder.md|src/agent_harness/providers.py|479-490": {
+    "doc": "docs/handbook/L3/registry-provider-e-ladder.md",
+    "file": "src/agent_harness/providers.py",
+    "head": "def declared_probe(descriptor: ModelDescriptor) -> CapabilityProbeResult:",
+    "head_offset": 0,
+    "tail": "verified={},",
+    "tail_offset": 2,
+    "last_seen": [
+      479,
+      490
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/canary.py|128-135": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/canary.py",
+    "head": "if status == \"completed\":",
+    "head_offset": 0,
+    "tail": "elif status == \"cancelled\":",
+    "tail_offset": 0,
+    "last_seen": [
+      128,
+      135
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/canary.py|13-13": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/canary.py",
+    "head": "MINIMUM_RUNS_PER_ARM = 5",
+    "head_offset": 0,
+    "tail": "MINIMUM_RUNS_PER_ARM = 5",
+    "tail_offset": 0,
+    "last_seen": [
+      13,
+      13
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/canary.py|16-80": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/canary.py",
+    "head": "class CanaryArmMetrics(BaseModel):",
+    "head_offset": 0,
+    "tail": "),",
+    "tail_offset": 2,
+    "last_seen": [
+      16,
+      80
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/canary.py|8-13": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/canary.py",
+    "head": "CANARY_EVENT_TYPES = (",
+    "head_offset": 0,
+    "tail": "MINIMUM_RUNS_PER_ARM = 5",
+    "tail_offset": 0,
+    "last_seen": [
+      8,
+      13
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/canary.py|82-180": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/canary.py",
+    "head": "def analyze_canary(",
+    "head_offset": 0,
+    "tail": "reasons=collecting_reasons,",
+    "tail_offset": 2,
+    "last_seen": [
+      82,
+      180
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/canary.py|98-113": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/canary.py",
+    "head": "for event in events:",
+    "head_offset": 0,
+    "tail": "elif event.get(\"type\") == \"run.completed\":",
+    "tail_offset": 0,
+    "last_seen": [
+      98,
+      113
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/evaluation.py|110-118": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/evaluation.py",
+    "head": "def _confined_path(root: Path, relative: str) -> Path:",
+    "head_offset": 0,
+    "tail": "return candidate",
+    "tail_offset": 2,
+    "last_seen": [
+      110,
+      118
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/evaluation.py|144-154": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/evaluation.py",
+    "head": "def eval_set_hash(cases: list[EvalCase]) -> str:",
+    "head_offset": 0,
+    "tail": "return hashlib.sha256(payload.encode()).hexdigest()",
+    "tail_offset": 1,
+    "last_seen": [
+      144,
+      154
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/evaluation.py|156-215": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/evaluation.py",
+    "head": "def evaluate_checks(",
+    "head_offset": 0,
+    "tail": ")",
+    "tail_offset": 2,
+    "last_seen": [
+      156,
+      215
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/evaluation.py|18-18": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/evaluation.py",
+    "head": "EVALUATION_SCHEMA_VERSION: Literal[2] = 2",
+    "head_offset": 0,
+    "tail": "EVALUATION_SCHEMA_VERSION: Literal[2] = 2",
+    "tail_offset": 0,
+    "last_seen": [
+      18,
+      18
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/evaluation.py|216-295": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/evaluation.py",
+    "head": "def evaluate_gate(",
+    "head_offset": 0,
+    "tail": "),",
+    "tail_offset": 2,
+    "last_seen": [
+      216,
+      295
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/evaluation.py|224-241": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/evaluation.py",
+    "head": "check_regressions = [",
+    "head_offset": 0,
+    "tail": "or not candidate_by_id[result.case_id].protocol_completed",
+    "tail_offset": 2,
+    "last_seen": [
+      224,
+      241
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/evaluation.py|259-266": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/evaluation.py",
+    "head": "quality_improved = quality_delta >= 0.01",
+    "head_offset": 0,
+    "tail": "f\"Regressioni completion su: {', '.join(completion_regressions)}\"",
+    "tail_offset": 0,
+    "last_seen": [
+      259,
+      266
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/evaluation.py|267-276": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/evaluation.py",
+    "head": "if candidate_summary.check_pass_rate < 0.8:",
+    "head_offset": 1,
+    "tail": "if not quality_improved and not completion_improved and not efficiency_improved:",
+    "tail_offset": 0,
+    "last_seen": [
+      267,
+      276
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/evaluation.py|277-280": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/evaluation.py",
+    "head": "\"Nessun miglioramento misurabile di qualità, completion o efficienza.\"",
+    "head_offset": 1,
+    "tail": "passed = not reasons",
+    "tail_offset": 0,
+    "last_seen": [
+      277,
+      280
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/evaluation.py|281-281": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/evaluation.py",
+    "head": "return (",
+    "head_offset": 0,
+    "tail": "return (",
+    "tail_offset": 0,
+    "last_seen": [
+      281,
+      281
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/evaluation.py|297-490": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/evaluation.py",
+    "head": "async def evaluate_candidate(",
+    "head_offset": 0,
+    "tail": "session_sandbox_manager.stop(session_id)",
+    "tail_offset": 2,
+    "last_seen": [
+      297,
+      490
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/improve.py|116-182": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/improve.py",
+    "head": "def build_report(",
+    "head_offset": 0,
+    "tail": "return report",
+    "tail_offset": 2,
+    "last_seen": [
+      116,
+      182
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/improve.py|16-19": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/improve.py",
+    "head": "# resta sotto controllo umano diretto nel codice.",
+    "head_offset": 0,
+    "tail": "{\"system_prompt_addendum\", \"harness_max_tool_calls\"}",
+    "tail_offset": 1,
+    "last_seen": [
+      16,
+      19
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/improve.py|229-250": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/improve.py",
+    "head": "def write_proposal(proposal: Proposal, report_text: str, improvements_dir: Path) -> Path:",
+    "head_offset": 0,
+    "tail": "return path",
+    "tail_offset": 2,
+    "last_seen": [
+      229,
+      250
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/improve.py|251-260": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/improve.py",
+    "head": "def saved_overrides(proposal_path: Path) -> dict[str, Any]:",
+    "head_offset": 0,
+    "tail": "except (OSError, json.JSONDecodeError):",
+    "tail_offset": 2,
+    "last_seen": [
+      251,
+      260
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/improve.py|251-301": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/improve.py",
+    "head": "def saved_overrides(proposal_path: Path) -> dict[str, Any]:",
+    "head_offset": 0,
+    "tail": "def select_runtime_overrides(",
+    "tail_offset": 0,
+    "last_seen": [
+      251,
+      301
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/improve.py|275-284": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/improve.py",
+    "head": "def replace_override_values(values: dict[str, Any], overrides_path: Path) -> dict[str, Any]:",
+    "head_offset": 0,
+    "tail": "return filtered",
+    "tail_offset": 1,
+    "last_seen": [
+      275,
+      284
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/improve.py|286-292": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/improve.py",
+    "head": "def load_overrides(overrides_path: Path) -> dict[str, Any]:",
+    "head_offset": 0,
+    "tail": "data = tomllib.loads(overrides_path.read_text(encoding=\"utf-8\"))",
+    "tail_offset": 2,
+    "last_seen": [
+      286,
+      292
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/improve.py|294-301": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/improve.py",
+    "head": "def overrides_fingerprint(values: dict[str, Any]) -> str:",
+    "head_offset": 0,
+    "tail": "def select_runtime_overrides(",
+    "tail_offset": 0,
+    "last_seen": [
+      294,
+      301
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/promotion.py|113-145": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/promotion.py",
+    "head": "def promote_proposal(",
+    "head_offset": 0,
+    "tail": "return {\"mode\": mode, \"active\": applied, \"canary\": None, \"version\": version}",
+    "tail_offset": 0,
+    "last_seen": [
+      113,
+      145
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/promotion.py|24-44": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/promotion.py",
+    "head": "def record_config_version(",
+    "head_offset": 0,
+    "tail": "return version",
+    "tail_offset": 2,
+    "last_seen": [
+      24,
+      44
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/promotion.py|24-81": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/promotion.py",
+    "head": "def record_config_version(",
+    "head_offset": 0,
+    "tail": "return restored",
+    "tail_offset": 2,
+    "last_seen": [
+      24,
+      81
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/promotion.py|59-81": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/promotion.py",
+    "head": "def restore_config_version(",
+    "head_offset": 0,
+    "tail": "return restored",
+    "tail_offset": 2,
+    "last_seen": [
+      59,
+      81
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/promotion.py|92-112": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/promotion.py",
+    "head": "def _validated_candidate(",
+    "head_offset": 0,
+    "tail": "return active, candidate, evaluation",
+    "tail_offset": 2,
+    "last_seen": [
+      92,
+      112
+    ]
+  },
+  "docs/handbook/L3/self-improvement.md|src/agent_harness/promotion.py|92-145": {
+    "doc": "docs/handbook/L3/self-improvement.md",
+    "file": "src/agent_harness/promotion.py",
+    "head": "def _validated_candidate(",
+    "head_offset": 0,
+    "tail": "return {\"mode\": mode, \"active\": applied, \"canary\": None, \"version\": version}",
+    "tail_offset": 0,
+    "last_seen": [
+      92,
+      145
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/durable.py|277-328": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/durable.py",
+    "head": "def claim_once(",
+    "head_offset": 0,
+    "tail": "return True",
+    "tail_offset": 1,
+    "last_seen": [
+      277,
+      328
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/server.py|1749-1754": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/server.py",
+    "head": "\"\"\"Costruisce il goal del run; il payload webhook è allegato come dato NON attendibile.\"\"\"",
+    "head_offset": 0,
+    "tail": "goal += _TEXT_RESPONSE_DIRECTIVE",
+    "tail_offset": 0,
+    "last_seen": [
+      1749,
+      1754
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/server.py|1772-1779": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/server.py",
+    "head": "I **webhook** aprono una **sessione fresca a ogni evento**: ogni richiesta in arrivo (es. una",
+    "head_offset": 0,
+    "tail": "fresh_each_fire = trigger.get(\"kind\") == \"webhook\"",
+    "tail_offset": 0,
+    "last_seen": [
+      1772,
+      1779
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/server.py|1907-1910": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/server.py",
+    "head": "# I webhook sono autenticati dal token, non dall'origine: sono pensati per essere chiamati",
+    "head_offset": 0,
+    "tail": "if request.url.path.endswith(\"/webhook\"):",
+    "tail_offset": 0,
+    "last_seen": [
+      1907,
+      1910
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/server.py|2633-2639": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/server.py",
+    "head": "@app.options(\"/api/triggers/{trigger_id}/webhook\")",
+    "head_offset": 0,
+    "tail": "headers={",
+    "tail_offset": 0,
+    "last_seen": [
+      2633,
+      2639
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/server.py|2673-2719": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/server.py",
+    "head": "@app.post(\"/api/triggers/{trigger_id}/webhook\", status_code=status.HTTP_202_ACCEPTED)",
+    "head_offset": 0,
+    "tail": "{\"status\": \"running\", \"run_id\": run_id},",
+    "tail_offset": 0,
+    "last_seen": [
+      2673,
+      2719
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|110-136": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "def describe_cron(expr: str, timezone: str = \"UTC\") -> str:",
+    "head_offset": 0,
+    "tail": "return f\"Ogni giorno alle {clock}{zone_suffix}\"",
+    "tail_offset": 2,
+    "last_seen": [
+      110,
+      136
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|138-160": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "class TriggerScheduler:",
+    "head_offset": 0,
+    "tail": "self._fired_minutes: dict[str, str] = {}",
+    "tail_offset": 1,
+    "last_seen": [
+      138,
+      160
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|153-156": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "self.clock = clock or (lambda: datetime.now(UTC))",
+    "head_offset": 0,
+    "tail": "# sopravvive al riavvio — senza, un restart dentro lo stesso minuto rifà scattare il cron.",
+    "tail_offset": 0,
+    "last_seen": [
+      153,
+      156
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|161-199": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "async def tick(self) -> list[str]:",
+    "head_offset": 0,
+    "tail": "await self.on_fire(trigger)",
+    "tail_offset": 0,
+    "last_seen": [
+      161,
+      199
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|161-200": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "async def tick(self) -> list[str]:",
+    "head_offset": 0,
+    "tail": "fired.append(trigger[\"id\"])",
+    "tail_offset": 0,
+    "last_seen": [
+      161,
+      200
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|165-166": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "# immune ai salti dell'ora legale, che nel fuso locale ripetono lo stesso minuto.",
+    "head_offset": 0,
+    "tail": "minute_key = moment.astimezone(UTC).strftime(\"%Y-%m-%dT%H:%M\")",
+    "tail_offset": 0,
+    "last_seen": [
+      165,
+      166
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|168-169": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "# voci dei minuti passati non hanno più effetto e crescerebbero senza limite.",
+    "head_offset": 0,
+    "tail": "self._fired_minutes = {",
+    "tail_offset": 0,
+    "last_seen": [
+      168,
+      169
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|18-42": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "def _match_field(field: str, value: int, low: int, high: int) -> bool:",
+    "head_offset": 0,
+    "tail": "return False",
+    "tail_offset": 0,
+    "last_seen": [
+      18,
+      42
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|180-186": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "except ValueError:",
+    "head_offset": 1,
+    "tail": "timezone,",
+    "tail_offset": 0,
+    "last_seen": [
+      180,
+      186
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|187-188": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": ")",
+    "head_offset": 0,
+    "tail": ")",
+    "tail_offset": 1,
+    "last_seen": [
+      187,
+      188
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|189-195": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "if self._fired_minutes.get(trigger[\"id\"]) == minute_key:",
+    "head_offset": 0,
+    "tail": "if self.claim_fire is not None and not self.claim_fire(trigger[\"id\"], minute_key):",
+    "tail_offset": 1,
+    "last_seen": [
+      189,
+      195
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|197-199": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "await self.on_fire(trigger)",
+    "head_offset": 2,
+    "tail": "await self.on_fire(trigger)",
+    "tail_offset": 0,
+    "last_seen": [
+      197,
+      199
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|202-208": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "_LOGGER.exception(\"Fire trigger %s fallito\", trigger[\"id\"])",
+    "head_offset": 0,
+    "tail": "await self.tick()",
+    "tail_offset": 0,
+    "last_seen": [
+      202,
+      208
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|202-222": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "_LOGGER.exception(\"Fire trigger %s fallito\", trigger[\"id\"])",
+    "head_offset": 0,
+    "tail": "self._task = None",
+    "tail_offset": 0,
+    "last_seen": [
+      202,
+      222
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|35-36": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "start = end = int(base)",
+    "head_offset": 0,
+    "tail": "if start < low or end > high or start > end:",
+    "tail_offset": 0,
+    "last_seen": [
+      35,
+      36
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|45-51": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "def resolve_timezone(name: str) -> ZoneInfo:",
+    "head_offset": 0,
+    "tail": "raise ValueError(f\"Timezone non valida: {name}\") from exc",
+    "tail_offset": 1,
+    "last_seen": [
+      45,
+      51
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|45-83": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "def resolve_timezone(name: str) -> ZoneInfo:",
+    "head_offset": 0,
+    "tail": "_WEEKDAY_NAMES = [\"domenica\", \"lunedì\", \"martedì\", \"mercoledì\", \"giovedì\", \"venerdì\", \"sabato\"]",
+    "tail_offset": 2,
+    "last_seen": [
+      45,
+      83
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|53-83": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "def cron_matches(expr: str, moment: datetime, timezone: str = \"UTC\") -> bool:",
+    "head_offset": 0,
+    "tail": "_WEEKDAY_NAMES = [\"domenica\", \"lunedì\", \"martedì\", \"mercoledì\", \"giovedì\", \"venerdì\", \"sabato\"]",
+    "tail_offset": 2,
+    "last_seen": [
+      53,
+      83
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|84-101": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "def next_runs(expr: str, timezone: str = \"UTC\", count: int = 3) -> list[datetime]:",
+    "head_offset": 0,
+    "tail": "return found",
+    "tail_offset": 2,
+    "last_seen": [
+      84,
+      101
+    ]
+  },
+  "docs/handbook/L3/trigger-autonomi.md|src/agent_harness/triggers.py|84-136": {
+    "doc": "docs/handbook/L3/trigger-autonomi.md",
+    "file": "src/agent_harness/triggers.py",
+    "head": "def next_runs(expr: str, timezone: str = \"UTC\", count: int = 3) -> list[datetime]:",
+    "head_offset": 0,
+    "tail": "return f\"Ogni giorno alle {clock}{zone_suffix}\"",
+    "tail_offset": 2,
+    "last_seen": [
+      84,
+      136
+    ]
+  }
+}

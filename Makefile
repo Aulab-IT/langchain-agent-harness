@@ -1,4 +1,4 @@
-.PHONY: install test lint format notebooks notebooks-live sandbox-image run chat smoke
+.PHONY: install test lint format handbook handbook-check notebooks notebooks-live sandbox-image run chat smoke
 
 install:
 	uv sync --extra dev
@@ -13,6 +13,12 @@ lint:
 format:
 	uv run ruff format src tests evals scripts steps
 	uv run ruff check --fix src tests evals scripts steps
+
+handbook:
+	uv run python scripts/handbook_sync.py --write
+
+handbook-check:
+	uv run python scripts/handbook_sync.py --check
 
 notebooks:
 	uv run python scripts/validate_notebooks.py --execute-offline

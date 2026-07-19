@@ -45,7 +45,7 @@ def validate_plan(plan, profiles, tools=(), *, max_tasks=8, diagnostics=None):
 
 | Controllo | Evidenza |
 |---|---|
-| tetto di task (`max_tasks=8`) | `subagent_routing.py · L322` |
+| tetto di task (`max_tasks=8`) | `subagent_routing.py · L323` |
 | agente esistente nel roster | `subagent_routing.py · L325` |
 | ID non vuoto e non duplicato | `subagent_routing.py · L323–325` |
 | tool candidati esistenti | `subagent_routing.py · L295–297` |

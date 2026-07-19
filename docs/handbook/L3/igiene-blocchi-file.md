@@ -67,7 +67,7 @@ lascia passare il resto invariato. Non prova a indovinare.
 
 Il sostituto è una nota testuale:
 `[file non valido rimosso: il contenuto non corrisponde al tipo dichiarato]`
-(`file_guard.py · L35`). Il modello vede una spiegazione, non un buco.
+(`file_guard.py · L36`). Il modello vede una spiegazione, non un buco.
 
 ---
 
