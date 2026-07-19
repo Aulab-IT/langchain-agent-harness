@@ -53,6 +53,25 @@ addopts = "-q"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 
+[tool.handbook]
+# `search_roots` è una lista ORDINATA di preferenza: decide quale file vince quando
+# un'ancora usa il nome corto (`runner.py`). L'ordine è la ragione per cui questa
+# configurazione esiste — non è deducibile dalla struttura del repo.
+handbook = "docs/handbook"
+lockfile = "docs/handbook/anchors.lock.json"
+search_roots = [
+    "src/agent_harness",
+    "client/src",
+    "client/src/components/shared",
+    ".",
+]
+extensions = ["py", "tsx", "ts"]
+
+[tool.handbook.html]
+out = "build/handbook/index.html"
+context_lines = 3
+editor = "vscode"
+
 [tool.ruff]
 extend-exclude = ["notebooks"]
 line-length = 100

@@ -44,6 +44,16 @@ def _anchor(start: int, end: int, tmp_path: Path) -> object:
     )
 
 
+def _use_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> object:
+    """Radica la configurazione attiva in una cartella temporanea, per il test corrente."""
+    cfg = sync.Config.from_mapping(
+        {"handbook": ".", "lockfile": "anchors.lock.json", "search_roots": ["."]},
+        tmp_path,
+    )
+    monkeypatch.setattr(sync, "_ACTIVE", cfg)
+    return cfg
+
+
 # --- scelta dell'impronta -------------------------------------------------------------
 
 
@@ -166,7 +176,7 @@ def test_parses_inline_and_table_anchors(tmp_path: Path, monkeypatch: pytest.Mon
         "| `esempio.py` | L20, L30–33 | ruolo |\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(sync, "SEARCH_ROOTS", (tmp_path,))
+    _use_config(tmp_path, monkeypatch)
 
     ranges = [(a.start, a.end) for a in sync.parse_anchors(doc)]
     assert ranges == [(10, 12), (20, 20), (30, 33)]
@@ -175,7 +185,7 @@ def test_parses_inline_and_table_anchors(tmp_path: Path, monkeypatch: pytest.Mon
 def test_ignores_paths_that_do_not_resolve(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     doc = tmp_path / "pagina.md"
     doc.write_text("Vedi `inesistente.py · L1–2`.\n", encoding="utf-8")
-    monkeypatch.setattr(sync, "SEARCH_ROOTS", (tmp_path,))
+    _use_config(tmp_path, monkeypatch)
     assert sync.parse_anchors(doc) == []
 
 
@@ -196,7 +206,7 @@ def test_rewrite_applies_from_the_end_so_offsets_stay_valid(
     code.write_text("\n".join(f"riga {i}" for i in range(1, 200)), encoding="utf-8")
     doc = tmp_path / "pagina.md"
     doc.write_text("Vedi `esempio.py · L5` e `esempio.py · L9–10`.\n", encoding="utf-8")
-    monkeypatch.setattr(sync, "SEARCH_ROOTS", (tmp_path,))
+    _use_config(tmp_path, monkeypatch)
 
     first, second = sync.parse_anchors(doc)
     report = sync.Report(

@@ -27,27 +27,17 @@ ancora corretta.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import re
 import sys
+import tomllib
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-ROOT = Path(__file__).resolve().parents[1]
-HANDBOOK = ROOT / "docs" / "handbook"
-LOCKFILE = HANDBOOK / "anchors.lock.json"
-
-# I file citati per nome corto vivono qui, in ordine di preferenza.
-SEARCH_ROOTS = (
-    ROOT / "src" / "agent_harness",
-    ROOT / "client" / "src",
-    ROOT / "client" / "src" / "components" / "shared",
-    ROOT,
-)
-
-_PATH = re.compile(r"(?<![\w/.-])(?P<path>[\w./-]+\.(?:py|tsx|ts))(?![\w.])")
 _RANGE = re.compile(r"L(?P<a>\d+)(?:(?P<dash>[–-])(?P<b>\d+))?")
 
 # Quante righe in testa e in coda al range sono candidate a fare da impronta. Poche: più ci
@@ -55,6 +45,109 @@ _RANGE = re.compile(r"L(?P<a>\d+)(?:(?P<dash>[–-])(?P<b>\d+))?")
 _CANDIDATES = 3
 
 Outcome = Literal["ok", "relocated", "ambiguous", "lost", "new"]
+
+_DEFAULTS: dict[str, Any] = {
+    "handbook": "docs/handbook",
+    "lockfile": "docs/handbook/anchors.lock.json",
+    "search_roots": ["."],
+    "extensions": ["py"],
+}
+
+
+# --- configurazione -------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Config:
+    """Dove sta il manuale e dove si risolvono i file che cita.
+
+    `search_roots` è la parte che non si può indovinare: è una lista **ordinata di
+    preferenza** che decide quale file vince quando un'ancora usa il nome corto
+    (`runner.py`). Su un repo con `client/src/index.ts` e `server/src/index.ts` l'ordine è
+    l'unica cosa che distingue lo snippet giusto da uno sbagliato ma plausibile. Per questo
+    vive in un file versionato insieme al manuale, non in un flag da ripetere in Makefile,
+    CI, test e skill.
+    """
+
+    root: Path
+    handbook: Path
+    lockfile: Path
+    search_roots: tuple[Path, ...]
+    extensions: tuple[str, ...]
+    html_out: Path
+    html_context_lines: int
+    html_editor: str
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any], root: Path) -> Config:
+        merged = {**_DEFAULTS, **data}
+        html = dict(data.get("html") or {})
+        return cls(
+            root=root,
+            handbook=root / str(merged["handbook"]),
+            lockfile=root / str(merged["lockfile"]),
+            search_roots=tuple(root / str(item) for item in merged["search_roots"]),
+            extensions=tuple(str(item).lstrip(".") for item in merged["extensions"]),
+            html_out=root / str(html.get("out", "build/handbook/index.html")),
+            html_context_lines=int(html.get("context_lines", 3)),
+            html_editor=str(html.get("editor", "vscode")),
+        )
+
+    @classmethod
+    def load(cls, path: Path) -> Config:
+        """Legge `[tool.handbook]` da un pyproject.toml, o la radice di un handbook.toml."""
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        if path.name == "pyproject.toml":
+            data = data.get("tool", {}).get("handbook", {})
+        return cls.from_mapping(data, path.parent)
+
+    @classmethod
+    def discover(cls, start: Path | None = None) -> Config:
+        """Risale dalla cartella corrente cercando una configurazione.
+
+        Ordine: `pyproject.toml` con `[tool.handbook]`, poi `handbook.toml`. La radice del
+        progetto è la cartella del file trovato, non il cwd: così i comandi funzionano da
+        qualunque sottocartella.
+        """
+        current = (start or Path.cwd()).resolve()
+        for folder in [current, *current.parents]:
+            pyproject = folder / "pyproject.toml"
+            if pyproject.is_file():
+                data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+                if "handbook" in data.get("tool", {}):
+                    return cls.from_mapping(data["tool"]["handbook"], folder)
+            handbook_toml = folder / "handbook.toml"
+            if handbook_toml.is_file():
+                return cls.load(handbook_toml)
+        raise SystemExit(
+            "Nessuna configurazione trovata: serve [tool.handbook] in pyproject.toml "
+            "oppure un handbook.toml. Con la skill `manuale-init` la si genera."
+        )
+
+
+_ACTIVE: Config | None = None
+
+
+def active() -> Config:
+    """La configurazione in uso, scoperta alla prima richiesta."""
+    global _ACTIVE
+    if _ACTIVE is None:
+        _ACTIVE = Config.discover()
+    return _ACTIVE
+
+
+def use(config: Config) -> None:
+    """Imposta la configurazione (test, o un chiamante che ne gestisce più d'una)."""
+    global _ACTIVE
+    _ACTIVE = config
+
+
+@functools.lru_cache(maxsize=8)
+def _path_re(extensions: tuple[str, ...]) -> re.Pattern[str]:
+    """Riconosce un percorso citato. Le estensioni vengono dalla config: senza, un'ancora
+    su un repo Go o PHP non verrebbe nemmeno vista."""
+    alternatives = "|".join(re.escape(ext) for ext in extensions)
+    return re.compile(rf"(?<![\w/.-])(?P<path>[\w./-]+\.(?:{alternatives}))(?![\w.])")
 
 
 @dataclass(frozen=True)
@@ -67,11 +160,15 @@ class Anchor:
     end: int
     dash: str
     span: tuple[int, int]  # posizione del token "Lx–y" nel testo del documento
+    # In coda e con default: `Anchor` è frozen e viene costruita per nome nei test, quindi
+    # un campo aggiunto altrove ne romperebbe una quarantina.
+    root: Path | None = None
 
     @property
     def key(self) -> str:
-        rel_doc = self.doc.relative_to(ROOT).as_posix()
-        rel_file = self.file.relative_to(ROOT).as_posix()
+        root = self.root or active().root
+        rel_doc = self.doc.relative_to(root).as_posix()
+        rel_file = self.file.relative_to(root).as_posix()
         return f"{rel_doc}|{rel_file}|{self.start}-{self.end}"
 
     def render(self, start: int, end: int) -> str:
@@ -120,15 +217,41 @@ class Report:
 # --- lettura dei documenti ------------------------------------------------------------
 
 
-def resolve_file(name: str) -> Path | None:
-    for root in SEARCH_ROOTS:
+def resolve_file(name: str, cfg: Config | None = None) -> Path | None:
+    for root in (cfg or active()).search_roots:
         candidate = root / name
         if candidate.is_file():
             return candidate.resolve()
     return None
 
 
-def parse_anchors(doc: Path) -> list[Anchor]:
+def colliding_names(names: Iterable[str], cfg: Config | None = None) -> dict[str, list[Path]]:
+    """Fra i nomi citati dal manuale, quelli che esistono in più di una `search_root`.
+
+    Non è un errore: l'ordine di preferenza è deliberato. Ma su un repo dove quell'ordine
+    non è stato curato a mano, una collisione silenziosa produce snippet sbagliati e
+    credibili — il fallimento peggiore per un manuale che promette evidenza.
+
+    Si guardano solo i nomi effettivamente usati come ancora: cercare le collisioni su
+    tutto il repo significherebbe segnalare i `config.py` di `.venv`, che non interessano
+    nessuno.
+    """
+    cfg = cfg or active()
+    found: dict[str, list[Path]] = {}
+    for name in sorted(set(names)):
+        if "/" in name:  # percorso completo: non c'è ambiguità da risolvere
+            continue
+        candidates = []
+        for root in cfg.search_roots:
+            candidate = (root / name).resolve()
+            if candidate.is_file() and candidate not in candidates:
+                candidates.append(candidate)
+        if len(candidates) > 1:
+            found[name] = candidates
+    return found
+
+
+def parse_anchors(doc: Path, cfg: Config | None = None) -> list[Anchor]:
     """Estrae le ancore di un documento, riga per riga.
 
     Un'ancora non attraversa mai una riga di markdown, e sulla stessa riga un percorso può
@@ -136,12 +259,14 @@ def parse_anchors(doc: Path) -> list[Anchor]:
     ``| `durable.py` | L42, L207–224 |``). Si associa quindi ogni range al percorso che lo
     precede sulla stessa riga, fermandosi al percorso successivo.
     """
+    cfg = cfg or active()
+    path_re = _path_re(cfg.extensions)
     anchors: list[Anchor] = []
     offset = 0
     for line in doc.read_text(encoding="utf-8").splitlines(keepends=True):
-        paths = list(_PATH.finditer(line))
+        paths = list(path_re.finditer(line))
         for index, match in enumerate(paths):
-            resolved = resolve_file(match.group("path"))
+            resolved = resolve_file(match.group("path"), cfg)
             if resolved is None:
                 continue
             stop = paths[index + 1].start() if index + 1 < len(paths) else len(line)
@@ -156,16 +281,18 @@ def parse_anchors(doc: Path) -> list[Anchor]:
                         end=end,
                         dash=rng.group("dash") or "–",
                         span=(offset + rng.start(), offset + rng.end()),
+                        root=cfg.root,
                     )
                 )
         offset += len(line)
     return anchors
 
 
-def all_anchors() -> list[Anchor]:
+def all_anchors(cfg: Config | None = None) -> list[Anchor]:
+    cfg = cfg or active()
     found: list[Anchor] = []
-    for doc in sorted(HANDBOOK.rglob("*.md")):
-        found.extend(parse_anchors(doc))
+    for doc in sorted(cfg.handbook.rglob("*.md")):
+        found.extend(parse_anchors(doc, cfg))
     return found
 
 
@@ -283,28 +410,32 @@ def relocate(lines: list[str], anchor: Anchor, print_: Fingerprint) -> Result:
 # --- lockfile -------------------------------------------------------------------------
 
 
-def load_lock() -> dict[str, dict[str, Any]]:
-    if not LOCKFILE.is_file():
+def load_lock(cfg: Config | None = None) -> dict[str, dict[str, Any]]:
+    lockfile = (cfg or active()).lockfile
+    if not lockfile.is_file():
         return {}
-    data: dict[str, dict[str, Any]] = json.loads(LOCKFILE.read_text(encoding="utf-8"))
+    data: dict[str, dict[str, Any]] = json.loads(lockfile.read_text(encoding="utf-8"))
     return data
 
 
-def save_lock(entries: dict[str, dict[str, Any]]) -> None:
+def save_lock(entries: dict[str, dict[str, Any]], cfg: Config | None = None) -> None:
+    lockfile = (cfg or active()).lockfile
+    lockfile.parent.mkdir(parents=True, exist_ok=True)
     ordered = {key: entries[key] for key in sorted(entries)}
-    LOCKFILE.write_text(json.dumps(ordered, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    lockfile.write_text(json.dumps(ordered, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 # --- esecuzione -----------------------------------------------------------------------
 
 
-def run(mode: Literal["adopt", "check", "write"]) -> Report:
-    lock = load_lock()
+def run(mode: Literal["adopt", "check", "write"], cfg: Config | None = None) -> Report:
+    cfg = cfg or active()
+    lock = load_lock(cfg)
     report = Report()
     file_lines: dict[Path, list[str]] = {}
     fresh: dict[str, dict[str, Any]] = {}
 
-    for anchor in all_anchors():
+    for anchor in all_anchors(cfg):
         if anchor.file not in file_lines:
             file_lines[anchor.file] = anchor.file.read_text(encoding="utf-8").splitlines()
         lines = file_lines[anchor.file]
@@ -353,15 +484,16 @@ def run(mode: Literal["adopt", "check", "write"]) -> Report:
     if mode == "write":
         rewrite_docs(report)
     if mode in ("adopt", "write"):
-        save_lock(fresh)
+        save_lock(fresh, cfg)
 
     return report
 
 
 def _entry(anchor: Anchor, print_: Fingerprint) -> dict[str, Any]:
+    root = anchor.root or active().root
     return {
-        "doc": anchor.doc.relative_to(ROOT).as_posix(),
-        "file": anchor.file.relative_to(ROOT).as_posix(),
+        "doc": anchor.doc.relative_to(root).as_posix(),
+        "file": anchor.file.relative_to(root).as_posix(),
         **print_.to_dict(),
         "last_seen": [anchor.start, anchor.end],
     }
@@ -389,7 +521,8 @@ def rewrite_docs(report: Report) -> None:
 # --- interfaccia ----------------------------------------------------------------------
 
 
-def summarize(report: Report, mode: str) -> int:
+def summarize(report: Report, mode: str, cfg: Config | None = None) -> int:
+    cfg = cfg or active()
     counts = report.counts
     total = sum(counts.values())
     print(f"{total} ancore · " + " · ".join(f"{k}: {v}" for k, v in sorted(counts.items())))
@@ -405,7 +538,7 @@ def summarize(report: Report, mode: str) -> int:
             continue
         print(f"\n{title}")
         for result in items[:40]:
-            doc = result.anchor.doc.relative_to(HANDBOOK).as_posix()
+            doc = result.anchor.doc.relative_to(cfg.handbook).as_posix()
             file = result.anchor.file.name
             detail = f"  {result.detail}" if result.detail else ""
             print(f"  {doc}  {file} L{result.anchor.start}–{result.anchor.end}{detail}")
@@ -421,16 +554,74 @@ def summarize(report: Report, mode: str) -> int:
     return 0
 
 
-def main() -> int:
+VENDOR_HEADER = re.compile(r"^# vendored: (?P<plugin>\S+) (?P<version>\S+) · sha256:(?P<sha>\w+)")
+
+
+def vendor_check(path: Path | None = None) -> int:
+    """Verifica che la copia vendorizzata non sia stata modificata a mano.
+
+    Rileva la deriva, non la impedisce: prima o poi qualcuno correggerà un bug qui invece
+    che nel plugin, e da quel momento i due file divergono in silenzio. Il messaggio dice
+    dove va portato il fix.
+    """
+    path = path or Path(__file__).resolve()
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    marked = [index for index, line in enumerate(lines) if VENDOR_HEADER.match(line)]
+    if not marked:
+        print("Copia non vendorizzata (nessun header di provenienza): niente da verificare.")
+        return 0
+
+    index = marked[0]
+    match = VENDOR_HEADER.match(lines[index])
+    assert match is not None
+    body = "".join(lines[:index] + lines[index + 1 :])
+    import hashlib
+
+    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    if digest == match.group("sha"):
+        return 0
+    print(
+        f"{path.name} diverge da {match.group('plugin')} {match.group('version')}.\n"
+        "Se il cambiamento serve, portalo nel plugin e riallinea con "
+        "`manuale-init --update`: una correzione che vive solo qui sparisce al prossimo "
+        "aggiornamento."
+    )
+    return 1
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--adopt", action="store_true", help="registra le ancore nuove")
     group.add_argument("--check", action="store_true", help="verifica senza modificare (CI)")
     group.add_argument("--write", action="store_true", help="rilocalizza e riscrive i .md")
-    args = parser.parse_args()
+    group.add_argument(
+        "--vendor-check", action="store_true", help="verifica la provenienza di questo script"
+    )
+    parser.add_argument("--config", type=Path, help="percorso della configurazione")
+    parser.add_argument("--root", type=Path, help="radice del progetto (scavalca la config)")
+    args = parser.parse_args(argv)
+
+    if args.vendor_check:
+        return vendor_check()
+
+    if args.config is not None:
+        use(Config.load(args.config.resolve()))
+    elif args.root is not None:
+        use(Config.discover(args.root.resolve()))
+
+    cfg = active()
+    cited = {anchor.file.name for anchor in all_anchors(cfg)}
+    collisions = colliding_names(cited, cfg)
+    if collisions:
+        print(f"Attenzione: {len(collisions)} nomi citati risolvono in più search_roots.")
+        for name, paths in list(collisions.items())[:5]:
+            others = ", ".join(str(p.relative_to(cfg.root)) for p in paths[1:3])
+            print(f"  {name} → {paths[0].relative_to(cfg.root)}  (anche: {others})")
+        print("  Nelle tabelle di riepilogo usa i percorsi completi.\n")
 
     mode = "adopt" if args.adopt else "check" if args.check else "write"
-    return summarize(run(mode), mode)
+    return summarize(run(mode, cfg), mode, cfg)
 
 
 if __name__ == "__main__":
