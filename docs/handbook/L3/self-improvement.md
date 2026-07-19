@@ -65,7 +65,7 @@ Un caso mancante nel candidato conta come regressione, non come dato assente.
 | token ratio > 1.2 | bloccato (+20% max) |
 | latency ratio > 1.3 | bloccato (+30% max) |
 
-**Evidenza:** `evaluation.py · L267–276`.
+**Evidenza:** `evaluation.py · L268–276`.
 
 Il candidato non può comprare qualità con costo illimitato.
 

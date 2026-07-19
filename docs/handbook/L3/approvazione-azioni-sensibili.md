@@ -48,7 +48,7 @@ Da leggere come una disgiunzione con una gamba non negoziabile:
 server MCP stdio gira **sull'host, fuori dalla sandbox Docker**, quindi cambia i privilegi
 del sistema, non solo quelli del container. Il costante-`True` è deliberato — impedisce che
 un futuro refactor della condizione lasci passare questa azione insieme alle altre
-(`factory.py · L790–797`).
+(`factory.py · L791–797`).
 
 ---
 
@@ -107,7 +107,7 @@ su tutte le tool call pendenti.
 | Sospensione | evento `approval.requested` sul flusso SSE | `server.py · L1211` |
 | Risoluzione | `Future` completata dal REST | `server.py · L1693–1698` |
 | Risoluzione | interrupt marcato risolto, idempotente | `server.py · L1218`, `durable.py · L566–608` |
-| Risoluzione | evento `approval.resolved` | `server.py · L1223` |
+| Risoluzione | evento `approval.resolved` | `server.py · L1220–1225` |
 | Auto-approvazione | evento `approval.auto`, nessuna sospensione | `server.py · L1199` |
 
 Lo stato `WAITING_APPROVAL` è parte della state machine dichiarata in `durable.py · L42`, non
@@ -210,7 +210,7 @@ approvazione non deve poter eseguire azioni sensibili.
 | Callback | `ask_approval` (`cli.py · L63–76`) | `approval` (`server.py · L1150`) |
 | Riepilogo mostrato | `build_approval_summary` | `build_approval_summary` |
 | Presentazione | Panel Rich (`cli.py · L36–60`) | modale React con badge di rischio |
-| Rete | prompt dedicato, `default=False` (`cli.py · L70–75`) | badge `network` + descrizione dedicata |
+| Rete | prompt dedicato, `default=False` (`cli.py · L68–73`) | badge `network` + descrizione dedicata |
 | Auto-approvazione | non disponibile | per sessione, `PATCH /api/sessions/{id}/auto-approve` |
 | Risposta | `typer.confirm` | `POST /api/runs/{id}/approve` \| `/reject` (`server.py · L2539–2549`) |
 

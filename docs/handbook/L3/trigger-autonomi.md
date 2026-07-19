@@ -30,7 +30,7 @@ all'anteprima nella UI — si vede cosa farà prima di salvarlo.
 
 Due difese in serie, con ruoli diversi.
 
-**Evidenza:** `triggers.py · L161–199`.
+**Evidenza:** `triggers.py · L161–203`.
 
 ```python
 minute_key = moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M")
@@ -46,8 +46,8 @@ problema non esiste.
 
 | Difesa | Cosa copre | Evidenza |
 |---|---|---|
-| cache in memoria `_fired_minutes` | doppio tick nello stesso minuto | `triggers.py · L187–188` |
-| `claim_fire` durevole | riavvio dentro lo stesso minuto | `triggers.py · L189–195` |
+| cache in memoria `_fired_minutes` | doppio tick nello stesso minuto | `triggers.py · L189–190` |
+| `claim_fire` durevole | riavvio dentro lo stesso minuto | `triggers.py · L191–196` |
 
 Il commento nel costruttore è netto: la cache *«è la prima linea (veloce); questo è la
 garanzia "una volta sola" che sopravvive al riavvio — senza, un restart dentro lo stesso
@@ -56,7 +56,7 @@ minuto rifà scattare il cron»* (`triggers.py · L153–156`).
 `claim_fire` è cablato su `claim_once` del [lavoro durevole](lavoro-durevole.md#claim_once).
 
 La cache viene **potata a ogni tick**, tenendo solo il minuto corrente: «le voci dei minuti
-passati non hanno più effetto e crescerebbero senza limite» (`triggers.py · L168–169`). Una
+passati non hanno più effetto e crescerebbero senza limite» (`triggers.py · L167–168`). Una
 cache anti-duplicato che cresce all'infinito è una perdita di memoria travestita da
 ottimizzazione.
 
@@ -64,10 +64,10 @@ ottimizzazione.
 
 Ogni livello cattura e continua:
 
-- cron o fuso non validi → warning, si salta quel trigger (`triggers.py · L180–186`);
+- cron o fuso non validi → warning, si salta quel trigger (`triggers.py · L181–188`);
 - `on_fire` che solleva → exception loggata, gli altri trigger proseguono
-  (`triggers.py · L197–199`);
-- tick che fallisce → loggato, il loop continua (`triggers.py · L202–208`).
+  (`triggers.py · L198–202`);
+- tick che fallisce → loggato, il loop continua (`triggers.py · L205–212`).
 
 Un trigger rotto non ferma lo scheduler.
 
@@ -88,7 +88,7 @@ token, non dall'origine: sono pensati per essere chiamati»* da qualunque origin
 
 ### Il payload è dato, mai istruzione
 
-**Evidenza:** `server.py · L1749–1754`.
+**Evidenza:** `server.py · L1748–1754`.
 
 > «Costruisce il goal del run; il payload webhook è allegato come dato **NON attendibile**.»
 
@@ -123,7 +123,7 @@ continuità è utile.
 | `src/agent_harness/triggers.py` | L138–160 | scheduler e reclamo durevole |
 | `src/agent_harness/triggers.py` | L161–200 | chiave UTC, doppia difesa, potatura |
 | `src/agent_harness/triggers.py` | L202–222 | loop resiliente e avvio/stop |
-| `src/agent_harness/server.py` | L1749–1754 | payload come dato non attendibile |
+| `src/agent_harness/server.py` | L1748–1754 | payload come dato non attendibile |
 | `src/agent_harness/server.py` | L1772–1779 | sessione fresca per i webhook |
 | `src/agent_harness/server.py` | L2633–2639 | preflight CORS aperto |
 | `src/agent_harness/server.py` | L2673–2719 | endpoint webhook con token |

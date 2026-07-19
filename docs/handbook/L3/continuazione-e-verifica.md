@@ -71,7 +71,7 @@ il primo obiettivo verificato di un thread renderebbe «verificati» tutti quell
 ### Controlli estensibili
 
 Oltre a quello d'ambiente, il runner esegue i `completion_checks` registrati sull'harness
-(`runner.py · L244–246`), definiti in `outcome_checks.py`. Ogni check ritorna
+(`runner.py · L245–246`), definiti in `outcome_checks.py`. Ogni check ritorna
 `(passato, messaggio)` e i messaggi dei falliti diventano feedback per l'iterazione
 successiva.
 
@@ -107,7 +107,7 @@ problema è la risposta finale, non il lavoro.
 
 In quel caso `fallimento_netto` resta falso — niente escalation — e la continuazione usa
 `FINAL_RESPONSE_FEEDBACK_PROMPT` invece del prompt di verifica generico
-(`runner.py · L289–301`). Si chiede di riscrivere la risposta, non di rifare il lavoro.
+(`runner.py · L290–301`). Si chiede di riscrivere la risposta, non di rifare il lavoro.
 
 I due criteri esclusi dal retry-leggero non sono casuali: sicurezza e aderenza sono quelli
 per cui «rispondi meglio» non è mai la correzione giusta.
@@ -133,7 +133,7 @@ finisce nella trace (`runner.py · L316–323`).
 
 ## Esiti terminali
 
-**Evidenza:** `runner.py · L278–288`.
+**Evidenza:** `runner.py · L279–288`.
 
 | `terminal_status` | Quando |
 |---|---|
@@ -153,7 +153,7 @@ contare come «errore dell'agente» un run semplicemente troppo lungo.
 
 L'evento `assistant.iteration` esiste per un motivo di interfaccia: *«la UI accumula i delta
 di streaming e senza questo marcatore concatenerebbe la risposta di ogni continuazione alla
-precedente»* (`runner.py · L324–326`).
+precedente»* (`runner.py · L326–328`).
 
 ### Limiti di sicurezza
 
@@ -164,7 +164,7 @@ precedente»* (`runner.py · L324–326`).
 ### Stato impossibile
 
 Il ciclo termina con `raise AssertionError("Ciclo di continuazione terminato in stato
-impossibile.")` (`runner.py · L332`). Non è codice morto difensivo generico: rende rumoroso
+impossibile.")` (`runner.py · L333`). Non è codice morto difensivo generico: rende rumoroso
 un eventuale futuro `break` che saltasse i due `return`.
 
 ---
@@ -178,11 +178,11 @@ un eventuale futuro `break` che saltasse i due `return`.
 | `src/agent_harness/runner.py` | L80–91 | taglio al turno corrente |
 | `src/agent_harness/runner.py` | L93–103 | prova d'esecuzione riuscita |
 | `src/agent_harness/runner.py` | L200–215 | avvio, reset ladder, limiti |
-| `src/agent_harness/runner.py` | L232–250 | controlli euristici e feedback |
+| `src/agent_harness/runner.py` | L233–250 | controlli euristici e feedback |
 | `src/agent_harness/runner.py` | L252–277 | grader, tre esiti, retry leggero |
-| `src/agent_harness/runner.py` | L278–288 | esiti terminali |
-| `src/agent_harness/runner.py` | L289–311 | scelta del prompt di continuazione |
-| `src/agent_harness/runner.py` | L312–326 | escalation misurata ed eventi |
+| `src/agent_harness/runner.py` | L279–288 | esiti terminali |
+| `src/agent_harness/runner.py` | L290–311 | scelta del prompt di continuazione |
+| `src/agent_harness/runner.py` | L312–328 | escalation misurata ed eventi |
 | `src/agent_harness/runner.py` | L335–387 | invocazione del grader |
 | `src/agent_harness/verification.py` | — | `RubricGrader`, rubric congelata |
 | `src/agent_harness/outcome_checks.py` | — | check di completamento |

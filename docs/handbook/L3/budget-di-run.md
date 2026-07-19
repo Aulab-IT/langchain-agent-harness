@@ -67,7 +67,7 @@ via più semplice per aggirare il budget.
 
 `BudgetRate.cost` (`run_budget.py · L79–84`) usa `Decimal` per tutto il percorso, e
 `from_values` converte passando da `str` — `Decimal(str(0.1))`, non `Decimal(0.1)`
-(`run_budget.py · L64–77`).
+(`run_budget.py · L63–77`).
 
 Il float qui accumulerebbe errore su migliaia di chiamate, e un budget che sfora per
 arrotondamento è un budget che non si può difendere.
@@ -112,12 +112,12 @@ rispetto al lavoro vero.
 ### Tentativi falliti in streaming
 
 Un tentativo che fallisce a metà stream ha comunque consumato input dal provider. Il tracker
-lo *«conta conservativamente»* (`run_budget.py · L435`): la stima prudente è preferibile al
+lo *«conta conservativamente»* (`run_budget.py · L434–435`): la stima prudente è preferibile al
 non contarlo, perché un errore ripetuto sarebbe altrimenti gratis.
 
 ### Stop esterno
 
-`run_budget.py · L601` registra uno stop esterno — per esempio il timeout dell'intero
+`run_budget.py · L600–601` registra uno stop esterno — per esempio il timeout dell'intero
 coroutine del run — nella stessa struttura, così l'esito è coerente con le altre dimensioni
 invece di essere un percorso a parte.
 

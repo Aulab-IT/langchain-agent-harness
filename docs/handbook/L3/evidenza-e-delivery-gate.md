@@ -120,7 +120,7 @@ approved = bool(
 )
 ```
 
-**Evidenza:** `evidence.py · L581–586`.
+**Evidenza:** `evidence.py · L580–584`.
 
 L'approvazione vale **per quel manifest**, non per il run. Se qualcosa cambia dopo
 l'approvazione, il manifest ha un hash diverso e l'approvazione non si applica più. Non

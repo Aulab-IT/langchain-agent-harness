@@ -57,7 +57,7 @@ uscita verso internet), ma collegabile a caldo (`sandbox.py · L306–311`,
 **Perché i limiti sono 2g e non 512m.** Erano più stretti e sono stati alzati per un motivo
 concreto documentato nel codice: installare client cloud, lavorare su PDF/PPTX o dataframe
 pandas sfondava i 512 MB di RAM e soprattutto i 64 MB di `/tmp` — pip usa `/tmp` per cache e
-build, e il risultato era «No space left on device» (`sandbox.py · L328–332`). Restano
+build, e il risultato era «No space left on device» (`sandbox.py · L329–332`). Restano
 limiti fermi: alzati una volta con una ragione, non rimossi.
 
 **Ordine degli argomenti.** `run_flags` restituisce le opzioni **senza** l'immagine, perché
