@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import os
 import tempfile
 from pathlib import Path
@@ -48,7 +49,15 @@ def validate_notebook(path: Path) -> nbformat.NotebookNode:
         raise AssertionError(f"{path.name}: manca un micro-esempio LangChain reale.")
     for index, cell in enumerate(notebook.cells):
         if cell.cell_type == "code":
-            compile(str(cell.source), f"{path.name}:cell-{index}", "exec")
+            # `PyCF_ALLOW_TOP_LEVEL_AWAIT` è lo stesso flag che usa IPython: senza, una cella
+            # con `await` o `async with` — codice valido in un notebook — verrebbe respinta
+            # come errore di sintassi.
+            compile(
+                str(cell.source),
+                f"{path.name}:cell-{index}",
+                "exec",
+                ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+            )
             if index == 0 or notebook.cells[index - 1].cell_type != "markdown":
                 raise AssertionError(f"{path.name}: cella {index} senza spiegazione precedente.")
             if not str(notebook.cells[index - 1].source).startswith(
