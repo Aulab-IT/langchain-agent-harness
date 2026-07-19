@@ -50,7 +50,7 @@ function RoutingCard({ routing }: { routing: RoutingActivity }) {
     {routing.rationale ? <p className="mt-1.5 text-muted">{routing.rationale}</p> : null}
     {routing.rejectedMatches.length ? <ul className="mt-1.5 space-y-1 text-warning">{routing.rejectedMatches.map((match, index) => <li key={`${match.agent}-${index}`}>Match scartato: <code>{match.agent}</code>{match.reason ? ` · ${match.reason}` : ""}</li>)}</ul> : null}
     {routing.error ? <p className="mt-1.5 text-warning">{routing.error}</p> : null}
-    {routing.missingAgents.length ? <p className="mt-1.5 text-warning">Mancano: {routing.missingAgents.join(", ")}</p> : null}
+    {routing.missingAgents.length ? <p className="mt-1.5 text-warning">Non completati: {routing.missingAgents.join(", ")}</p> : null}
   </article>;
 }
 

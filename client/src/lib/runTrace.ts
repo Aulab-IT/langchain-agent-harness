@@ -363,7 +363,7 @@ export function describeTraceEvent(event: RunEvent): TraceEventDescription {
     case "subagent.routing.not_followed":
       return {
         title: "Piano subagent non seguito",
-        detail: `Mancano: ${compactTraceValue(payload.missing_agents, 180) ?? "?"}`,
+        detail: `Non completati: ${compactTraceValue(payload.missing_agents, 180) ?? "?"}`,
         subject: null,
         tone: "warning",
       };
