@@ -40,6 +40,14 @@ meccanismo concreto presente nel progetto.
 | Control plane | REST/SSE, sessioni, file, trace, impostazioni | 19 |
 | Control Center | UI React per chat, inspector e governance | 19 |
 
+## Dalla mappa dei componenti alla mappa dei comportamenti
+
+Questa tabella dice **dove sono i pezzi**. Non dice come si compongono: un comportamento
+come «chiedi conferma prima di eseguire un comando in sandbox» tocca sei file e due
+linguaggi, e qui compare come una riga sola. Per seguire un comportamento attraverso tutti
+i suoi siti di implementazione, con l'evidenza `file:riga` di ogni passaggio, vedi
+[`handbook/`](handbook/README.md).
+
 ## Confini intenzionali
 
 L'articolo descrive una famiglia di scelte architetturali, non un'unica API. Il progetto

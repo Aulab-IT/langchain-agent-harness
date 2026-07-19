@@ -25,6 +25,9 @@ contesto, pianificazione, subagenti, middleware, approvazione umana e verifica.
 La matrice completa tra articolo e implementazione si trova in
 [`docs/HARNESS_COMPONENTS.md`](docs/HARNESS_COMPONENTS.md); il diagramma dei componenti
 in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Il manuale a livello di *comportamento* — cosa succede quando l'agente prova a fare
+qualcosa, con l'evidenza `file:riga` di ogni affermazione — è in
+[`docs/handbook/`](docs/handbook/README.md).
 La spiegazione didattica end-to-end è in
 [`docs/GUIDA_DIDATTICA_COMPLETA.md`](docs/GUIDA_DIDATTICA_COMPLETA.md); la copertura
 feature → step → notebook → test in

@@ -61,6 +61,11 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# Il test delle ancore del manuale confronta letteralmente il formato `file · L120–140`:
+# l'en dash è parte del dato, non un refuso da normalizzare.
+"tests/test_handbook_anchors.py" = ["RUF001", "RUF002", "RUF003"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
