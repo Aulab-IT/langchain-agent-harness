@@ -159,6 +159,35 @@ def test_model_json_cannot_break_out_of_its_script_tag(repo: Path) -> None:
     assert json.loads(body.group(1).replace("<\\/", "</"))
 
 
+ASSETS = ROOT / "scripts" / "assets"
+
+
+@pytest.mark.parametrize("asset", sorted(ASSETS.iterdir()), ids=lambda p: p.name)
+def test_asset_has_no_invisible_control_characters(asset: Path) -> None:
+    """Un NUL in un sorgente è invisibile e rompe i confronti senza errori.
+
+    Successo davvero: `const MAP_SLUG = "\\x00mappa"` faceva fallire ogni `slug ===
+    MAP_SLUG`, quindi la rotta della mappa non scattava mai — e il file *sembrava*
+    corretto in ogni editor.
+    """
+    text = asset.read_text(encoding="utf-8")
+    stray = {ch for ch in text if ord(ch) < 32 and ch not in "\n\t"}
+    assert stray == set(), f"{asset.name} contiene {[hex(ord(c)) for c in stray]}"
+
+
+def test_map_route_cannot_collide_with_a_real_page(repo: Path) -> None:
+    """Lo slug della mappa non deve essere raggiungibile anche come pagina."""
+    script = (ASSETS / "handbook.js").read_text(encoding="utf-8")
+    match = re.search(r'const MAP_SLUG = "([^"]*)"', script)
+    assert match is not None
+    slug = match.group(1)
+    assert slug and slug.strip() == slug
+
+    cfg = _configure(repo)
+    pages, _, _ = gen.collect(cfg)
+    assert slug not in {page.slug for page in pages}
+
+
 def test_huge_span_is_elided_in_the_middle(repo: Path) -> None:
     lines = [f"riga {n}" for n in range(1, 900)]
     snippet = gen.build_snippet(lines, 1, 899, context=0)

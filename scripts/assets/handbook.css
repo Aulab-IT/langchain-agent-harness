@@ -248,6 +248,44 @@ td { color: var(--ink-soft); }
 .hit .where { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-faint); }
 .empty { color: var(--ink-faint); }
 
+/* --- mappa --- */
+
+.map-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem; margin-bottom: 0.8rem; }
+.map-head h1 { margin: 0; }
+.map-opts { display: flex; gap: 0.8rem; align-items: center; margin-left: auto; font-size: 0.85rem; color: var(--ink-soft); }
+.map-opts label { display: flex; gap: 0.35rem; align-items: center; cursor: pointer; }
+
+#canvas-wrap {
+  position: relative;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+#graph { display: block; width: 100%; height: 62vh; min-height: 26rem; cursor: grab; }
+#graph.grabbing { cursor: grabbing; }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.7rem;
+  font-size: 0.8rem;
+  color: var(--ink-faint);
+}
+.legend span { display: flex; gap: 0.4rem; align-items: center; }
+.dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; display: inline-block; }
+.dot.stage { background: var(--ink-faint); }
+.dot.unit { background: var(--accent); }
+.dot.file { background: var(--warn); }
+
+.map-info { margin-top: 1rem; padding: 0.9rem 1rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+.map-info h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+.map-info p { margin: 0 0 0.6rem; color: var(--ink-soft); font-size: 0.9rem; }
+.map-info ul { margin: 0; padding-left: 1.1rem; }
+.map-info li { color: var(--ink-soft); font-size: 0.9rem; }
+.map-info button.link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; }
+
 /* --- percorsi di lettura --- */
 
 .trail { display: flex; gap: 0.6rem; margin: 2rem 0 0; padding-top: 1.2rem; border-top: 1px solid var(--rule); }

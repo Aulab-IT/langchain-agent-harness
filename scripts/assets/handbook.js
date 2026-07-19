@@ -92,6 +92,23 @@
     }
 
     rail.textContent = "";
+
+    const mapHead = document.createElement("p");
+    mapHead.className = "rail-group";
+    mapHead.textContent = "Colpo d'occhio";
+    const mapButton = document.createElement("button");
+    mapButton.className = "rail-item";
+    mapButton.type = "button";
+    mapButton.dataset.slug = MAP_SLUG;
+    const mapIcon = document.createElement("span");
+    mapIcon.className = "uid";
+    mapIcon.textContent = "◍";
+    const mapName = document.createElement("span");
+    mapName.textContent = "Mappa";
+    mapButton.append(mapIcon, mapName);
+    mapButton.addEventListener("click", () => go(MAP_SLUG));
+    rail.append(mapHead, mapButton);
+
     for (const [key, items] of groups) {
       const label = labels.get(key);
       const head = document.createElement("p");
@@ -215,6 +232,374 @@
     }
   }
 
+  /* --- mappa: un comportamento, molti siti ------------------------------------------
+   *
+   * Il grafo dice la cosa che la prosa non riesce a mostrare: quali file sono condivisi
+   * da più unità. Un file con molti archi è un punto in cui comportamenti diversi si
+   * toccano — cioè dove una modifica ne rompe più di uno.
+   */
+
+  // Nessuna pagina del manuale può chiamarsi così: gli slug vengono dai nomi dei file.
+  const MAP_SLUG = "mappa";
+  let mapState = null;
+
+  function graphData(showFiles) {
+    const nodes = [];
+    const links = [];
+    const byId = new Map();
+    const add = (node) => {
+      byId.set(node.id, node);
+      nodes.push(node);
+      return node;
+    };
+
+    for (const page of pages) {
+      if (page.kind !== "unit") continue;
+      const stageId = "s:" + groupKey(page);
+      if (!byId.has(stageId)) {
+        add({ id: stageId, kind: "stage", label: page.stage.split("·")[0].trim(), r: 9 });
+      }
+      const unit = add({
+        id: "u:" + page.slug,
+        kind: "unit",
+        label: page.unit || page.title,
+        title: page.title.replace(/^L\d\s*·\s*/, ""),
+        slug: page.slug,
+        r: 6 + Math.min(9, Math.sqrt(page.anchors.length) * 1.6),
+      });
+      links.push({ a: stageId, b: unit.id, k: 0.03, len: 90 });
+
+      if (!showFiles) continue;
+      for (const file of new Set(page.anchors.map((a) => a.file))) {
+        const fileId = "f:" + file;
+        if (!byId.has(fileId)) {
+          add({
+            id: fileId,
+            kind: "file",
+            label: file.split("/").pop(),
+            file,
+            r: 4,
+            degree: 0,
+          });
+        }
+        byId.get(fileId).degree += 1;
+        links.push({ a: unit.id, b: fileId, k: 0.02, len: 60 });
+      }
+    }
+
+    for (const node of nodes) {
+      if (node.kind === "file") node.r = 3.5 + Math.min(8, node.degree * 1.5);
+    }
+    return { nodes, links, byId };
+  }
+
+  function layout(graph, width, height) {
+    // Disposizione iniziale a cerchio: partire dal centro esatto lascia le forze senza
+    // direzione e il grafo esplode al primo passo.
+    graph.nodes.forEach((node, i) => {
+      const angle = (i / graph.nodes.length) * Math.PI * 2;
+      const radius = node.kind === "stage" ? 60 : node.kind === "unit" ? 160 : 250;
+      node.x = width / 2 + Math.cos(angle) * radius;
+      node.y = height / 2 + Math.sin(angle) * radius;
+      node.vx = 0;
+      node.vy = 0;
+    });
+
+    for (let step = 0; step < 320; step++) tick(graph, width, height, 1);
+  }
+
+  function tick(graph, width, height, damping) {
+    const { nodes, links, byId } = graph;
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let dist = Math.hypot(dx, dy) || 0.01;
+        const min = a.r + b.r + 14;
+        const force = (2400 / (dist * dist)) + (dist < min ? (min - dist) * 0.35 : 0);
+        dx /= dist;
+        dy /= dist;
+        a.vx -= dx * force;
+        a.vy -= dy * force;
+        b.vx += dx * force;
+        b.vy += dy * force;
+      }
+    }
+    for (const link of links) {
+      const a = byId.get(link.a);
+      const b = byId.get(link.b);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 0.01;
+      const pull = (dist - link.len) * link.k;
+      a.vx += (dx / dist) * pull;
+      a.vy += (dy / dist) * pull;
+      b.vx -= (dx / dist) * pull;
+      b.vy -= (dy / dist) * pull;
+    }
+    for (const node of nodes) {
+      if (node.pinned) {
+        node.vx = node.vy = 0;
+        continue;
+      }
+      node.vx += (width / 2 - node.x) * 0.004;
+      node.vy += (height / 2 - node.y) * 0.004;
+      node.vx *= 0.82 * damping;
+      node.vy *= 0.82 * damping;
+      node.x = Math.max(node.r + 6, Math.min(width - node.r - 6, node.x + node.vx));
+      node.y = Math.max(node.r + 6, Math.min(height - node.r - 6, node.y + node.vy));
+    }
+  }
+
+  function css(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function draw(state) {
+    const { ctx, graph, width, height, hover, selected } = state;
+    const ink = css("--ink");
+    const soft = css("--ink-soft");
+    const faint = css("--ink-faint");
+    const accent = css("--accent");
+    const warn = css("--warn");
+    const rule = css("--rule");
+
+    ctx.clearRect(0, 0, width, height);
+
+    const near = new Set();
+    const focus = hover || selected;
+    if (focus) {
+      near.add(focus.id);
+      for (const link of graph.links) {
+        if (link.a === focus.id) near.add(link.b);
+        if (link.b === focus.id) near.add(link.a);
+      }
+    }
+
+    for (const link of graph.links) {
+      const a = graph.byId.get(link.a);
+      const b = graph.byId.get(link.b);
+      const lit = focus && near.has(a.id) && near.has(b.id);
+      ctx.strokeStyle = lit ? accent : rule;
+      ctx.globalAlpha = focus ? (lit ? 0.9 : 0.25) : 0.7;
+      ctx.lineWidth = lit ? 1.6 : 1;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const node of graph.nodes) {
+      const dim = focus && !near.has(node.id);
+      ctx.globalAlpha = dim ? 0.3 : 1;
+      ctx.fillStyle = node.kind === "unit" ? accent : node.kind === "file" ? warn : faint;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      const label = node.kind === "file" && node.degree < 2 && !near.has(node.id) ? "" : node.label;
+      if (label) {
+        ctx.fillStyle = node.kind === "unit" ? ink : soft;
+        ctx.font = `${node.kind === "unit" ? 600 : 400} 11px ui-sans-serif, system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(label, node.x, node.y - node.r - 5);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function nodeAt(state, x, y) {
+    for (let i = state.graph.nodes.length - 1; i >= 0; i--) {
+      const node = state.graph.nodes[i];
+      if (Math.hypot(node.x - x, node.y - y) <= node.r + 5) return node;
+    }
+    return null;
+  }
+
+  function describe(state, node) {
+    const box = state.info;
+    box.textContent = "";
+    if (!node) {
+      const hint = document.createElement("p");
+      hint.textContent =
+        "Ogni cerchio blu è un'unità di comportamento, ogni cerchio ambra un file citato. " +
+        "Un file collegato a più unità è un punto in cui comportamenti diversi si toccano.";
+      box.append(hint);
+      return;
+    }
+
+    const title = document.createElement("h2");
+    const body = document.createElement("p");
+    const list = document.createElement("ul");
+
+    if (node.kind === "unit") {
+      const page = bySlug.get(node.slug);
+      title.textContent = `${page.unit} · ${node.title}`;
+      body.textContent = `${page.anchors.length} ancore · ${
+        new Set(page.anchors.map((a) => a.file)).size
+      } file citati`;
+      const open = document.createElement("button");
+      open.className = "link";
+      open.type = "button";
+      open.textContent = "apri la pagina";
+      open.addEventListener("click", () => go(node.slug));
+      body.append(" — ", open);
+      for (const file of new Set(page.anchors.map((a) => a.file))) {
+        const item = document.createElement("li");
+        item.textContent = file;
+        list.append(item);
+      }
+    } else if (node.kind === "file") {
+      title.textContent = node.label;
+      const citing = pages.filter(
+        (p) => p.kind === "unit" && p.anchors.some((a) => a.file === node.file)
+      );
+      body.textContent =
+        citing.length === 1
+          ? `${node.file} — citato da una sola unità.`
+          : `${node.file} — citato da ${citing.length} unità: è un punto di contatto fra comportamenti diversi.`;
+      for (const page of citing) {
+        const item = document.createElement("li");
+        const link = document.createElement("button");
+        link.className = "link";
+        link.type = "button";
+        link.textContent = `${page.unit} · ${page.title.replace(/^L\d\s*·\s*/, "")}`;
+        link.addEventListener("click", () => go(page.slug));
+        item.append(link);
+        list.append(item);
+      }
+    } else {
+      title.textContent = node.label;
+      body.textContent = "Stadio del flusso: raggruppa le unità che ne fanno parte.";
+    }
+
+    box.append(title, body, list);
+  }
+
+  function renderMap() {
+    main.textContent = "";
+    markCurrent(MAP_SLUG);
+
+    const head = document.createElement("div");
+    head.className = "map-head";
+    const title = document.createElement("h1");
+    title.textContent = "Mappa";
+    const opts = document.createElement("div");
+    opts.className = "map-opts";
+    const toggle = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = true;
+    toggle.append(box, document.createTextNode("mostra i file citati"));
+    opts.append(toggle);
+    head.append(title, opts);
+
+    const wrap = document.createElement("div");
+    wrap.id = "canvas-wrap";
+    const canvas = document.createElement("canvas");
+    canvas.id = "graph";
+    wrap.append(canvas);
+
+    const legend = document.createElement("div");
+    legend.className = "legend";
+    for (const [cls, text] of [
+      ["stage", "stadio del flusso"],
+      ["unit", "unità di comportamento — l'area cresce con le ancore"],
+      ["file", "file citato — l'area cresce con le unità che lo citano"],
+    ]) {
+      const item = document.createElement("span");
+      const dot = document.createElement("i");
+      dot.className = `dot ${cls}`;
+      item.append(dot, document.createTextNode(text));
+      legend.append(item);
+    }
+
+    const info = document.createElement("div");
+    info.className = "map-info";
+
+    main.append(head, wrap, legend, info);
+
+    const ctx = canvas.getContext("2d");
+    const state = { ctx, canvas, info, hover: null, selected: null, graph: null };
+    mapState = state;
+
+    function build() {
+      const ratio = devicePixelRatio || 1;
+      const width = wrap.clientWidth;
+      const height = canvas.clientHeight;
+      canvas.width = width * ratio;
+      canvas.height = height * ratio;
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      state.width = width;
+      state.height = height;
+      state.graph = graphData(box.checked);
+      layout(state.graph, width, height);
+      state.hover = null;
+      state.selected = null;
+      draw(state);
+      describe(state, null);
+    }
+
+    box.addEventListener("change", build);
+
+    let dragging = null;
+    canvas.addEventListener("mousemove", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      if (dragging) {
+        dragging.x = x;
+        dragging.y = y;
+        for (let i = 0; i < 6; i++) tick(state.graph, state.width, state.height, 1);
+        dragging.x = x;
+        dragging.y = y;
+        draw(state);
+        return;
+      }
+      const node = nodeAt(state, x, y);
+      if (node !== state.hover) {
+        state.hover = node;
+        canvas.style.cursor = node ? "pointer" : "grab";
+        draw(state);
+      }
+    });
+
+    canvas.addEventListener("mousedown", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const node = nodeAt(state, event.clientX - rect.left, event.clientY - rect.top);
+      if (!node) return;
+      dragging = node;
+      node.pinned = true;
+      canvas.classList.add("grabbing");
+    });
+
+    addEventListener("mouseup", () => {
+      if (!dragging) return;
+      dragging.pinned = false;
+      dragging = null;
+      canvas.classList.remove("grabbing");
+    });
+
+    canvas.addEventListener("click", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const node = nodeAt(state, event.clientX - rect.left, event.clientY - rect.top);
+      state.selected = node;
+      describe(state, node);
+      draw(state);
+    });
+
+    canvas.addEventListener("dblclick", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const node = nodeAt(state, event.clientX - rect.left, event.clientY - rect.top);
+      if (node && node.kind === "unit") go(node.slug);
+    });
+
+    build();
+  }
+
   /* --- percorsi di lettura: l'ordine è l'informazione ------------------------------- */
 
   const units = pages.filter((p) => p.kind === "unit");
@@ -247,6 +632,8 @@
   /* --- routing ---------------------------------------------------------------------- */
 
   function render(slug, hash) {
+    if (slug === MAP_SLUG) return renderMap();
+    mapState = null;
     const page = bySlug.get(slug) || pages[0];
     main.innerHTML = page.html;
     wireAnchors(page);
