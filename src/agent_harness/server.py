@@ -26,7 +26,7 @@ from starlette.responses import Response
 from agent_harness import provider_settings as provider_cfg
 from agent_harness.audit import SubagentExecutionBlocked
 from agent_harness.canary import CANARY_EVENT_TYPES, CanaryAnalysis, analyze_canary
-from agent_harness.command_review import review_command
+from agent_harness.command_review import build_approval_summary
 from agent_harness.config import SANDBOX_SKILLS_MOUNT, SANDBOX_WORKSPACE_MOUNT, Settings
 from agent_harness.context_budget import LiveUsageThrottle
 from agent_harness.control_store import OUTPUT_DIR, ControlStore
@@ -662,23 +662,6 @@ def _extract_mcp_proposal(payload: Any) -> dict[str, str] | None:
     return None
 
 
-def _extract_command(value: Any) -> str | None:
-    if isinstance(value, dict):
-        command = value.get("command")
-        if isinstance(command, str):
-            return command[:4_000]
-        for nested in value.values():
-            found = _extract_command(nested)
-            if found:
-                return found
-    if isinstance(value, list):
-        for nested in value:
-            found = _extract_command(nested)
-            if found:
-                return found
-    return None
-
-
 _MAX_CHAT_ATTACHMENTS = 20
 
 
@@ -861,17 +844,6 @@ def _merge_budget_usage(
     usage["cost_usd"] = budget["cost_usd"]
     usage["budget"] = budget
     return usage
-
-
-def _pending_with_network(value: Any) -> bool:
-    """True se una delle tool call in sospeso chiede accesso rete (with_network)."""
-    if isinstance(value, dict):
-        if value.get("with_network") is True:
-            return True
-        return any(_pending_with_network(nested) for nested in value.values())
-    if isinstance(value, list):
-        return any(_pending_with_network(nested) for nested in value)
-    return False
 
 
 class RunManager:
@@ -1215,23 +1187,10 @@ class RunManager:
                     terminal_hint_reason = "Approvazione MCP rifiutata o scaduta."
                 return approved
 
-            is_network = _pending_with_network(payload)
-            safe_payload: dict[str, Any] = {
-                "action": str(payload.get("action", "docker_exec")),
-                "description": (
-                    "Accesso rete temporaneo alla sandbox Docker (per questo comando)"
-                    if is_network
-                    else "Esecuzione comando in sandbox Docker isolata"
-                ),
-            }
-            if is_network:
-                safe_payload["network"] = True
-            command = _extract_command(payload)
-            if command:
-                safe_payload["command"] = command
-                # Classificazione statica: dice all'utente cosa fa il comando prima che
-                # lo approvi. Non è un'autorizzazione, è una spiegazione.
-                safe_payload["review"] = review_command(command).as_dict()
+            # Costruito in `command_review` e non qui: la CLI mostra esattamente la stessa
+            # cosa, così la decisione di sicurezza non dipende dalla superficie usata.
+            safe_payload = build_approval_summary(payload)
+            is_network = bool(safe_payload.get("network"))
             # Letto live a ogni richiesta: se la sessione lavora in autonomia, l'agente
             # procede subito, senza fermare il run né mostrare il modale di conferma.
             # ECCEZIONE: le richieste di accesso rete richiedono SEMPRE conferma

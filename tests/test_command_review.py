@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from agent_harness.command_review import review_command
+from agent_harness.command_review import (
+    build_approval_summary,
+    payload_wants_network,
+    review_command,
+)
 
 
 def test_pip_install_is_categorized_as_install() -> None:
@@ -76,3 +80,57 @@ def test_write_outside_workspace_warns() -> None:
 def test_pytest_is_recognized_as_test_run() -> None:
     review = review_command("pytest -q tests/")
     assert review.categories == ["test"]
+
+
+# --- riepilogo di approvazione condiviso fra CLI e Control Center ---------------------
+
+
+def _interrupt_payload(command: str, *, with_network: bool = False) -> dict[str, object]:
+    """Forma reale del payload di interrupt di HumanInTheLoopMiddleware."""
+    return {
+        "action_requests": [
+            {
+                "action": "docker_exec",
+                "args": {"command": command, "with_network": with_network},
+            }
+        ]
+    }
+
+
+def test_approval_summary_includes_static_review_of_the_command() -> None:
+    summary = build_approval_summary(_interrupt_payload("pip install requests"))
+    assert summary["command"] == "pip install requests"
+    assert summary["review"]["categories"] == ["install"]
+    assert "network" not in summary
+
+
+def test_approval_summary_marks_network_requests() -> None:
+    summary = build_approval_summary(_interrupt_payload("curl example.com", with_network=True))
+    assert summary["network"] is True
+    assert "Accesso rete temporaneo" in summary["description"]
+
+
+def test_approval_summary_never_forwards_the_raw_payload() -> None:
+    payload = _interrupt_payload("pytest -q")
+    payload["internal_state"] = {"api_key": "sk-segreto"}
+    summary = build_approval_summary(payload)
+    assert "internal_state" in payload
+    assert set(summary) <= {"action", "description", "network", "command", "review"}
+
+
+def test_approval_summary_survives_a_payload_without_command() -> None:
+    summary = build_approval_summary({"action_requests": [{"action": "docker_exec"}]})
+    assert "command" not in summary
+    assert "review" not in summary
+    assert summary["description"]
+
+
+def test_approval_summary_truncates_a_very_long_command() -> None:
+    summary = build_approval_summary(_interrupt_payload("echo " + "a" * 10_000))
+    assert len(summary["command"]) == 4_000
+
+
+def test_network_flag_is_found_however_deeply_it_is_nested() -> None:
+    assert payload_wants_network(_interrupt_payload("curl x", with_network=True)) is True
+    assert payload_wants_network(_interrupt_payload("pytest")) is False
+    assert payload_wants_network({}) is False

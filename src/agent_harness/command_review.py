@@ -22,6 +22,9 @@ from typing import Any
 # Un comando può essere una pipeline o una sequenza. Spezziamo sugli operatori di shell
 # per esaminare il primo token (il programma) di ogni segmento.
 _SEGMENT_SEPARATOR = re.compile(r"\|\||&&|[;|\n&]")
+# Tetto sul comando mostrato: il dialogo di approvazione deve restare leggibile, e un
+# comando più lungo di così va comunque letto nella trace, non in un modale.
+_MAX_COMMAND_CHARS = 4_000
 
 # Prefissi che non sono il programma reale, ma lo introducono.
 _TRANSPARENT_PREFIXES = {"sudo", "env", "time", "nohup", "exec", "command", "nice", "xargs"}
@@ -156,6 +159,69 @@ def _collect_warnings(command: str, categories: set[str]) -> list[str]:
     if "unknown" in categories:
         warnings.append("Almeno un comando non è stato riconosciuto: leggilo per intero.")
     return warnings
+
+
+def payload_wants_network(value: Any) -> bool:
+    """True se una delle tool call in sospeso chiede accesso rete (``with_network``)."""
+    if isinstance(value, dict):
+        if value.get("with_network") is True:
+            return True
+        return any(payload_wants_network(nested) for nested in value.values())
+    if isinstance(value, list):
+        return any(payload_wants_network(nested) for nested in value)
+    return False
+
+
+def extract_command(value: Any) -> str | None:
+    """Primo ``command`` trovato nel payload di interrupt, a qualsiasi profondità."""
+    if isinstance(value, dict):
+        command = value.get("command")
+        if isinstance(command, str):
+            return command[:_MAX_COMMAND_CHARS]
+        for nested in value.values():
+            found = extract_command(nested)
+            if found:
+                return found
+    if isinstance(value, list):
+        for nested in value:
+            found = extract_command(nested)
+            if found:
+                return found
+    return None
+
+
+def build_approval_summary(payload: Any) -> dict[str, Any]:
+    """Ciò che l'utente vede prima di approvare, ricostruito dal payload grezzo.
+
+    Vive qui, e non nel control plane, perché ogni superficie di approvazione — CLI e
+    Control Center — deve mostrare le stesse informazioni. Quando questa logica stava solo
+    lato web, chi approvava da terminale decideva senza la classificazione del comando: la
+    stessa decisione di sicurezza presa con meno elementi.
+
+    Il payload grezzo non viene mai inoltrato: si estraggono i soli campi che servono a
+    decidere.
+    """
+    is_network = payload_wants_network(payload)
+    action = "docker_exec"
+    if isinstance(payload, dict):
+        action = str(payload.get("action", action))
+    summary: dict[str, Any] = {
+        "action": action,
+        "description": (
+            "Accesso rete temporaneo alla sandbox Docker (per questo comando)"
+            if is_network
+            else "Esecuzione comando in sandbox Docker isolata"
+        ),
+    }
+    if is_network:
+        summary["network"] = True
+    command = extract_command(payload)
+    if command:
+        summary["command"] = command
+        # Classificazione statica: dice all'utente cosa fa il comando prima che lo approvi.
+        # Non è un'autorizzazione, è una spiegazione.
+        summary["review"] = review_command(command).as_dict()
+    return summary
 
 
 def review_command(command: str) -> CommandReview:

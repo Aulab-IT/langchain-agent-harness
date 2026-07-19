@@ -164,3 +164,37 @@ async def test_short_or_already_offloaded_tool_output_is_untouched(tmp_path: Pat
 
     await middleware.awrap_model_call(request, handler)  # type: ignore[arg-type]
     assert not (tmp_path / ".context").exists()
+
+
+# --- validazione delle soglie ---------------------------------------------------------
+
+
+def test_budget_rejects_unordered_ratios() -> None:
+    # Con warning sopra compaction la zona di allerta non esisterebbe: `decide` la
+    # salterebbe in silenzio invece di offloadare prima di comprimere.
+    with pytest.raises(ValueError, match="Soglie non ordinate"):
+        ContextBudget(max_tokens=100_000, warning_ratio=0.9, compaction_ratio=0.8)
+
+
+def test_budget_accepts_equal_ratios() -> None:
+    budget = ContextBudget(
+        max_tokens=100_000, warning_ratio=0.8, compaction_ratio=0.8, hard_ratio=0.8
+    )
+    assert budget.compaction_ratio == 0.8
+
+
+def test_budget_rejects_ratio_outside_unit_interval() -> None:
+    with pytest.raises(ValueError, match="hard_ratio"):
+        ContextBudget(max_tokens=100_000, hard_ratio=1.5)
+    with pytest.raises(ValueError, match="warning_ratio"):
+        ContextBudget(max_tokens=100_000, warning_ratio=0)
+
+
+def test_budget_rejects_reservation_that_leaves_no_window() -> None:
+    with pytest.raises(ValueError, match="lasciare spazio"):
+        ContextBudget(max_tokens=4_000, reserved_output_tokens=4_000)
+
+
+def test_budget_rejects_non_positive_window() -> None:
+    with pytest.raises(ValueError, match="max_tokens"):
+        ContextBudget(max_tokens=0)

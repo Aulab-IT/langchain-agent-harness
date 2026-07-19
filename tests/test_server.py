@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 import agent_harness.server as server
+from agent_harness.command_review import payload_wants_network
 from agent_harness.config import Settings
 from agent_harness.control_store import ControlStore
 from agent_harness.durable import DurableStore
@@ -599,7 +600,7 @@ def test_pending_with_network_detects_flag_in_action_requests() -> None:
             {"action": "docker_exec", "args": {"command": "pip install x", "with_network": True}}
         ]
     }
-    assert server._pending_with_network(payload) is True
+    assert payload_wants_network(payload) is True
 
 
 def test_pending_with_network_false_for_plain_exec() -> None:
@@ -608,8 +609,8 @@ def test_pending_with_network_false_for_plain_exec() -> None:
             {"action": "docker_exec", "args": {"command": "pytest", "with_network": False}}
         ]
     }
-    assert server._pending_with_network(payload) is False
-    assert server._pending_with_network({}) is False
+    assert payload_wants_network(payload) is False
+    assert payload_wants_network({}) is False
 
 
 def test_chat_rejects_empty_message(client: TestClient) -> None:

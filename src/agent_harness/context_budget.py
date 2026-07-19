@@ -43,6 +43,12 @@ class ContextBudget:
     ``reserved_output_tokens`` è lo spazio tenuto libero per la risposta: la finestra
     utile è ``max_tokens - reserved_output_tokens``. ``warning_ratio`` e
     ``compaction_ratio`` sono frazioni di quella finestra utile.
+
+    Le soglie devono restare ordinate. `decide` le confronta in sequenza, quindi una
+    configurazione con ``warning_ratio`` sopra ``compaction_ratio`` non fallisce: produce
+    silenziosamente una zona di allerta inesistente, e l'harness smette di offloadare
+    prima di comprimere. Un budget mal configurato va rifiutato quando lo si costruisce,
+    non scoperto dal comportamento.
     """
 
     max_tokens: int
@@ -50,6 +56,31 @@ class ContextBudget:
     warning_ratio: float = 0.7
     compaction_ratio: float = 0.8
     hard_ratio: float = 0.95
+
+    def __post_init__(self) -> None:
+        if self.max_tokens <= 0:
+            raise ValueError("max_tokens deve essere positivo.")
+        if self.reserved_output_tokens < 0:
+            raise ValueError("reserved_output_tokens non può essere negativo.")
+        if self.reserved_output_tokens >= self.max_tokens:
+            raise ValueError(
+                "reserved_output_tokens deve lasciare spazio: "
+                f"{self.reserved_output_tokens} >= max_tokens {self.max_tokens}."
+            )
+        ratios = (
+            ("warning_ratio", self.warning_ratio),
+            ("compaction_ratio", self.compaction_ratio),
+            ("hard_ratio", self.hard_ratio),
+        )
+        for name, value in ratios:
+            if not 0 < value <= 1:
+                raise ValueError(f"{name} deve stare in (0, 1]: {value}.")
+        if not self.warning_ratio <= self.compaction_ratio <= self.hard_ratio:
+            raise ValueError(
+                "Soglie non ordinate: serve warning_ratio <= compaction_ratio <= "
+                f"hard_ratio, ricevuto {self.warning_ratio} / {self.compaction_ratio} / "
+                f"{self.hard_ratio}."
+            )
 
     @property
     def usable_tokens(self) -> int:

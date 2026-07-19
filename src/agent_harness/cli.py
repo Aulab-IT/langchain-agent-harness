@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import subprocess
 import uuid
 import warnings
@@ -15,6 +14,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from agent_harness.command_review import build_approval_summary
 from agent_harness.config import Settings
 from agent_harness.evaluation import CaseResult, execute_eval_case, load_eval_cases, summarize
 from agent_harness.factory import build_harness
@@ -33,20 +33,38 @@ def command_ok(arguments: list[str]) -> bool:
         return False
 
 
-def _payload_wants_network(value: Any) -> bool:
-    if isinstance(value, dict):
-        if value.get("with_network") is True:
-            return True
-        return any(_payload_wants_network(nested) for nested in value.values())
-    if isinstance(value, list):
-        return any(_payload_wants_network(nested) for nested in value)
-    return False
+def render_approval(summary: dict[str, Any]) -> str:
+    """Rende leggibile a terminale il riepilogo mostrato prima di approvare.
+
+    Stesse informazioni del modale del Control Center: comando, cosa fa, path toccati e
+    avvisi. Una decisione di sicurezza non deve dipendere dalla superficie da cui la si
+    prende.
+    """
+    lines = [str(summary.get("description", ""))]
+    command = summary.get("command")
+    if command:
+        lines.append(f"\n[bold]Comando[/bold]\n{command}")
+    review = summary.get("review")
+    if isinstance(review, dict):
+        for key, title in (
+            ("labels", "Cosa fa"),
+            ("paths", "Percorsi"),
+            ("warnings", "Attenzione"),
+        ):
+            values = [str(value) for value in review.get(key) or []]
+            if not values:
+                continue
+            style = "yellow" if key == "warnings" else "bold"
+            rendered = "\n".join(f"  - {value}" for value in values)
+            lines.append(f"\n[{style}]{title}[/{style}]\n{rendered}")
+    return "\n".join(lines)
 
 
 async def ask_approval(payload: dict[str, Any]) -> bool:
-    wants_network = _payload_wants_network(payload)
+    summary = build_approval_summary(payload)
+    wants_network = bool(summary.get("network"))
     title = "Accesso rete sandbox" if wants_network else "Approvazione"
-    console.print(Panel(json.dumps(payload, indent=2, ensure_ascii=False), title=title))
+    console.print(Panel(render_approval(summary), title=title))
     if wants_network:
         console.print(
             "[yellow]Concede accesso rete temporaneo al container, solo per questo "
