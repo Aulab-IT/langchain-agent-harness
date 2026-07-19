@@ -17,3 +17,7 @@ state/*
 tmp/
 .DS_Store
 *.zip
+
+# L'artefatto del manuale incorpora il testo di ogni riga citata: cambia a ogni
+# modifica dei file citati, non solo del manuale. Si rigenera con `make handbook`.
+build/

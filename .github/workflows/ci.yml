@@ -27,7 +27,14 @@ jobs:
       - run: uv sync --all-extras --dev --locked
       - run: uv run ruff check src tests
       - run: uv run mypy src/agent_harness
+      - run: uv run python scripts/handbook_sync.py --vendor-check
       - run: uv run python scripts/handbook_sync.py --check
+      - run: uv run python scripts/handbook_html.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: handbook
+          path: build/handbook/
+          retention-days: 14
       - run: uv run pytest -q
 
   frontend:
