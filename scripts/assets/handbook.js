@@ -1,0 +1,350 @@
+/* Navigazione dell'artefatto del manuale.
+ *
+ * Il modello sta tutto nella pagina, ma si rende UNA pagina alla volta: incorporare
+ * quindici documenti e quattrocento snippet nel DOM significherebbe sessantamila nodi
+ * all'apertura. Gli snippet si materializzano al primo click e restano.
+ */
+
+(() => {
+  const model = JSON.parse(document.getElementById("model").textContent);
+  const pages = model.pages;
+  const bySlug = new Map(pages.map((p) => [p.slug, p]));
+  const rail = document.getElementById("rail");
+  const main = document.getElementById("main");
+  const search = document.getElementById("q");
+
+  /* --- radice locale: il percorso assoluto della macchina che ha generato la pagina non
+     esiste su quella che la legge. Si tiene relativo e si ricostruisce qui. --- */
+  const ROOT_KEY = "handbook:root";
+  const localRoot = () => localStorage.getItem(ROOT_KEY) || model.root;
+
+  /* --- indice di ricerca ------------------------------------------------------------ */
+
+  const index = pages.map((p) => ({
+    slug: p.slug,
+    title: p.title,
+    unit: p.unit,
+    haystack: [
+      p.title,
+      p.unit,
+      p.stage,
+      ...p.headings.map((h) => h.text),
+      ...p.anchors.map((a) => a.file),
+      p.text,
+    ]
+      .join(" ")
+      .toLowerCase(),
+    files: [...new Set(p.anchors.map((a) => a.file))],
+    headings: p.headings,
+  }));
+
+  function score(entry, needle) {
+    let total = 0;
+    if (entry.title.toLowerCase().includes(needle)) total += 8;
+    if (entry.unit.toLowerCase().includes(needle)) total += 8;
+    if (entry.files.some((f) => f.toLowerCase().includes(needle))) total += 4;
+    if (entry.headings.some((h) => h.text.toLowerCase().includes(needle))) total += 4;
+    if (entry.haystack.includes(needle)) total += 1;
+    return total;
+  }
+
+  /* --- rail: L1 e L2 sono la navigazione, non due pagine da leggere ----------------- */
+
+  /* L'unità porta il suo posto nell'ordine: `4.2` sta nello stadio 4 e viene dopo `4.1`.
+     Ordinare per nome di file darebbe un rail alfabetico, che non è informazione. */
+  function rank(page) {
+    const match = /^(\d+)\.(\d+)/.exec(page.unit);
+    if (match) return [0, Number(match[1]), Number(match[2])];
+    if (/^T\./.test(page.unit)) return [1, 0, Number(page.unit.slice(2)) || 0];
+    return [-1, 0, 0];
+  }
+
+  function groupKey(page) {
+    if (page.kind === "index") return "il-manuale";
+    const match = /^(\d+)\./.exec(page.unit);
+    if (match) return `stadio-${match[1]}`;
+    return /^T\./.test(page.unit) ? "trasversale" : "unita";
+  }
+
+  function buildRail() {
+    const groups = new Map();
+    const sorted = [...pages].sort((a, b) => {
+      const [ra, sa, ua] = rank(a);
+      const [rb, sb, ub] = rank(b);
+      return ra - rb || sa - sb || ua - ub;
+    });
+    for (const page of sorted) {
+      const key = groupKey(page);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(page);
+    }
+
+    // Lo stesso stadio è descritto in modo diverso da pagine diverse («stadio 4» e
+    // «stadio 4 · esecuzione guardata degli effetti collaterali»): si tiene la più
+    // descrittiva invece di stampare due gruppi che sono lo stesso gruppo.
+    const labels = new Map();
+    for (const [key, items] of groups) {
+      const best = items
+        .map((p) => p.stage)
+        .filter(Boolean)
+        .sort((a, b) => b.length - a.length)[0];
+      labels.set(key, key === "il-manuale" ? "Il manuale" : best || "Unità");
+    }
+
+    rail.textContent = "";
+    for (const [key, items] of groups) {
+      const label = labels.get(key);
+      const head = document.createElement("p");
+      head.className = "rail-group";
+      head.textContent = label;
+      rail.append(head);
+      for (const page of items) {
+        const button = document.createElement("button");
+        button.className = "rail-item";
+        button.type = "button";
+        button.dataset.slug = page.slug;
+        const uid = document.createElement("span");
+        uid.className = "uid";
+        uid.textContent = page.unit || "";
+        const name = document.createElement("span");
+        name.textContent = page.title.replace(/^L\d\s*·\s*/, "");
+        const count = document.createElement("span");
+        count.className = "n";
+        if (page.anchors.length) count.textContent = page.anchors.length;
+        button.append(uid, name, count);
+        button.addEventListener("click", () => go(page.slug));
+        rail.append(button);
+      }
+    }
+  }
+
+  function markCurrent(slug) {
+    for (const item of rail.querySelectorAll(".rail-item")) {
+      item.setAttribute("aria-current", item.dataset.slug === slug ? "true" : "false");
+    }
+  }
+
+  /* --- snippet ---------------------------------------------------------------------- */
+
+  function editorHref(file, line) {
+    if (model.editor === "none") return null;
+    const scheme = model.editor === "cursor" ? "cursor" : "vscode";
+    return `${scheme}://file/${localRoot()}/${file}:${line}`;
+  }
+
+  function buildSnippet(view) {
+    const data = model.snippets[view.snippet];
+    const box = document.createElement("div");
+    box.className = "snippet";
+
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    const path = document.createElement("span");
+    path.className = "path";
+    path.textContent = `${data.file}:${data.start}${data.end !== data.start ? "–" + data.end : ""}`;
+    bar.append(path);
+
+    const spacer = document.createElement("span");
+    spacer.className = "sp";
+    bar.append(spacer);
+
+    const href = editorHref(data.file, data.start);
+    if (href) {
+      const open = document.createElement("a");
+      open.href = href;
+      open.textContent = "apri nell'editor";
+      bar.append(open);
+    }
+
+    // Non è un accessorio: se la CSP blocca gli schemi custom, questo resta l'unico modo
+    // di arrivare al file.
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.textContent = "copia percorso";
+    copy.addEventListener("click", async () => {
+      const text = `${data.file}:${data.start}`;
+      try {
+        await navigator.clipboard.writeText(text);
+        copy.textContent = "copiato";
+      } catch {
+        // Clipboard negata: si seleziona, così resta un Cmd-C di distanza.
+        const field = document.createElement("input");
+        field.value = text;
+        box.append(field);
+        field.select();
+        copy.textContent = "seleziona e copia";
+      }
+      setTimeout(() => (copy.textContent = "copia percorso"), 1800);
+    });
+    bar.append(copy);
+    box.append(bar);
+
+    const pre = document.createElement("pre");
+    const code = document.createElement("code");
+    data.lines.forEach((line, offset) => {
+      const number = data.first + offset;
+      const cited = number >= data.start && number <= data.end;
+      const row = document.createElement(cited ? "span" : "span");
+      if (cited) row.className = "cited";
+      const gutter = document.createElement("span");
+      gutter.className = "ln";
+      gutter.textContent = data.elided ? "" : number;
+      row.append(gutter, document.createTextNode(line + "\n"));
+      code.append(row);
+    });
+    pre.append(code);
+    box.append(pre);
+    return box;
+  }
+
+  function wireAnchors(page) {
+    for (const button of main.querySelectorAll("button.anchor")) {
+      button.addEventListener("click", () => {
+        const open = button.getAttribute("aria-expanded") === "true";
+        const existing = button.nextElementSibling;
+        if (open && existing && existing.classList.contains("snippet")) {
+          existing.remove();
+          button.setAttribute("aria-expanded", "false");
+          return;
+        }
+        const view = page.anchors.find((a) => String(a.snippet) === button.dataset.snippet);
+        if (!view) return;
+        button.after(buildSnippet(view));
+        button.setAttribute("aria-expanded", "true");
+      });
+    }
+  }
+
+  /* --- percorsi di lettura: l'ordine è l'informazione ------------------------------- */
+
+  const units = pages.filter((p) => p.kind === "unit");
+
+  function trail(page) {
+    const at = units.findIndex((u) => u.slug === page.slug);
+    if (at < 0) return null;
+    const box = document.createElement("nav");
+    box.className = "trail";
+    if (at > 0) {
+      const prev = document.createElement("button");
+      prev.type = "button";
+      prev.textContent = "← " + units[at - 1].title.replace(/^L\d\s*·\s*/, "");
+      prev.addEventListener("click", () => go(units[at - 1].slug));
+      box.append(prev);
+    }
+    const spacer = document.createElement("span");
+    spacer.className = "sp";
+    box.append(spacer);
+    if (at < units.length - 1) {
+      const next = document.createElement("button");
+      next.type = "button";
+      next.textContent = units[at + 1].title.replace(/^L\d\s*·\s*/, "") + " →";
+      next.addEventListener("click", () => go(units[at + 1].slug));
+      box.append(next);
+    }
+    return box;
+  }
+
+  /* --- routing ---------------------------------------------------------------------- */
+
+  function render(slug, hash) {
+    const page = bySlug.get(slug) || pages[0];
+    main.innerHTML = page.html;
+    wireAnchors(page);
+    const tail = trail(page);
+    if (tail) main.append(tail);
+    markCurrent(page.slug);
+    if (hash) {
+      const target = main.querySelector(`[id="${CSS.escape(hash)}"]`);
+      if (target) target.scrollIntoView();
+    } else {
+      main.scrollIntoView();
+    }
+  }
+
+  function go(slug, hash) {
+    location.hash = `#/${slug}` + (hash ? `#${hash}` : "");
+  }
+
+  function fromHash() {
+    const raw = location.hash.replace(/^#\//, "");
+    if (!raw) return render(pages[0].slug);
+    const [slug, hash] = raw.split("#");
+    render(slug, hash);
+  }
+
+  /* --- ricerca ---------------------------------------------------------------------- */
+
+  function showResults(needle) {
+    const hits = index
+      .map((entry) => ({ entry, points: score(entry, needle) }))
+      .filter((h) => h.points > 0)
+      .sort((a, b) => b.points - a.points);
+
+    main.textContent = "";
+    const title = document.createElement("h1");
+    title.textContent = `${hits.length} risultati per «${needle}»`;
+    main.append(title);
+
+    if (!hits.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "Nessuna unità cita questo termine.";
+      main.append(empty);
+      return;
+    }
+
+    for (const { entry } of hits) {
+      const hit = document.createElement("button");
+      hit.className = "hit";
+      hit.type = "button";
+      const name = document.createElement("div");
+      name.textContent = entry.title;
+      const where = document.createElement("div");
+      where.className = "where";
+      const cited = entry.files.filter((f) => f.toLowerCase().includes(needle));
+      where.textContent = cited.length ? `cita ${cited.join(", ")}` : entry.unit || entry.slug;
+      hit.append(name, where);
+      hit.addEventListener("click", () => {
+        search.value = "";
+        go(entry.slug);
+      });
+      main.append(hit);
+    }
+  }
+
+  search.addEventListener("input", () => {
+    const needle = search.value.trim().toLowerCase();
+    if (needle.length < 2) return fromHash();
+    showResults(needle);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "/" && document.activeElement !== search) {
+      event.preventDefault();
+      search.focus();
+    } else if (event.key === "Escape" && document.activeElement === search) {
+      search.value = "";
+      search.blur();
+      fromHash();
+    }
+  });
+
+  /* --- tema ------------------------------------------------------------------------- */
+
+  const THEME_KEY = "handbook:theme";
+  const stored = localStorage.getItem(THEME_KEY);
+  if (stored) document.documentElement.dataset.theme = stored;
+  document.getElementById("theme").addEventListener("click", () => {
+    const dark =
+      document.documentElement.dataset.theme === "dark" ||
+      (!document.documentElement.dataset.theme &&
+        matchMedia("(prefers-color-scheme: dark)").matches);
+    const next = dark ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem(THEME_KEY, next);
+  });
+
+  buildRail();
+  addEventListener("hashchange", fromHash);
+  fromHash();
+})();
