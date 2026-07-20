@@ -86,10 +86,12 @@ select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 "scripts/handbook_sync.py" = ["RUF001", "RUF002", "RUF003"]
 "scripts/handbook_html.py" = ["RUF001", "RUF002", "RUF003"]
 "scripts/mdlite.py" = ["RUF001", "RUF002", "RUF003"]
+"scripts/handbook_skill.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/test_handbook_anchors.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/test_handbook_sync.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/test_handbook_html.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/test_mdlite.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/test_handbook_skill.py" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.mypy]
 python_version = "3.11"

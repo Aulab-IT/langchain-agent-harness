@@ -1,4 +1,4 @@
-.PHONY: install test lint format handbook handbook-check handbook-html notebooks notebooks-live sandbox-image run chat smoke
+.PHONY: install test lint format handbook handbook-check handbook-html handbook-skill notebooks notebooks-live sandbox-image run chat smoke
 
 install:
 	uv sync --extra dev
@@ -17,13 +17,18 @@ format:
 handbook:
 	uv run python scripts/handbook_sync.py --write
 	uv run python scripts/handbook_html.py
+	uv run python scripts/handbook_skill.py
 
 handbook-check:
 	uv run python scripts/handbook_sync.py --vendor-check
 	uv run python scripts/handbook_sync.py --check
+	uv run python scripts/handbook_skill.py --check
 
 handbook-html:
 	uv run python scripts/handbook_html.py
+
+handbook-skill:
+	uv run python scripts/handbook_skill.py
 
 notebooks:
 	uv run python scripts/validate_notebooks.py --execute-offline
