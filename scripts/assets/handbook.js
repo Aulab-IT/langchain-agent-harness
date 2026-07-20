@@ -13,10 +13,30 @@
   const main = document.getElementById("main");
   const search = document.getElementById("q");
 
+  /* Aperta da `file://`, alcuni browser negano `localStorage` sollevando: senza questa
+     protezione l'eccezione ucciderebbe l'intero script al caricamento e la pagina
+     resterebbe bianca. Le preferenze sono un di più; la lettura del manuale no. */
+  const store = {
+    get(key) {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    },
+    set(key, value) {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        /* preferenza non memorizzata: la sessione corrente funziona lo stesso */
+      }
+    },
+  };
+
   /* --- radice locale: il percorso assoluto della macchina che ha generato la pagina non
      esiste su quella che la legge. Si tiene relativo e si ricostruisce qui. --- */
   const ROOT_KEY = "handbook:root";
-  const localRoot = () => localStorage.getItem(ROOT_KEY) || model.root;
+  const localRoot = () => store.get(ROOT_KEY) || model.root;
 
   /* --- indice di ricerca ------------------------------------------------------------ */
 
@@ -719,7 +739,7 @@
   /* --- tema ------------------------------------------------------------------------- */
 
   const THEME_KEY = "handbook:theme";
-  const stored = localStorage.getItem(THEME_KEY);
+  const stored = store.get(THEME_KEY);
   if (stored) document.documentElement.dataset.theme = stored;
   document.getElementById("theme").addEventListener("click", () => {
     const dark =
@@ -728,7 +748,7 @@
         matchMedia("(prefers-color-scheme: dark)").matches);
     const next = dark ? "light" : "dark";
     document.documentElement.dataset.theme = next;
-    localStorage.setItem(THEME_KEY, next);
+    store.set(THEME_KEY, next);
   });
 
   buildRail();

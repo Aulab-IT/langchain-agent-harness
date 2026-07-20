@@ -175,6 +175,24 @@ def test_asset_has_no_invisible_control_characters(asset: Path) -> None:
     assert stray == set(), f"{asset.name} contiene {[hex(ord(c)) for c in stray]}"
 
 
+def test_storage_access_is_guarded() -> None:
+    """Da `file://` alcuni browser negano `localStorage` sollevando.
+
+    L'accesso avviene al caricamento, prima di disegnare qualunque cosa: non protetto,
+    ucciderebbe l'intero script e lascerebbe la pagina bianca proprio nel modo più comune
+    di aprire l'artefatto — il doppio clic.
+    """
+    script = (ASSETS / "handbook.js").read_text(encoding="utf-8")
+    raw = [
+        line.strip()
+        for line in script.splitlines()
+        if "localStorage." in line and not line.lstrip().startswith(("*", "/*"))
+    ]
+    # Le uniche occorrenze ammesse sono le due dentro il wrapper con try/except.
+    assert len(raw) == 2, f"accesso a localStorage fuori dal wrapper: {raw}"
+    assert "try {" in script
+
+
 def test_map_route_cannot_collide_with_a_real_page(repo: Path) -> None:
     """Lo slug della mappa non deve essere raggiungibile anche come pagina."""
     script = (ASSETS / "handbook.js").read_text(encoding="utf-8")
