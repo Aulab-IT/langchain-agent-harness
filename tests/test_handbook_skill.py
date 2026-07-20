@@ -130,9 +130,11 @@ def test_the_skill_tells_the_agent_that_the_repository_is_authoritative(repo: Pa
     assert "Verifica contro il codice" in body
 
 
-def test_an_empty_handbook_fails_instead_of_writing_a_useless_skill(
+def test_an_empty_handbook_is_a_noop_not_an_error(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """Un repo appena inizializzato ha un manuale vuoto. `make handbook` deve funzionare
+    lo stesso — se generare la skill fallisse, il bootstrap lascerebbe la CI rossa."""
     handbook = tmp_path / "docs" / "handbook"
     handbook.mkdir(parents=True)
     (handbook / "L2_UNITA.md").write_text("# L2 · Unità\n\nNiente ancora.\n", encoding="utf-8")
@@ -142,8 +144,9 @@ def test_an_empty_handbook_fails_instead_of_writing_a_useless_skill(
     )
     sync.use(sync.Config.load(tmp_path / "handbook.toml"))
 
-    assert gen.main([]) == 1
-    assert "Nessuna unità" in capsys.readouterr().out
+    assert gen.main([]) == 0
+    assert gen.main(["--check"]) == 0
+    assert "senza unità" in capsys.readouterr().out
 
 
 def test_real_handbook_produces_every_unit() -> None:

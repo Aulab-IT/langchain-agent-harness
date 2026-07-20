@@ -228,12 +228,21 @@ def main(argv: list[str] | None = None) -> int:
         sync.use(sync.Config.load(args.config.resolve()))
     cfg = sync.active()
 
-    units = collect_units(cfg)
-    if not units:
-        print("Nessuna unità trovata in L2_UNITA.md: il manuale è vuoto o non segue lo schema.")
-        return 1
-
     out = (args.out or cfg.root / ".claude" / "skills" / args.name / "SKILL.md").resolve()
+    units = collect_units(cfg)
+
+    if not units:
+        # Manuale vuoto: è lo stato di un repo appena inizializzato, non un errore.
+        # Se ci fosse una skill vecchia di quando le unità c'erano, va rimossa — altrimenti
+        # instraderebbe verso pagine inesistenti; ma con il manuale svuotato di proposito
+        # non c'è niente da generare, e il gate deve restare verde.
+        stale = out.is_file() and out.read_text(encoding="utf-8").strip()
+        if args.check and stale:
+            print(f"{out.relative_to(cfg.root)} esiste ma il manuale non ha unità: rimuovila.")
+            return 1
+        print("Manuale senza unità: niente skill da generare (repo appena inizializzato?).")
+        return 0
+
     body = render(cfg, units, args.name)
     files = {path for unit in units for path in unit.files}
     summary = (
