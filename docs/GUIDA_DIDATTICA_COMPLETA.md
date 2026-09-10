@@ -7,16 +7,15 @@ azioni, manipolare artefatti, ricordare stato, chiedere autorizzazioni, rispetta
 risultati e spiegare perché un esito è credibile. L’**harness** è questo insieme di meccanismi attorno
 al modello.
 
-Questo repository ha tre livelli coordinati:
+Questo repository ha due livelli coordinati:
 
-- `notebooks/`: esperimenti piccoli. 01–06 usano LangChain e modelli reali; 07–12 sono offline e
-  standard-library. Nessuno importa codice dal progetto.
-- `steps/`: venti snapshot incrementali. Ogni cartella contiene `app.py`, `GUIDA.md` e
-  `CHANGELOG.md` ed è eseguibile dalla radice.
-- `src/agent_harness/` + `client/`: sistema finale, con CLI, API FastAPI e Control Center React.
+- `src/agent_harness/` + `client/`: il sistema, con CLI, API FastAPI e Control Center React.
+- `docs/handbook/`: il manuale che lo descrive **per comportamento** invece che per modulo, con
+  l'evidenza `file · riga` di ogni affermazione e un gate di CI che verifica che ogni riferimento
+  punti ancora al codice giusto.
 
-La progressione evita due errori comuni: mostrare un framework completo senza far capire i pezzi,
-oppure costruire demo isolate che non convergono mai in un sistema reale.
+L'accoppiata evita due errori comuni: mostrare un framework completo senza far capire i pezzi,
+oppure scrivere documentazione che invecchia in silenzio mentre il codice si muove.
 
 ## 2. Modello mentale: quattro loop impilati
 
@@ -35,9 +34,9 @@ dopo confronto controllato. Ogni loop ha budget e condizioni terminali: nessuno 
 
 ### 3.1 Chiamata diretta
 
-Nello step 01 una lista di messaggi contiene istruzione di sistema, input utente e risposte. È già un
-primo harness: decide formato, lingua e memoria del turno. Limite: il modello non può ottenere nuove
-prove o causare effetti.
+Al livello più basso una lista di messaggi contiene istruzione di sistema, input utente e risposte.
+È già un primo harness: decide formato, lingua e memoria del turno. Limite: il modello non può
+ottenere nuove prove o causare effetti.
 
 ### 3.2 Tool calling e ReAct
 
@@ -70,8 +69,8 @@ vengono risolti e verificati contro root: `../`, symlink e path assoluti fuori c
 
 ### 4.2 Perché un subprocess non è una sandbox
 
-Un processo Python con timeout può ancora leggere home, rete e segreti host. La demo notebook usa un
-sottoprocesso solo per mostrare timeout. Sistema finale usa Docker con:
+Un processo Python con timeout può ancora leggere home, rete e segreti host: il timeout limita la
+durata, non l'accesso. Il sistema finale usa Docker con:
 
 - root filesystem read-only;
 - utente non-root, capability rimosse e `no-new-privileges`;
@@ -303,12 +302,13 @@ Sicurezza è composizione. Nessuna singola misura—Docker, approval o grader—
 
 Percorso consigliato:
 
-1. esegui notebook 01–06 con modello reale per vedere decisioni non deterministiche;
-2. esegui `make notebooks` per laboratori governance offline 07–12;
-3. percorri step 00–13 per anatomia e loop engineering;
-4. percorri step 14–19 per produzione local-first e prove;
-5. usa la matrice di copertura per passare da concetto a modulo/test finale;
-6. avvia API e client solo dopo aver capito confini di workspace, budget e HITL.
+1. leggi `handbook/L1_SISTEMA.md` per gli stadi che una richiesta attraversa;
+2. scegli in `handbook/L2_UNITA.md` l'unità di comportamento che ti interessa e scendi alla sua
+   pagina L3: trigger, cambi di stato, percorsi di eccezione, casi limite;
+3. apri i file citati dalle ancore, non l'albero dei sorgenti in ordine alfabetico;
+4. usa la matrice di copertura per passare da concetto a modulo e test;
+5. avvia API e client solo dopo aver capito confini di workspace, budget e HITL;
+6. guarda Trace e Timeline durante un run vero: sono gli stessi stadi di L1, in diretta.
 
 Per aggiungere un tool:
 
@@ -318,7 +318,8 @@ Per aggiungere un tool:
 4. decidi se richiede approval o rete;
 5. emetti eventi correlati;
 6. aggiungi verifica deterministica e test offline;
-7. documenta nello step pertinente e aggiorna matrice.
+7. documenta il comportamento nella pagina L3 dell'unità che lo governa, con l'evidenza nel
+   codice, e aggiorna la matrice di copertura.
 
 Per aggiungere provider o subagente, usa stessa disciplina: capability esplicite, deny-by-default,
 budget, protocollo terminale e prove.
@@ -337,14 +338,14 @@ un harness affidabile dichiara ciò che non garantisce.
 uv sync --extra dev
 make test
 make lint
-make notebooks
+make handbook-check
 cd client && npm run lint && npm run build
 ```
 
-Esecuzione notebook live, con costo API:
+Dopo aver toccato un file citato dal manuale, prima del commit:
 
 ```bash
-make notebooks-live
+make handbook
 ```
 
 Avvio sistema completo:
@@ -354,5 +355,6 @@ make sandbox-image
 make run
 ```
 
-La corrispondenza completa fra funzionalità, laboratori e test è in
-[`MATRICE_COPERTURA_DIDATTICA.md`](MATRICE_COPERTURA_DIDATTICA.md).
+La corrispondenza completa fra funzionalità, implementazione e test è in
+[`MATRICE_COPERTURA_DIDATTICA.md`](MATRICE_COPERTURA_DIDATTICA.md); la mappa dei comportamenti,
+con l'evidenza nel codice, in [`handbook/README.md`](handbook/README.md).

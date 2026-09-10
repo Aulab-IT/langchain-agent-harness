@@ -1,4 +1,4 @@
-.PHONY: install test lint format handbook handbook-check handbook-html handbook-skill notebooks notebooks-live sandbox-image run chat smoke
+.PHONY: install test lint format handbook handbook-check handbook-html handbook-skill sandbox-image run chat smoke
 
 install:
 	uv sync --extra dev
@@ -29,12 +29,6 @@ handbook-html:
 
 handbook-skill:
 	uv run python scripts/handbook_skill.py
-
-notebooks:
-	uv run python scripts/validate_notebooks.py --execute-offline
-
-notebooks-live:
-	uv run python scripts/validate_notebooks.py --execute
 
 sandbox-image:
 	docker build -t langchain-harness-sandbox:latest -f docker/sandbox.Dockerfile .
