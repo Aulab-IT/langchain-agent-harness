@@ -54,6 +54,7 @@ asyncio_mode = "auto"
 # `search_roots` è una lista ORDINATA di preferenza: decide quale file vince quando
 # un'ancora usa il nome corto (`runner.py`). L'ordine è la ragione per cui questa
 # configurazione esiste — non è deducibile dalla struttura del repo.
+project = "langchain_harness"
 handbook = "docs/handbook"
 lockfile = "docs/handbook/anchors.lock.json"
 search_roots = [

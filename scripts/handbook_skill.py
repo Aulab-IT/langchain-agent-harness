@@ -103,7 +103,9 @@ def collect_units(cfg: Any) -> list[Unit]:
 
 def render(cfg: Any, units: list[Unit], name: str) -> str:
     handbook = cfg.handbook.relative_to(cfg.root).as_posix()
-    project = cfg.root.name
+    # Il nome configurato, non quello della cartella: in CI il checkout si chiama come il
+    # repository, e un artefatto che cambia con il percorso non è verificabile.
+    project = cfg.project or cfg.root.name
 
     by_stage: dict[str, list[Unit]] = {}
     for unit in units:

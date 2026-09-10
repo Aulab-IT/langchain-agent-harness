@@ -112,6 +112,41 @@ def test_shared_files_section_names_the_units_that_meet_there(repo: Path) -> Non
     assert "src/alfa.py` → unità" not in body
 
 
+def test_project_name_comes_from_the_configuration_not_the_folder(
+    repo: Path, tmp_path: Path
+) -> None:
+    """La CI clona in una cartella che porta il nome del repository, non quello locale.
+
+    Finché il nome del progetto veniva dedotto dalla cartella, l'artefatto generato in CI
+    era diverso da quello versionato e il gate falliva senza che nessuno avesse toccato il
+    manuale.
+    """
+    import shutil
+
+    cfg = _configure(repo)
+    senza_nome = gen.render(cfg, gen.collect_units(cfg), "manuale")
+    assert repo.name in senza_nome  # nessun `project` configurato: resta il fallback
+
+    config = repo / "handbook.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8") + 'project = "progetto-vero"\n', encoding="utf-8"
+    )
+    cfg = _configure(repo)
+    atteso = gen.render(cfg, gen.collect_units(cfg), "manuale")
+    assert "progetto-vero" in atteso
+    assert repo.name not in atteso
+
+    altrove = tmp_path.parent / f"{repo.name}-clonato-altrove"
+    shutil.rmtree(altrove, ignore_errors=True)
+    shutil.copytree(repo, altrove)
+    try:
+        cfg = sync.Config.load(altrove / "handbook.toml")
+        sync.use(cfg)
+        assert gen.render(cfg, gen.collect_units(cfg), "manuale") == atteso
+    finally:
+        shutil.rmtree(altrove, ignore_errors=True)
+
+
 def test_generated_skill_has_a_valid_frontmatter(repo: Path) -> None:
     cfg = _configure(repo)
     body = gen.render(cfg, gen.collect_units(cfg), "manuale")

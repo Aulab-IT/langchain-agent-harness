@@ -51,6 +51,7 @@ _DEFAULTS: dict[str, Any] = {
     "lockfile": "docs/handbook/anchors.lock.json",
     "search_roots": ["."],
     "extensions": ["py"],
+    "project": "",
 }
 
 
@@ -77,6 +78,11 @@ class Config:
     html_out: Path
     html_context_lines: int
     html_editor: str
+    # Come si chiama il progetto negli artefatti generati. Configurato, non dedotto dal
+    # nome della cartella: una CI che clona in una directory con un altro nome — il nome
+    # del repository, di solito — produrrebbe un artefatto diverso da quello versionato,
+    # e il gate fallirebbe senza che nessuno abbia toccato il manuale.
+    project: str = ""
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any], root: Path) -> Config:
@@ -91,6 +97,7 @@ class Config:
             html_out=root / str(html.get("out", "build/handbook/index.html")),
             html_context_lines=int(html.get("context_lines", 3)),
             html_editor=str(html.get("editor", "vscode")),
+            project=str(merged["project"]),
         )
 
     @classmethod
