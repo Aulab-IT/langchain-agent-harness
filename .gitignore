@@ -21,3 +21,11 @@ tmp/
 # L'artefatto del manuale incorpora il testo di ogni riga citata: cambia a ogni
 # modifica dei file citati, non solo del manuale. Si rigenera con `make handbook`.
 build/
+
+# Le skill sono dati dell'utente, non sorgenti del progetto: ognuno installa le proprie
+# (`skill_install`, Control Center, registry Agent Skills) e il repository non se le porta
+# dietro. Percorso dello standard Agent Skills: `.agents/skills/`.
+.agents/skills/
+
+# Configurazione locale dell'editor: dipende da chi lavora sul repo, non dal progetto.
+.cursor/

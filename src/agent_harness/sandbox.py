@@ -14,7 +14,7 @@ from pathlib import Path
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field
 
-from agent_harness.config import PROJECT_ROOT
+from agent_harness.config import PROJECT_ROOT, skills_root
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -383,7 +383,7 @@ class SessionSandboxManager:
             )
             self.ensure_network(isolated_network)
             command = [
-                *self.run_flags(workspace, image, project_root / "skills", isolated_network),
+                *self.run_flags(workspace, image, skills_root(project_root), isolated_network),
                 "--name",
                 name,
                 "-d",

@@ -9,8 +9,8 @@ from agent_harness.control_store import ControlStore
 
 
 def make_store(tmp_path: Path) -> ControlStore:
-    (tmp_path / "skills" / "research").mkdir(parents=True)
-    (tmp_path / "skills" / "research" / "SKILL.md").write_text("# Research\n")
+    (tmp_path / ".agents" / "skills" / "research").mkdir(parents=True)
+    (tmp_path / ".agents" / "skills" / "research" / "SKILL.md").write_text("# Research\n")
     (tmp_path / "memories").mkdir()
     (tmp_path / "memories" / "AGENTS.md").write_text("# Memory\n")
     return ControlStore(Settings(_env_file=None, project_root=tmp_path))

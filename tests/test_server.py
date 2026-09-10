@@ -22,7 +22,7 @@ from agent_harness.usage import context_categories
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    (tmp_path / "skills").mkdir()
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
     (tmp_path / "memories").mkdir()
     (tmp_path / "memories" / "AGENTS.md").write_text("# Test\n", encoding="utf-8")
     settings = Settings(_env_file=None, project_root=tmp_path, openai_api_key=None)

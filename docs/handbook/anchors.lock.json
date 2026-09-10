@@ -239,7 +239,7 @@
       260
     ]
   },
-  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/config.py|144-144": {
+  "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/config.py|154-154": {
     "doc": "docs/handbook/L3/approvazione-azioni-sensibili.md",
     "file": "src/agent_harness/config.py",
     "head": "harness_require_approval: bool = True",
@@ -247,8 +247,8 @@
     "tail": "harness_require_approval: bool = True",
     "tail_offset": 0,
     "last_seen": [
-      144,
-      144
+      154,
+      154
     ]
   },
   "docs/handbook/L3/approvazione-azioni-sensibili.md|src/agent_harness/durable.py|207-224": {
@@ -3839,6 +3839,42 @@
       2017
     ]
   },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/config.py|180-184": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/config.py",
+    "head": "def skills_dir(self) -> Path:",
+    "head_offset": 1,
+    "tail": "return skills_root(self.project_root)",
+    "tail_offset": 0,
+    "last_seen": [
+      180,
+      184
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/config.py|190-194": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/config.py",
+    "head": "def ensure_directories(self) -> None:",
+    "head_offset": 0,
+    "tail": "self.subagents_dir.mkdir(parents=True, exist_ok=True)",
+    "tail_offset": 0,
+    "last_seen": [
+      190,
+      194
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/config.py|22-30": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/config.py",
+    "head": "# Percorso delle skill dentro la radice del progetto, come lo vuole lo standard Agent Skills",
+    "head_offset": 0,
+    "tail": "return (project_root / SKILLS_SUBPATH).resolve()",
+    "tail_offset": 0,
+    "last_seen": [
+      22,
+      30
+    ]
+  },
   "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/control_store.py|1093-1094": {
     "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
     "file": "src/agent_harness/control_store.py",
@@ -3861,6 +3897,18 @@
     "last_seen": [
       1039,
       1039
+    ]
+  },
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/sandbox.py|386-386": {
+    "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
+    "file": "src/agent_harness/sandbox.py",
+    "head": "*self.run_flags(workspace, image, skills_root(project_root), isolated_network),",
+    "head_offset": 0,
+    "tail": "*self.run_flags(workspace, image, skills_root(project_root), isolated_network),",
+    "tail_offset": 0,
+    "last_seen": [
+      386,
+      386
     ]
   },
   "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|120-127": {

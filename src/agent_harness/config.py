@@ -9,8 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# Serializza le operazioni sull'albero `skills/` condiviso: la copia verso le radici di
-# sessione (`control_store.prepare_session_root`) e le scritture dei tool skill_* e delle
+# Serializza le operazioni sull'albero `.agents/skills/` condiviso: la copia verso le radici
+# di sessione (`control_store.prepare_session_root`) e le scritture dei tool skill_* e delle
 # rotte REST (`skills.py`). Sta qui perché è l'unico modulo che entrambi importano.
 SKILLS_LOCK = threading.RLock()
 SUBAGENTS_LOCK = threading.RLock()
@@ -18,6 +18,16 @@ SUBAGENTS_LOCK = threading.RLock()
 # Mount point delle directory host dentro il container sandbox.
 SANDBOX_WORKSPACE_MOUNT = "/workspace"
 SANDBOX_SKILLS_MOUNT = "/skills"
+
+# Percorso delle skill dentro la radice del progetto, come lo vuole lo standard Agent Skills
+# (agentskills.io): `.agents/skills/`, non una cartella `skills/` in radice. Sta qui perché
+# `sandbox.py` monta la stessa directory e non deve ricostruirne il percorso a mano.
+SKILLS_SUBPATH = Path(".agents") / "skills"
+
+
+def skills_root(project_root: Path) -> Path:
+    """Directory delle skill di una radice di progetto."""
+    return (project_root / SKILLS_SUBPATH).resolve()
 
 
 class Settings(BaseSettings):
@@ -169,7 +179,9 @@ class Settings(BaseSettings):
 
     @property
     def skills_dir(self) -> Path:
-        return (self.project_root / "skills").resolve()
+        # Le skill sono dati dell'utente, non sorgenti del progetto: ognuno installa le
+        # proprie e il repository non se le porta dietro (vedi `.gitignore`).
+        return skills_root(self.project_root)
 
     @property
     def subagents_dir(self) -> Path:
@@ -178,6 +190,7 @@ class Settings(BaseSettings):
     def ensure_directories(self) -> None:
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.state_dir.mkdir(parents=True, exist_ok=True)
+        self.skills_dir.mkdir(parents=True, exist_ok=True)
         self.subagents_dir.mkdir(parents=True, exist_ok=True)
 
     def require_openai_key(self) -> str:

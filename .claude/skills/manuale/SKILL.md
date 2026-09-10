@@ -49,7 +49,7 @@ Tocca: `src/agent_harness/context_budget.py`.
 → `docs/handbook/L3/budget-di-contesto.md`
 
 **2.2 · Progressive disclosure delle skill** — Esporre le skill per nome e descrizione, caricarne il corpo solo su invocazione, e trattare l'installazione da fonti esterne come la superficie d'attacco che è.
-Tocca: `src/agent_harness/skills.py`, `src/agent_harness/control_store.py`, `src/agent_harness/factory.py`.
+Tocca: `src/agent_harness/skills.py`, `src/agent_harness/config.py`, `src/agent_harness/control_store.py`, `src/agent_harness/factory.py`, `src/agent_harness/sandbox.py`.
 → `docs/handbook/L3/progressive-disclosure-skill.md`
 
 ### Stadio 3 · Esecuzione del turno
@@ -113,13 +113,14 @@ più di uno.
 
 - `src/agent_harness/factory.py` → unità 1.1, 1.2, 2.2, 3.1, 4.1, T.1
 - `src/agent_harness/server.py` → unità 4.1, 4.2, 6.1, 6.2, T.2
+- `src/agent_harness/config.py` → unità 1.1, 2.2, 4.1
 - `src/agent_harness/durable.py` → unità 4.1, 6.1, T.2
 - `src/agent_harness/runner.py` → unità 4.1, 4.2, 5.1
 - `client/src/App.tsx` → unità 4.1, 4.2
 - `src/agent_harness/cli.py` → unità 4.1, 5.3
-- `src/agent_harness/config.py` → unità 1.1, 4.1
 - `src/agent_harness/control_store.py` → unità 1.1, 2.2
 - `src/agent_harness/run_budget.py` → unità 5.3, T.1
+- `src/agent_harness/sandbox.py` → unità 2.2, 4.3
 
 ## Se il manuale e il codice non concordano
 

@@ -30,6 +30,27 @@ Le modifiche fatte dal pannello valgono dal run successivo, perché
 `prepare_session_root` ricopia la cartella da zero a ogni run
 (`control_store.py · L1093–1094`).
 
+### Dove vivono, e perché in tre posti
+
+Lo stesso catalogo compare sotto tre percorsi diversi, ed è facile confonderli:
+
+| Percorso | Cos'è | Chi lo scrive |
+|---|---|---|
+| `.agents/skills/` nel progetto | sorgente unica, percorso dello standard Agent Skills | l'utente, i tool `skill_*`, il Control Center |
+| `<radice di sessione>/skills/` | copia rifatta a ogni run | `prepare_session_root` |
+| `/skills` nel container | mount in sola lettura della sorgente | il manager della sandbox |
+
+La sorgente è `.agents/skills/`, non una cartella `skills/` in radice: lo dice
+`SKILLS_SUBPATH`, e sia la configurazione sia il mount della sandbox partono da lì
+invece di ricostruire il percorso a mano.
+
+**Evidenza:** `config.py · L22–30` (`SKILLS_SUBPATH`), `config.py · L180–184` (`skills_dir`),
+`config.py · L190–194` (`ensure_directories`), `sandbox.py · L386` (il mount).
+
+Sono **dati dell'utente, non sorgenti del progetto**: ogni installazione ha il proprio
+catalogo e il repository non lo versiona (`.gitignore`). Un clone appena fatto parte senza
+nessuna skill, e `ensure_directories` crea la cartella vuota al primo avvio.
+
 ---
 
 ## Formato e validazione

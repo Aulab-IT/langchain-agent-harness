@@ -13,6 +13,15 @@ def test_settings_create_expected_paths(tmp_path: Path) -> None:
     assert settings.state_dir.is_dir()
 
 
+def test_skills_live_under_the_agent_skills_path(tmp_path: Path) -> None:
+    """Lo standard Agent Skills vuole `.agents/skills/`, non una cartella in radice."""
+    settings = Settings(_env_file=None, project_root=tmp_path)
+    settings.ensure_directories()
+    assert settings.skills_dir == (tmp_path / ".agents" / "skills").resolve()
+    assert settings.skills_dir.is_dir()
+    assert not (tmp_path / "skills").exists()
+
+
 def test_openai_key_is_required_explicitly(tmp_path: Path) -> None:
     settings = Settings(_env_file=None, project_root=tmp_path, openai_api_key=None)
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):

@@ -287,7 +287,7 @@ async def test_execute_case_separates_checks_from_completion_and_captures_feedba
     )
     (tmp_path / "memories").mkdir()
     (tmp_path / "memories" / "AGENTS.md").write_text("# Test\n", encoding="utf-8")
-    (tmp_path / "skills").mkdir()
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
     captured_settings: list[Settings] = []
 
     class FakeGraph:

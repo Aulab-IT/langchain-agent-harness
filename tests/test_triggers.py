@@ -18,7 +18,7 @@ def _dt(minute: int = 0, hour: int = 0, day: int = 1, month: int = 1) -> datetim
 
 
 def make_store(tmp_path: Path) -> ControlStore:
-    (tmp_path / "skills").mkdir()
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
     (tmp_path / "memories").mkdir()
     (tmp_path / "memories" / "AGENTS.md").write_text("# Memory\n")
     return ControlStore(Settings(_env_file=None, project_root=tmp_path))

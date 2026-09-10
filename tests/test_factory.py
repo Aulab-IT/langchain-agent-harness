@@ -73,7 +73,7 @@ def test_auto_approve_skips_local_commands_but_never_network() -> None:
 async def test_factory_builds_graph_without_network_calls(tmp_path: Path) -> None:
     (tmp_path / "memories").mkdir()
     (tmp_path / "memories" / "AGENTS.md").write_text("# Memoria\n", encoding="utf-8")
-    (tmp_path / "skills").mkdir()
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
     settings = Settings(
         _env_file=None,
         project_root=tmp_path,
@@ -96,7 +96,7 @@ async def test_factory_loads_user_subagent_and_overrides_builtin(
 ) -> None:
     (tmp_path / "memories").mkdir()
     (tmp_path / "memories" / "AGENTS.md").write_text("# Memoria\n", encoding="utf-8")
-    (tmp_path / "skills").mkdir()
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
     (tmp_path / "subagents").mkdir()
     (tmp_path / "subagents" / "reviewer.md").write_text(
         "---\n"
@@ -155,7 +155,7 @@ async def test_factory_loads_user_subagent_and_overrides_builtin(
 async def test_mcp_enabled_exposes_guarded_proposal_tool(tmp_path: Path) -> None:
     (tmp_path / "memories").mkdir()
     (tmp_path / "memories" / "AGENTS.md").write_text("# Memoria\n", encoding="utf-8")
-    (tmp_path / "skills").mkdir()
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
     settings = Settings(
         _env_file=None,
         project_root=tmp_path,
@@ -174,7 +174,7 @@ async def test_mcp_enabled_exposes_guarded_proposal_tool(tmp_path: Path) -> None
 async def test_factory_exposes_canary_attribution(tmp_path: Path) -> None:
     (tmp_path / "memories").mkdir()
     (tmp_path / "memories" / "AGENTS.md").write_text("# Memoria\n", encoding="utf-8")
-    (tmp_path / "skills").mkdir()
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
     (tmp_path / "state").mkdir()
     candidate = {"harness_max_tool_calls": 12}
     (tmp_path / "state" / "canary.json").write_text(
@@ -262,7 +262,7 @@ async def test_build_harness_with_ollama_colon_model(tmp_path: Path) -> None:
     # 'openai:ornith:9b' (due ':'). Il profilo ora è per-provider (chiave bare).
     (tmp_path / "memories").mkdir()
     (tmp_path / "memories" / "AGENTS.md").write_text("# Memoria\n", encoding="utf-8")
-    (tmp_path / "skills").mkdir()
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
     settings = Settings(
         _env_file=None,
         project_root=tmp_path,
