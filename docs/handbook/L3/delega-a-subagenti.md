@@ -183,7 +183,7 @@ Sei condizioni, tutte necessarie:
 | stato riportato `complete` **con** evidenza | il «fatto» senza prove | `subagent_routing.py · L899–914` |
 | se `kind == "review"`, verdetto `pass` | una review che non approva | `subagent_routing.py · L917–919` |
 | tutti i `required_tools` davvero usati | dichiarare uno strumento e non usarlo | `subagent_routing.py · L936` |
-| se l'output atteso nomina un file, un artefatto deve esistere | il file promesso e mai scritto | `subagent_routing.py · L938–942` |
+| se `expected_output` contiene uno dei marcatori `file `, `file.`, `.pptx`, `artefatto salvato`, deve esistere almeno un artefatto | il file promesso e mai scritto | `subagent_routing.py · L938–942` |
 
 Le frasi di blocco («mi manca», «non ho accesso», «cannot proceed») sono la difesa contro il
 caso peggiore: un subagente che spiega educatamente di non aver potuto fare niente, e la cui

@@ -41,7 +41,7 @@ Da leggere come una disgiunzione con una gamba non negoziabile:
 
 - `with_network=true` → **sempre** approvazione. Nessuna configurazione la disattiva.
 - Altrimenti → approvazione se la configurazione la richiede
-  (`harness_require_approval`, default `True` in `config.py · L144`) e la sessione non è in
+  (`harness_require_approval`, default `True` in `config.py · L154`) e la sessione non è in
   autonomia.
 
 `propose_mcp_server` ha `when` costante-`True` con un commento che spiega il perché: un
@@ -261,7 +261,7 @@ Sul client, il modale è montato in `App.tsx · L231–239` e implementato in
 
 Il confine della modifica, se devi toccare questo comportamento:
 
-- **Aggiungere un tool da gattare** → `factory.py · L781–798`, e valuta se serve una
+- **Mettere un altro tool sotto approvazione** → `factory.py · L781–798`, e valuta se serve una
   ricostruzione dedicata del payload in `server.py` come per `propose_mcp_server`.
 - **Cambiare quando si può auto-approvare** → due siti da tenere allineati,
   `factory.py · L85–90` e `server.py · L1194–1199`. Toccarne uno solo rompe l'invariante
