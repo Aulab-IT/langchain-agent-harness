@@ -1,4 +1,6 @@
-.PHONY: install test lint format handbook handbook-check handbook-html handbook-skill sandbox-image run chat smoke
+.PHONY: install test lint format handbook handbook-check handbook-html handbook-skill sandbox-image sandbox-image-check run chat smoke
+
+SANDBOX_IMAGE ?= langchain-harness-sandbox:latest
 
 install:
 	uv sync --extra dev
@@ -31,9 +33,20 @@ handbook-skill:
 	uv run python scripts/handbook_skill.py
 
 sandbox-image:
-	docker build -t langchain-harness-sandbox:latest -f docker/sandbox.Dockerfile .
+	docker build -t $(SANDBOX_IMAGE) -f docker/sandbox.Dockerfile docker/
 
-run:
+sandbox-image-check:
+	@docker version >/dev/null 2>&1 || { \
+		echo "Docker non è attivo. Avvia Docker Desktop, poi riprova."; \
+		exit 1; \
+	}
+	@docker image inspect $(SANDBOX_IMAGE) >/dev/null 2>&1 || { \
+		echo "Immagine sandbox $(SANDBOX_IMAGE) assente."; \
+		echo "Costruiscila una volta con: make sandbox-image"; \
+		exit 1; \
+	}
+
+run: sandbox-image-check
 	@trap 'kill 0' INT TERM EXIT; \
 	uv run harness-api & \
 	cd client && npm run dev & \

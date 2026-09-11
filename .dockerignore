@@ -7,4 +7,10 @@ __pycache__
 .ruff_cache
 state
 workspace
+client
+node_modules
+lezione_harness
+tmp
+build
+.agents
 

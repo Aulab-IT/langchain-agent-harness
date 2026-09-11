@@ -70,7 +70,7 @@ npm install
 npm run dev
 ```
 
-Apri `http://127.0.0.1:5173` (oppure `make run`, che avvia API e client insieme).
+Apri `http://127.0.0.1:5173` (oppure `make run`, che verifica l'immagine sandbox e avvia API e client insieme). Senza `make sandbox-image` il check fallisce: Docker acceso non basta, il primo `docker_exec` non deve costruire l'immagine in silenzio.
 
 **Conversazione.** Chat con streaming del delta del modello, tool, skills, richieste
 di approvazione e token rate via SSE. Allegati caricabili da due punti (composer del
@@ -241,7 +241,7 @@ make lint       # analisi statica
 make format     # ruff format + fix automatico
 make sandbox-image # immagine Docker riproducibile
 make handbook   # rigenera le ancore del manuale e i suoi artefatti
-make run        # API + Control Center insieme
+make run        # check immagine sandbox, poi API + Control Center
 make chat       # chat interattiva CLI
 make smoke      # run singolo di verifica end-to-end
 ```

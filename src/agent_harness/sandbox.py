@@ -213,7 +213,10 @@ class SessionSandboxManager:
                 image,
                 "-f",
                 str(dockerfile),
-                str(project_root),
+                # Il Dockerfile non fa COPY: contesto = cartella docker/, non tutto il repo.
+                # Con `.` Docker Desktop restava minuti a 0/0 step a serializzare
+                # client/node_modules e altri alberi inutili, e docker_exec sembrava appeso.
+                str(dockerfile.parent),
             ],
             capture_output=True,
             text=True,
