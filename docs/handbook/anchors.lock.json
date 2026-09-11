@@ -2627,7 +2627,7 @@
       45
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|227-246": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|230-249": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "def _connect_network(self, container: str, network: str) -> None:",
@@ -2635,11 +2635,11 @@
     "tail": "timeout=15,",
     "tail_offset": 1,
     "last_seen": [
-      227,
-      246
+      230,
+      249
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|293-356": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|296-359": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "def run_flags(",
@@ -2647,11 +2647,11 @@
     "tail": "\"/workspace\",",
     "tail_offset": 1,
     "last_seen": [
-      293,
-      356
+      296,
+      359
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|300-305": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|303-308": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "\"\"\"Flag di sicurezza per `docker run`, SENZA l'immagine.",
@@ -2659,11 +2659,11 @@
     "tail": "queste opzioni e l'immagine, mai dopo).",
     "tail_offset": 0,
     "last_seen": [
-      300,
-      305
+      303,
+      308
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|306-311": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|309-314": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "`isolated_network` è la rete di base del container: una rete `--internal`",
@@ -2671,11 +2671,11 @@
     "tail": "`none`, impedendo la concessione temporanea di internet per gli install.",
     "tail_offset": 1,
     "last_seen": [
-      306,
-      311
+      309,
+      314
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|329-332": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|332-335": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "# Limiti dimensionati per lavoro reale, non solo demo: installare client cloud",
@@ -2683,11 +2683,11 @@
     "tail": "# build, e «No space left on device» era il risultato. Restano limiti fermi.",
     "tail_offset": 0,
     "last_seen": [
-      329,
-      332
+      332,
+      335
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|359-406": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|362-409": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "def ensure_running(",
@@ -2695,11 +2695,11 @@
     "tail": "raise RuntimeError(\"Container sandbox non risulta in esecuzione dopo l'avvio.\")",
     "tail_offset": 1,
     "last_seen": [
-      359,
-      406
+      362,
+      409
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|359-419": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|362-422": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "def ensure_running(",
@@ -2707,11 +2707,11 @@
     "tail": "self.forget(session_id)",
     "tail_offset": 0,
     "last_seen": [
-      359,
-      419
+      362,
+      422
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|403-404": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|406-407": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "raise RuntimeError(f\"Avvio sandbox sessione fallito:\\n{detail}\")",
@@ -2719,11 +2719,11 @@
     "tail": "if not self.is_running(session_id):",
     "tail_offset": 0,
     "last_seen": [
-      403,
-      404
+      406,
+      407
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|408-419": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|411-422": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "def stop(self, session_id: str) -> None:",
@@ -2731,11 +2731,11 @@
     "tail": "self.forget(session_id)",
     "tail_offset": 0,
     "last_seen": [
-      408,
-      419
+      411,
+      422
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|421-472": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|424-475": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "def execute(",
@@ -2743,11 +2743,11 @@
     "tail": "return _offload_or_truncate(combined, workspace, output_limit)",
     "tail_offset": 1,
     "last_seen": [
-      421,
-      472
+      424,
+      475
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|434-434": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|437-437": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "if \"\\x00\" in command:",
@@ -2755,11 +2755,11 @@
     "tail": "if \"\\x00\" in command:",
     "tail_offset": 0,
     "last_seen": [
-      434,
-      434
+      437,
+      437
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|436-458": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|439-461": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "self.touch(session_id)",
@@ -2767,11 +2767,11 @@
     "tail": "self._disconnect_network(container, network)",
     "tail_offset": 0,
     "last_seen": [
-      436,
-      458
+      439,
+      461
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|439-443": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|442-446": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "# Concessione per-comando: collega la rete solo per questo exec e la",
@@ -2779,11 +2779,11 @@
     "tail": "# ancora presente (errore ignorato con check=False); il finally la ripulisce.",
     "tail_offset": 0,
     "last_seen": [
-      439,
-      443
+      442,
+      446
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|446-449": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|449-452": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "# Niente `text=True`: farebbe una decodifica UTF-8 STRETTA di stdout/stderr, e",
@@ -2791,11 +2791,11 @@
     "tail": "# noi con `errors=\"replace\"`, così l'output è sempre una stringa valida.",
     "tail_offset": 0,
     "last_seen": [
-      446,
-      449
+      449,
+      452
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|456-458": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|459-461": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "finally:",
@@ -2803,11 +2803,11 @@
     "tail": "self._disconnect_network(container, network)",
     "tail_offset": 0,
     "last_seen": [
-      456,
-      458
+      459,
+      461
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|459-465": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|462-468": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "except FileNotFoundError:",
@@ -2815,11 +2815,11 @@
     "tail": "return f\"ERRORE: {exc}\"",
     "tail_offset": 1,
     "last_seen": [
-      459,
-      465
+      462,
+      468
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|474-485": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|477-488": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "def _decode_output(data: bytes | str | None) -> str:",
@@ -2827,11 +2827,11 @@
     "tail": "return data",
     "tail_offset": 0,
     "last_seen": [
-      474,
-      485
+      477,
+      488
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|488-519": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|491-522": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "def _offload_or_truncate(combined: str, workspace: Path, output_limit: int) -> str:",
@@ -2839,11 +2839,11 @@
     "tail": "tail = combined[-output_limit // 2 :]",
     "tail_offset": 0,
     "last_seen": [
-      488,
-      519
+      491,
+      522
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|489-498": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|492-501": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "\"\"\"Un output di tool troppo lungo: salva l'integrale su file, tieni in contesto un estratto.",
@@ -2851,11 +2851,11 @@
     "tail": "fa perdere del tutto l'output.",
     "tail_offset": 0,
     "last_seen": [
-      489,
-      498
+      492,
+      501
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|516-519": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|519-522": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "return offloaded.render()",
@@ -2863,11 +2863,11 @@
     "tail": "tail = combined[-output_limit // 2 :]",
     "tail_offset": 0,
     "last_seen": [
-      516,
-      519
+      519,
+      522
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|556-563": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|559-566": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "class SandboxIdleReaper:",
@@ -2875,11 +2875,11 @@
     "tail": "di un container che magari sta per essere riusato).",
     "tail_offset": 1,
     "last_seen": [
-      556,
-      563
+      559,
+      566
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|556-616": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|559-619": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "class SandboxIdleReaper:",
@@ -2887,11 +2887,11 @@
     "tail": "self._task = None",
     "tail_offset": 1,
     "last_seen": [
-      556,
-      616
+      559,
+      619
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|586-595": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|589-598": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "stopped: list[str] = []",
@@ -2899,11 +2899,11 @@
     "tail": "stopped.append(session_id)",
     "tail_offset": 0,
     "last_seen": [
-      586,
-      595
+      589,
+      598
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|598-604": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|601-607": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "async def _loop(self) -> None:",
@@ -2911,11 +2911,11 @@
     "tail": "await asyncio.sleep(self.tick_seconds)",
     "tail_offset": 0,
     "last_seen": [
-      598,
-      604
+      601,
+      607
     ]
   },
-  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|668-681": {
+  "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|671-684": {
     "doc": "docs/handbook/L3/esecuzione-in-sandbox.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "def as_tool(self) -> BaseTool:",
@@ -2923,8 +2923,8 @@
     "tail": "args_schema=DockerExecInput,",
     "tail_offset": 0,
     "last_seen": [
-      668,
-      681
+      671,
+      684
     ]
   },
   "docs/handbook/L3/esecuzione-in-sandbox.md|src/agent_harness/sandbox.py|76-78": {
@@ -3899,7 +3899,7 @@
       1039
     ]
   },
-  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/sandbox.py|386-386": {
+  "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/sandbox.py|389-389": {
     "doc": "docs/handbook/L3/progressive-disclosure-skill.md",
     "file": "src/agent_harness/sandbox.py",
     "head": "*self.run_flags(workspace, image, skills_root(project_root), isolated_network),",
@@ -3907,8 +3907,8 @@
     "tail": "*self.run_flags(workspace, image, skills_root(project_root), isolated_network),",
     "tail_offset": 0,
     "last_seen": [
-      386,
-      386
+      389,
+      389
     ]
   },
   "docs/handbook/L3/progressive-disclosure-skill.md|src/agent_harness/skills.py|120-127": {

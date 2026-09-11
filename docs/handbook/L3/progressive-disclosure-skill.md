@@ -45,7 +45,7 @@ La sorgente è `.agents/skills/`, non una cartella `skills/` in radice: lo dice
 invece di ricostruire il percorso a mano.
 
 **Evidenza:** `config.py · L22–30` (`SKILLS_SUBPATH`), `config.py · L180–184` (`skills_dir`),
-`config.py · L190–194` (`ensure_directories`), `sandbox.py · L386` (il mount).
+`config.py · L190–194` (`ensure_directories`), `sandbox.py · L389` (il mount).
 
 Sono **dati dell'utente, non sorgenti del progetto**: ogni installazione ha il proprio
 catalogo e il repository non lo versiona (`.gitignore`). Un clone appena fatto parte senza
