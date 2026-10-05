@@ -1074,6 +1074,78 @@ async def test_completed_dag_exposes_evidence_and_delegated_sandbox_verification
 
 
 @pytest.mark.asyncio
+async def test_runner_continuation_reopens_tools_after_mixed_plan_finalization() -> None:
+    # Piano misto: la ricerca è delegata, il PDF resta al root. Un preflight del tool root
+    # soddisfa la rotta e attiva la finalizzazione prima che l'artefatto esista; la
+    # continuazione del runner deve riaprire i tool, altrimenti il run non può più verificare.
+    candidate = tool_profile("docker_exec", origin="built-in")
+    plan = DelegationPlan(
+        delegate=True,
+        rationale="research delegated, pdf on root",
+        tasks=[task("research", "worker-a")],
+        root_tools=RootToolRoute(
+            required=True,
+            external_data_required=False,
+            candidates=[candidate.name],
+            rationale="root builds the PDF in sandbox",
+        ),
+    )
+    events: list[dict[str, Any]] = []
+    model = FakeModel(plan)
+    router = SubagentRouterMiddleware(  # type: ignore[arg-type]
+        model, [profile("worker-a")], tools=[candidate], event_callback=events.append
+    )
+    goal = HumanMessage(content="Ricerca e genera un PDF")
+    first_turn = ModelRequest(  # type: ignore[arg-type]
+        model=model, messages=[goal], tools=[]
+    )
+    router.wrap_model_call(first_turn, lambda _: "ok")  # type: ignore[arg-type,return-value]
+    execution, _ = await router.prepare_delegation(
+        "worker-a", "[routing_task_id=research] ricerca", "call-one"
+    )
+    router.complete_delegation(execution, result=completed("Sintesi della ricerca pronta."))
+
+    def docker_call(call_id: str) -> ToolCallRequest:
+        return ToolCallRequest(  # type: ignore[arg-type]
+            tool_call={"id": call_id, "name": candidate.name, "args": {}},
+            tool=None,
+            state={},
+            runtime=None,
+        )
+
+    def sandbox_ok(request: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(
+            content="exit_code=0",
+            tool_call_id=str(request.tool_call["id"]),
+            name=candidate.name,
+        )
+
+    router.wrap_tool_call(docker_call("preflight"), sandbox_ok)
+    router.wrap_model_call(first_turn, lambda _: "ok")  # type: ignore[arg-type,return-value]
+    blocked = router.wrap_tool_call(  # type: ignore[arg-type]
+        docker_call("same-turn"), lambda _: pytest.fail("same turn stays in finalization")
+    )
+    assert "already complete" in str(blocked.content)
+
+    continuation = ModelRequest(  # type: ignore[arg-type]
+        model=model,
+        messages=[goal, AIMessage(content="Fatto."), HumanMessage(content="Manca la verifica")],
+        tools=[],
+    )
+    captured: list[ModelRequest[Any]] = []
+    router.wrap_model_call(  # type: ignore[arg-type]
+        continuation, lambda next_request: captured.append(next_request) or "ok"
+    )
+    system = captured[0].system_message
+    assert system is not None
+    assert "finalization mode" not in system.text
+
+    executed = router.wrap_tool_call(docker_call("verify"), sandbox_ok)
+    assert executed.content == "exit_code=0"
+    assert any(event["type"] == "subagent.finalization.reopened" for event in events)
+
+
+@pytest.mark.asyncio
 async def test_review_requires_explicit_pass_verdict() -> None:
     planned = task("review", "worker-a").model_copy(update={"kind": "review"})
     plan = DelegationPlan(delegate=True, rationale="review", tasks=[planned])

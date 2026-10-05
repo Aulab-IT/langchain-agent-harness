@@ -109,10 +109,10 @@ sprecherebbe tutto ciò che ha già speso.
 ## Il piano entra nel prompt, non in un esecutore
 
 Il piano validato viene **reso in testo** e appeso al system message a ogni turno
-(`subagent_routing.py · L687–698`). Il modello root non riceve un grafo da eseguire:
+(`subagent_routing.py · L712–724`). Il modello root non riceve un grafo da eseguire:
 riceve un contesto che dice quali task esistono, a chi sono assegnati e in che ordine.
 
-La pianificazione avviene **una volta per run** (`subagent_routing.py · L1571–1580`), e il
+La pianificazione avviene **una volta per run** (`subagent_routing.py · L1601–1610`), e il
 flag `_planned` si alza *prima* di pianificare, non dopo: un errore del pianificatore non
 innesca un ciclo di ripianificazioni.
 
@@ -120,9 +120,9 @@ innesca un ciclo di ripianificazioni.
 
 ## Dalla chiamata al task pianificato
 
-Quando root delega, `prepare_delegation` (`subagent_routing.py · L1078–1252`) deve capire
+Quando root delega, `prepare_delegation` (`subagent_routing.py · L1108–1282`) deve capire
 **a quale task pianificato** corrisponde la chiamata. Due strategie in cascata
-(`subagent_routing.py · L1052–1076`):
+(`subagent_routing.py · L1082–1106`):
 
 1. un marcatore esplicito `[routing_task_id=…]` nella descrizione
    (`subagent_routing.py · L33`);
@@ -136,7 +136,7 @@ già completato non viene riassegnato.
 
 Se root sceglie un agente diverso da quello pianificato ma presente fra le `alternatives`,
 il task viene **riassegnato** e il piano aggiornato di conseguenza
-(`subagent_routing.py · L1082–1112`). Il piano si adatta a una scelta ragionevole invece di
+(`subagent_routing.py · L1112–1142`). Il piano si adatta a una scelta ragionevole invece di
 imporsi; le alternative sono state validate contro il roster, quindi la riassegnazione non
 apre una porta.
 
@@ -154,14 +154,14 @@ def pause_delegation(self, execution):
     """Registra un approval interrupt come pausa, senza chiudere o ritentare il task."""
 ```
 
-**Evidenza:** `subagent_routing.py · L1254–1272`.
+**Evidenza:** `subagent_routing.py · L1284–1302`.
 
 Senza questo stato una richiesta di approvazione sembrerebbe un fallimento, e alla ripresa
 il task verrebbe rieseguito da capo — pagando due volte il lavoro già fatto. La guardia
 `execution.status in {"completed", "incomplete", "failed", "blocked"}` impedisce di mettere
 in pausa un task già chiuso.
 
-Durante l'esecuzione `record_tool_event` (`subagent_routing.py · L986–1006`) collega ogni
+Durante l'esecuzione `record_tool_event` (`subagent_routing.py · L1016–1036`) collega ogni
 tool completato al task **e al tentativo corrente**: un evento che arriva da un tentativo
 precedente viene scartato. È qui che si marca `environment_verified`, quando un
 `docker_exec` esce con `exit_code=0`.
@@ -172,45 +172,45 @@ precedente viene scartato. È qui che si marca `environment_verified`, quando un
 
 Il subagente dice «fatto». Il middleware non gli crede.
 
-**Evidenza:** `subagent_routing.py · L964–984` (`_contract_met`).
+**Evidenza:** `subagent_routing.py · L994–1014` (`_contract_met`).
 
 Sei condizioni, tutte necessarie:
 
 | Controllo | Cosa impedisce | Evidenza |
 |---|---|---|
-| output ≥ 20 caratteri | risposte vuote | `subagent_routing.py · L972` |
+| output ≥ 20 caratteri | risposte vuote | `subagent_routing.py · L1002` |
 | nessuna frase di blocco | costruire sopra un subagente bloccato | `subagent_routing.py · L36–46` |
-| stato riportato `complete` **con** evidenza | il «fatto» senza prove | `subagent_routing.py · L941–956` |
-| se `kind == "review"`, verdetto `pass` | una review che non approva | `subagent_routing.py · L959–961` |
-| tutti i `required_tools` davvero usati | dichiarare uno strumento e non usarlo | `subagent_routing.py · L978` |
-| se `expected_output` contiene uno dei marcatori `file `, `file.`, `.pptx`, `artefatto salvato`, deve esistere almeno un artefatto | il file promesso e mai scritto | `subagent_routing.py · L980–984` |
+| stato riportato `complete` **con** evidenza | il «fatto» senza prove | `subagent_routing.py · L971–986` |
+| se `kind == "review"`, verdetto `pass` | una review che non approva | `subagent_routing.py · L989–991` |
+| tutti i `required_tools` davvero usati | dichiarare uno strumento e non usarlo | `subagent_routing.py · L1008` |
+| se `expected_output` contiene uno dei marcatori `file `, `file.`, `.pptx`, `artefatto salvato`, deve esistere almeno un artefatto | il file promesso e mai scritto | `subagent_routing.py · L1010–1014` |
 
 Le frasi di blocco («mi manca», «non ho accesso», «cannot proceed») sono la difesa contro il
 caso peggiore: un subagente che spiega educatamente di non aver potuto fare niente, e la cui
 risposta verrebbe altrimenti trattata come risultato.
 
-L'esito è `completed` oppure `incomplete` (`subagent_routing.py · L1320–1322`). Non esiste
+L'esito è `completed` oppure `incomplete` (`subagent_routing.py · L1350–1352`). Non esiste
 un `completed` concesso per fiducia.
 
 ### Riconciliazione degli artefatti
 
 La parte che rende il contratto verificabile invece che dichiarativo. Prima dell'esecuzione
 si prende uno **snapshot** del workspace con un fingerprint per file
-(`subagent_routing.py · L880–899`); alla fine si confronta.
+(`subagent_routing.py · L910–929`); alla fine si confronta.
 
-**Evidenza:** `subagent_routing.py · L1297–1313`.
+**Evidenza:** `subagent_routing.py · L1327–1343`.
 
 Funziona nei due sensi:
 
 - una **rivendicazione** del subagente è accettata solo se quel file risulta davvero
-  cambiato rispetto allo snapshot (`subagent_routing.py · L908–914`) — dichiarare un file
+  cambiato rispetto allo snapshot (`subagent_routing.py · L938–944`) — dichiarare un file
   preesistente non conta;
 - i file **effettivamente nuovi** che corrispondono all'estensione attesa vengono aggiunti
   anche se il subagente si è dimenticato di nominarli
-  (`subagent_routing.py · L916–925`).
+  (`subagent_routing.py · L946–955`).
 
 L'estensione attesa si ricava dal campo `expected_output` del task
-(`subagent_routing.py · L902–906`): se il task prometteva un `.pptx`, un `.txt` nuovo non
+(`subagent_routing.py · L932–936`): se il task prometteva un `.pptx`, un `.txt` nuovo non
 lo soddisfa.
 
 Se il progetto non fornisce né snapshotter né lister, `provenance_available` è falso e le
@@ -220,8 +220,8 @@ rivendicazioni passano senza confronto: la verifica degrada, non fallisce.
 
 ## Finalizzazione: i tool si chiudono
 
-Quando tutti i task sono `completed` (`subagent_routing.py · L700–706`) e la rotta dei tool
-root è soddisfatta (`subagent_routing.py · L708–711`), il middleware entra in modalità di
+Quando tutti i task sono `completed` (`subagent_routing.py · L726–732`) e la rotta dei tool
+root è soddisfatta (`subagent_routing.py · L734–737`), il middleware entra in modalità di
 finalizzazione.
 
 ```python
@@ -230,12 +230,12 @@ def wrap_tool_call(self, request, handler):
         return self._blocked_finalization_tool(request)
 ```
 
-**Evidenza:** `subagent_routing.py · L784–793`, `subagent_routing.py · L765–782`.
+**Evidenza:** `subagent_routing.py · L814–823`, `subagent_routing.py · L795–812`.
 
 I tool vengono **bloccati** e al loro posto il modello riceve un contesto che dice:
 sintetizza la risposta dalle evidenze validate, non ricreare un piano, non rileggere le
 skill, non rifare i controlli già passati, non modificare gli artefatti
-(`subagent_routing.py · L729–745`).
+(`subagent_routing.py · L759–775`).
 
 **Un'eccezione sola: la verifica sandbox ancora dovuta.** Se l'obiettivo contiene un verbo
 di produzione, il [runner](continuazione-e-verifica.md#verifica-dambiente) esige un
@@ -246,8 +246,22 @@ criterio impossibile, e ogni continuazione fallirebbe allo stesso modo fino a
 finalizzazione lo dichiara come criterio aperto; appena un `docker_exec` dell'agente
 principale riesce, si richiude come ogni altro tool.
 
-**Evidenza:** `subagent_routing.py · L716–727`, `subagent_routing.py · L747–751`,
-`subagent_routing.py · L753–763`.
+**Evidenza:** `subagent_routing.py · L746–757`, `subagent_routing.py · L777–781`,
+`subagent_routing.py · L783–793`.
+
+**Riapertura: il runner ha l'ultima parola.** L'eccezione sandbox non basta quando il root
+ha ancora un artefatto da produrre. In un piano misto (ricerca delegata, PDF al root) un
+preflight come `command -v weasyprint` soddisfa la rotta root *e* conta come verifica
+riuscita: la finalizzazione si chiude su tutto, `write_file` compreso, prima che il PDF
+esista. Il runner invece guarda solo il turno corrente e scarta quel preflight alla prima
+continuazione: senza un'altra via d'uscita il run gira fino a `failed_verification`.
+
+Per questo il middleware conta i messaggi umani alla prima chiamata al modello in
+finalizzazione. Se una chiamata successiva ne vede di più, è una continuazione del runner,
+cioè un verdetto di lavoro incompleto: la finalizzazione cade per il resto del run e si
+emette `subagent.finalization.reopened`. Dentro lo stesso turno il blocco resta.
+
+**Evidenza:** `subagent_routing.py · L689–710`, `subagent_routing.py · L739–744`.
 
 È la protezione contro l'agente che, avendo finito, ricomincia a lavorare — il modo più
 comune di bruciare budget dopo che il risultato era già pronto.
@@ -267,9 +281,9 @@ tentativo, output, errore, artefatti in ingresso e uscita, tool usati,
 `environment_verified` è ciò che consente alla
 [continuazione](continuazione-e-verifica.md#verifica-dambiente) di accettare una verifica
 **delegata**: se il subagente ha eseguito con successo in sandbox, il padre non deve
-rifarlo (`subagent_routing.py · L1008–1015`).
+rifarlo (`subagent_routing.py · L1038–1045`).
 
-`completion_evidence` (`subagent_routing.py · L1017–1045`) raccoglie ciò che il modello legge
+`completion_evidence` (`subagent_routing.py · L1047–1075`) raccoglie ciò che il modello legge
 in finalizzazione, con un tetto in caratteri: l'evidenza deve stare nel contesto.
 
 Il modulo estrae anche segnali dal testo prodotto: path di artefatti
@@ -289,17 +303,18 @@ Il modulo estrae anche segnali dal testo prodotto: path di artefatti
 | `src/agent_harness/subagent_routing.py` | L284–509 | validazione del piano |
 | `src/agent_harness/subagent_routing.py` | L532–550 | rilevamento cicli |
 | `src/agent_harness/subagent_routing.py` | L552–622 | rendering e parsing del piano |
-| `src/agent_harness/subagent_routing.py` | L687–698 | il piano entra nel system message |
-| `src/agent_harness/subagent_routing.py` | L700–763 | condizioni, contesto ed eccezione sandbox della finalizzazione |
-| `src/agent_harness/subagent_routing.py` | L765–793 | blocco dei tool a lavoro finito |
-| `src/agent_harness/subagent_routing.py` | L880–925 | snapshot e riconciliazione degli artefatti |
-| `src/agent_harness/subagent_routing.py` | L941–984 | contratto di completamento |
-| `src/agent_harness/subagent_routing.py` | L986–1045 | tool per tentativo ed evidenza |
-| `src/agent_harness/subagent_routing.py` | L1052–1076 | dalla chiamata al task pianificato |
-| `src/agent_harness/subagent_routing.py` | L1078–1252 | preparazione, DAG, riassegnazione |
-| `src/agent_harness/subagent_routing.py` | L1254–1272 | pausa per approvazione |
-| `src/agent_harness/subagent_routing.py` | L1274–1342 | chiusura e verdetto |
-| `src/agent_harness/subagent_routing.py` | L1571–1580 | pianificazione una volta per run |
+| `src/agent_harness/subagent_routing.py` | L689–710 | riapertura su continuazione del runner |
+| `src/agent_harness/subagent_routing.py` | L712–724 | il piano entra nel system message |
+| `src/agent_harness/subagent_routing.py` | L726–793 | condizioni, contesto ed eccezione sandbox della finalizzazione |
+| `src/agent_harness/subagent_routing.py` | L795–823 | blocco dei tool a lavoro finito |
+| `src/agent_harness/subagent_routing.py` | L910–955 | snapshot e riconciliazione degli artefatti |
+| `src/agent_harness/subagent_routing.py` | L971–1014 | contratto di completamento |
+| `src/agent_harness/subagent_routing.py` | L1016–1075 | tool per tentativo ed evidenza |
+| `src/agent_harness/subagent_routing.py` | L1082–1106 | dalla chiamata al task pianificato |
+| `src/agent_harness/subagent_routing.py` | L1108–1282 | preparazione, DAG, riassegnazione |
+| `src/agent_harness/subagent_routing.py` | L1284–1302 | pausa per approvazione |
+| `src/agent_harness/subagent_routing.py` | L1304–1372 | chiusura e verdetto |
+| `src/agent_harness/subagent_routing.py` | L1601–1610 | pianificazione una volta per run |
 | `src/agent_harness/subagents.py` | L23–85 | formato e validazione |
 | `src/agent_harness/subagents.py` | L182–200 | caricamento con errori non fatali |
 | `src/agent_harness/factory.py` | L156–228 | roster di default e permessi |
@@ -317,5 +332,8 @@ Il modulo estrae anche segnali dal testo prodotto: path di artefatti
   schema garantisce la forma, non che gli agenti nominati esistano.
 - **Aggiungere un tipo di controllo** → dentro `validate_plan`, con la stessa politica:
   rimuovere la parte invalida, non rifiutare tutto.
+- **Non rendere la finalizzazione definitiva.** Un blocco che il runner non può revocare
+  riporta il deadlock tra «verifica in sandbox» e «tool bloccato»: la riapertura su
+  continuazione è ciò che li tiene coerenti.
 - Se dai la scrittura a un subagente, `supports` smette di proteggere: il modello potrà
   assegnargli task con `requires_write`. È una decisione di sicurezza, non di comodità.

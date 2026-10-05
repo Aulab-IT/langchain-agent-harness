@@ -1931,7 +1931,67 @@
       614
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1008-1015": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1002-1002": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "if len(clean) < 20 or any(phrase in clean.lower() for phrase in _BLOCKER_PHRASES):",
+    "head_offset": 0,
+    "tail": "if len(clean) < 20 or any(phrase in clean.lower() for phrase in _BLOCKER_PHRASES):",
+    "tail_offset": 0,
+    "last_seen": [
+      1002,
+      1002
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1008-1008": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "if not set(task.required_tools).issubset(used_tools):",
+    "head_offset": 0,
+    "tail": "if not set(task.required_tools).issubset(used_tools):",
+    "tail_offset": 0,
+    "last_seen": [
+      1008,
+      1008
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1010-1014": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "expected = task.expected_output.lower()",
+    "head_offset": 0,
+    "tail": "return not requires_artifact or bool(artifacts)",
+    "tail_offset": 0,
+    "last_seen": [
+      1010,
+      1014
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1016-1036": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def record_tool_event(self, event: Mapping[str, Any]) -> None:",
+    "head_offset": 0,
+    "tail": "execution.environment_verified = True",
+    "tail_offset": 0,
+    "last_seen": [
+      1016,
+      1036
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1016-1075": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def record_tool_event(self, event: Mapping[str, Any]) -> None:",
+    "head_offset": 0,
+    "tail": "return \"\".join(sections)",
+    "tail_offset": 0,
+    "last_seen": [
+      1016,
+      1075
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1038-1045": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def has_successful_environment_verification(self) -> bool:",
@@ -1939,11 +1999,11 @@
     "tail": "and runtime.execution.environment_verified",
     "tail_offset": 2,
     "last_seen": [
-      1008,
-      1015
+      1038,
+      1045
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1017-1045": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1047-1075": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def completion_evidence(self, max_chars: int = 12_000) -> str:",
@@ -1951,11 +2011,11 @@
     "tail": "return \"\".join(sections)",
     "tail_offset": 0,
     "last_seen": [
-      1017,
-      1045
+      1047,
+      1075
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1052-1076": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1082-1106": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _match_runtime(self, subagent_name: str, description: str) -> _TaskRuntime | None:",
@@ -1963,11 +2023,11 @@
     "tail": "words & set(re.findall(r\"[a-z0-9à-ÿ]{4,}\", runtime.task.objective.lower()))",
     "tail_offset": 2,
     "last_seen": [
-      1052,
-      1076
+      1082,
+      1106
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1078-1252": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1108-1282": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "async def prepare_delegation(",
@@ -1975,11 +2035,11 @@
     "tail": "return execution, prepared",
     "tail_offset": 0,
     "last_seen": [
-      1078,
-      1252
+      1108,
+      1282
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1082-1112": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1112-1142": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "runtime = self._match_runtime(subagent_name, description)",
@@ -1987,11 +2047,11 @@
     "tail": "\"previous_agent\": previous,",
     "tail_offset": 1,
     "last_seen": [
-      1082,
-      1112
+      1112,
+      1142
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1254-1272": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1284-1302": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def pause_delegation(self, execution: DelegationExecution | None) -> None:",
@@ -1999,32 +2059,8 @@
     "tail": "\"attempt\": execution.attempt,",
     "tail_offset": 2,
     "last_seen": [
-      1254,
-      1272
-    ]
-  },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1274-1342": {
-    "doc": "docs/handbook/L3/delega-a-subagenti.md",
-    "file": "src/agent_harness/subagent_routing.py",
-    "head": "def complete_delegation(",
-    "head_offset": 0,
-    "tail": "runtime.done.set()",
-    "tail_offset": 0,
-    "last_seen": [
-      1274,
-      1342
-    ]
-  },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1297-1313": {
-    "doc": "docs/handbook/L3/delega-a-subagenti.md",
-    "file": "src/agent_harness/subagent_routing.py",
-    "head": "claimed_artifacts = self._artifacts(execution.output)",
-    "head_offset": 0,
-    "tail": "execution.output_artifacts = list(dict.fromkeys([*validated_claims, *reconciled]))",
-    "tail_offset": 0,
-    "last_seen": [
-      1297,
-      1313
+      1284,
+      1302
     ]
   },
   "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|130-156": {
@@ -2039,7 +2075,31 @@
       156
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1320-1322": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1304-1372": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def complete_delegation(",
+    "head_offset": 0,
+    "tail": "runtime.done.set()",
+    "tail_offset": 0,
+    "last_seen": [
+      1304,
+      1372
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1327-1343": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "claimed_artifacts = self._artifacts(execution.output)",
+    "head_offset": 0,
+    "tail": "execution.output_artifacts = list(dict.fromkeys([*validated_claims, *reconciled]))",
+    "tail_offset": 0,
+    "last_seen": [
+      1327,
+      1343
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1350-1352": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "execution.status = runtime.status = (",
@@ -2047,20 +2107,8 @@
     "tail": "\"completed\" if execution.objective_met else \"incomplete\"",
     "tail_offset": 1,
     "last_seen": [
-      1320,
-      1322
-    ]
-  },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1571-1580": {
-    "doc": "docs/handbook/L3/delega-a-subagenti.md",
-    "file": "src/agent_harness/subagent_routing.py",
-    "head": "def wrap_model_call(",
-    "head_offset": 0,
-    "tail": "return handler(self._apply(request))",
-    "tail_offset": 0,
-    "last_seen": [
-      1571,
-      1580
+      1350,
+      1352
     ]
   },
   "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|158-174": {
@@ -2085,6 +2133,18 @@
     "last_seen": [
       158,
       184
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|1601-1610": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def wrap_model_call(",
+    "head_offset": 0,
+    "tail": "return handler(self._apply(request))",
+    "tail_offset": 0,
+    "last_seen": [
+      1601,
+      1610
     ]
   },
   "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|186-283": {
@@ -2255,7 +2315,19 @@
       622
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|687-698": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|689-710": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def _track_finalization(self, request: ModelRequest) -> None:",
+    "head_offset": 0,
+    "tail": "\"reason\": \"runner continuation after finalization\",",
+    "tail_offset": 2,
+    "last_seen": [
+      689,
+      710
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|712-724": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _apply(self, request: ModelRequest) -> ModelRequest:",
@@ -2263,11 +2335,11 @@
     "tail": "return request.override(system_message=SystemMessage(content=content))",
     "tail_offset": 0,
     "last_seen": [
-      687,
-      698
+      712,
+      724
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|700-706": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|726-732": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _all_tasks_completed(self) -> bool:",
@@ -2275,11 +2347,11 @@
     "tail": "and all(runtime.status == \"completed\" for runtime in self._runtime.values())",
     "tail_offset": 1,
     "last_seen": [
-      700,
-      706
+      726,
+      732
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|700-763": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|726-793": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _all_tasks_completed(self) -> bool:",
@@ -2287,11 +2359,11 @@
     "tail": "self._root_environment_verified = True",
     "tail_offset": 0,
     "last_seen": [
-      700,
-      763
+      726,
+      793
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|708-711": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|734-737": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _tool_route_satisfied(self) -> bool:",
@@ -2299,11 +2371,23 @@
     "tail": "return bool(set(self._plan.root_tools.candidates) & self._used_tools)",
     "tail_offset": 0,
     "last_seen": [
-      708,
-      711
+      734,
+      737
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|716-727": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|739-744": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def _ready_for_finalization(self) -> bool:",
+    "head_offset": 0,
+    "tail": "and self._tool_route_satisfied()",
+    "tail_offset": 1,
+    "last_seen": [
+      739,
+      744
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|746-757": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _environment_verification_pending(self) -> bool:",
@@ -2311,11 +2395,11 @@
     "tail": "and not self.has_successful_environment_verification()",
     "tail_offset": 1,
     "last_seen": [
-      716,
-      727
+      746,
+      757
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|729-745": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|759-775": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _finalization_context(self) -> str:",
@@ -2323,11 +2407,11 @@
     "tail": "\"instructions.\\n\\n\" + pending + self.completion_evidence()",
     "tail_offset": 1,
     "last_seen": [
-      729,
-      745
+      759,
+      775
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|747-751": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|777-781": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _finalization_blocks(self, request: ToolCallRequest) -> bool:",
@@ -2335,11 +2419,11 @@
     "tail": "return not (tool_name == \"docker_exec\" and self._environment_verification_pending())",
     "tail_offset": 0,
     "last_seen": [
-      747,
-      751
+      777,
+      781
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|753-763": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|783-793": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _observe_root_result(",
@@ -2347,11 +2431,11 @@
     "tail": "self._root_environment_verified = True",
     "tail_offset": 0,
     "last_seen": [
-      753,
-      763
+      783,
+      793
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|765-782": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|795-812": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _blocked_finalization_tool(self, request: ToolCallRequest) -> ToolMessage:",
@@ -2359,11 +2443,11 @@
     "tail": "name=tool_name,",
     "tail_offset": 1,
     "last_seen": [
-      765,
-      782
+      795,
+      812
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|765-793": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|795-823": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _blocked_finalization_tool(self, request: ToolCallRequest) -> ToolMessage:",
@@ -2371,20 +2455,8 @@
     "tail": "result = handler(request)",
     "tail_offset": 2,
     "last_seen": [
-      765,
-      793
-    ]
-  },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|784-793": {
-    "doc": "docs/handbook/L3/delega-a-subagenti.md",
-    "file": "src/agent_harness/subagent_routing.py",
-    "head": "def wrap_tool_call(",
-    "head_offset": 0,
-    "tail": "result = handler(request)",
-    "tail_offset": 2,
-    "last_seen": [
-      784,
-      793
+      795,
+      823
     ]
   },
   "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|80-128": {
@@ -2399,7 +2471,19 @@
       128
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|880-899": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|814-823": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def wrap_tool_call(",
+    "head_offset": 0,
+    "tail": "result = handler(request)",
+    "tail_offset": 2,
+    "last_seen": [
+      814,
+      823
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|910-929": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _artifact_snapshot(self) -> dict[str, str]:",
@@ -2407,11 +2491,11 @@
     "tail": "return {}",
     "tail_offset": 0,
     "last_seen": [
-      880,
-      899
+      910,
+      929
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|880-925": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|910-955": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _artifact_snapshot(self) -> dict[str, str]:",
@@ -2419,11 +2503,11 @@
     "tail": "return sorted(created)",
     "tail_offset": 0,
     "last_seen": [
-      880,
-      925
+      910,
+      955
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|902-906": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|932-936": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _expected_extensions(task: RoutedTask) -> set[str]:",
@@ -2431,11 +2515,11 @@
     "tail": "for match in re.findall(r\"\\.[a-z0-9]{1,10}\\b\", task.expected_output.lower())",
     "tail_offset": 1,
     "last_seen": [
-      902,
-      906
+      932,
+      936
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|908-914": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|938-944": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _changed_artifacts(self, execution: DelegationExecution) -> set[str]:",
@@ -2443,11 +2527,11 @@
     "tail": "if execution.initial_artifacts.get(path) != fingerprint",
     "tail_offset": 1,
     "last_seen": [
-      908,
-      914
+      938,
+      944
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|916-925": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|946-955": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _new_matching_artifacts(",
@@ -2455,11 +2539,23 @@
     "tail": "return sorted(created)",
     "tail_offset": 0,
     "last_seen": [
-      916,
-      925
+      946,
+      955
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|941-956": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|971-1014": {
+    "doc": "docs/handbook/L3/delega-a-subagenti.md",
+    "file": "src/agent_harness/subagent_routing.py",
+    "head": "def _reported_status(output: str) -> str | None:",
+    "head_offset": 0,
+    "tail": "return not requires_artifact or bool(artifacts)",
+    "tail_offset": 0,
+    "last_seen": [
+      971,
+      1014
+    ]
+  },
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|971-986": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _reported_status(output: str) -> str | None:",
@@ -2467,23 +2563,11 @@
     "tail": "return bool(match and len(match.group(1).strip(\" \\n-*\")) >= 3)",
     "tail_offset": 0,
     "last_seen": [
-      941,
-      956
+      971,
+      986
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|941-984": {
-    "doc": "docs/handbook/L3/delega-a-subagenti.md",
-    "file": "src/agent_harness/subagent_routing.py",
-    "head": "def _reported_status(output: str) -> str | None:",
-    "head_offset": 0,
-    "tail": "return not requires_artifact or bool(artifacts)",
-    "tail_offset": 0,
-    "last_seen": [
-      941,
-      984
-    ]
-  },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|959-961": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|989-991": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _review_verdict(output: str) -> str | None:",
@@ -2491,11 +2575,11 @@
     "tail": "match = re.search(r\"(?:^|\\n)\\s*VERDICT\\s*:\\s*(PASS|FAIL)\\b\", output, re.IGNORECASE)",
     "tail_offset": 1,
     "last_seen": [
-      959,
-      961
+      989,
+      991
     ]
   },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|964-984": {
+  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|994-1014": {
     "doc": "docs/handbook/L3/delega-a-subagenti.md",
     "file": "src/agent_harness/subagent_routing.py",
     "head": "def _contract_met(",
@@ -2503,68 +2587,8 @@
     "tail": "return not requires_artifact or bool(artifacts)",
     "tail_offset": 0,
     "last_seen": [
-      964,
-      984
-    ]
-  },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|972-972": {
-    "doc": "docs/handbook/L3/delega-a-subagenti.md",
-    "file": "src/agent_harness/subagent_routing.py",
-    "head": "if len(clean) < 20 or any(phrase in clean.lower() for phrase in _BLOCKER_PHRASES):",
-    "head_offset": 0,
-    "tail": "if len(clean) < 20 or any(phrase in clean.lower() for phrase in _BLOCKER_PHRASES):",
-    "tail_offset": 0,
-    "last_seen": [
-      972,
-      972
-    ]
-  },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|978-978": {
-    "doc": "docs/handbook/L3/delega-a-subagenti.md",
-    "file": "src/agent_harness/subagent_routing.py",
-    "head": "if not set(task.required_tools).issubset(used_tools):",
-    "head_offset": 0,
-    "tail": "if not set(task.required_tools).issubset(used_tools):",
-    "tail_offset": 0,
-    "last_seen": [
-      978,
-      978
-    ]
-  },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|980-984": {
-    "doc": "docs/handbook/L3/delega-a-subagenti.md",
-    "file": "src/agent_harness/subagent_routing.py",
-    "head": "expected = task.expected_output.lower()",
-    "head_offset": 0,
-    "tail": "return not requires_artifact or bool(artifacts)",
-    "tail_offset": 0,
-    "last_seen": [
-      980,
-      984
-    ]
-  },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|986-1006": {
-    "doc": "docs/handbook/L3/delega-a-subagenti.md",
-    "file": "src/agent_harness/subagent_routing.py",
-    "head": "def record_tool_event(self, event: Mapping[str, Any]) -> None:",
-    "head_offset": 0,
-    "tail": "execution.environment_verified = True",
-    "tail_offset": 0,
-    "last_seen": [
-      986,
-      1006
-    ]
-  },
-  "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagent_routing.py|986-1045": {
-    "doc": "docs/handbook/L3/delega-a-subagenti.md",
-    "file": "src/agent_harness/subagent_routing.py",
-    "head": "def record_tool_event(self, event: Mapping[str, Any]) -> None:",
-    "head_offset": 0,
-    "tail": "return \"\".join(sections)",
-    "tail_offset": 0,
-    "last_seen": [
-      986,
-      1045
+      994,
+      1014
     ]
   },
   "docs/handbook/L3/delega-a-subagenti.md|src/agent_harness/subagents.py|182-200": {

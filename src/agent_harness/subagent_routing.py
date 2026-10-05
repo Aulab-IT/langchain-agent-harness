@@ -660,6 +660,8 @@ class SubagentRouterMiddleware(AgentMiddleware[Any, Any, Any]):
         self._goal_text = ""
         self._root_environment_verified = False
         self._finalized = False
+        self._finalization_human_turns: int | None = None
+        self._finalization_reopened = False
         self._runtime: dict[str, _TaskRuntime] = {}
         self._runtime_lock = threading.RLock()
 
@@ -684,9 +686,33 @@ class SubagentRouterMiddleware(AgentMiddleware[Any, Any, Any]):
         if self._emit is not None:
             self._emit(event)
 
+    def _track_finalization(self, request: ModelRequest) -> None:
+        """Riapre i tool se il runner reinietta l'obiettivo dopo l'ingresso in finalizzazione.
+
+        La finalizzazione presume che il DAG copra tutto l'obiettivo, ma un piano misto lascia
+        lavoro al root: basta un uso qualsiasi del tool root (anche un preflight) per chiudere
+        tutti i tool prima che l'artefatto esista. Un nuovo messaggio umano dopo quel momento
+        è una continuazione del runner, cioè un verdetto di lavoro incompleto: il runner ha
+        l'ultima parola sul completamento, quindi il blocco cade per il resto del run.
+        """
+        if self._finalization_reopened or not self._ready_for_finalization():
+            return
+        human_turns = sum(isinstance(message, HumanMessage) for message in request.messages)
+        if self._finalization_human_turns is None:
+            self._finalization_human_turns = human_turns
+        elif human_turns > self._finalization_human_turns:
+            self._finalization_reopened = True
+            self._event(
+                {
+                    "type": "subagent.finalization.reopened",
+                    "reason": "runner continuation after finalization",
+                }
+            )
+
     def _apply(self, request: ModelRequest) -> ModelRequest:
         if self._plan is None:
             return request
+        self._track_finalization(request)
         base = request.system_message
         base_text = base.text if base is not None else ""
         routing_context = (
@@ -711,7 +737,11 @@ class SubagentRouterMiddleware(AgentMiddleware[Any, Any, Any]):
         return bool(set(self._plan.root_tools.candidates) & self._used_tools)
 
     def _ready_for_finalization(self) -> bool:
-        return self._all_tasks_completed() and self._tool_route_satisfied()
+        return (
+            not self._finalization_reopened
+            and self._all_tasks_completed()
+            and self._tool_route_satisfied()
+        )
 
     def _environment_verification_pending(self) -> bool:
         """Il runner esigerà un `docker_exec` riuscito che nessuno ha ancora eseguito.
