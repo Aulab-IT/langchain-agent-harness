@@ -75,7 +75,11 @@ from agent_harness.model_preflight import (
     preflight_tier_models,
     required_preflight_tiers,
 )
-from agent_harness.outcome_checks import SkillCatalogCompletionCheck, skill_catalog_snapshot
+from agent_harness.outcome_checks import (
+    SkillCatalogCompletionCheck,
+    requires_environment_verification,
+    skill_catalog_snapshot,
+)
 from agent_harness.pricing import ModelCallUsage, catalog_from_settings, estimate_cost_usd
 from agent_harness.promotion import (
     list_config_versions,
@@ -90,12 +94,7 @@ from agent_harness.run_budget import (
     RunBudgetLimits,
     RunBudgetTracker,
 )
-from agent_harness.runner import (
-    GoalRunner,
-    RunResult,
-    final_text,
-    requires_environment_verification,
-)
+from agent_harness.runner import GoalRunner, RunResult, final_text
 from agent_harness.sandbox import (
     SandboxIdleReaper,
     cleanup_orphan_sandboxes,

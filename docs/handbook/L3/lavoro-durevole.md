@@ -139,9 +139,9 @@ Tabella dedicata con indice su `(run_id, status)` (`durable.py · L207–224`).
 | Pendenti per run | `durable.py · L619–626` |
 
 `all_pending_interrupts` è esposto come `GET /api/durable/interrupts`
-(`server.py · L2011–2024`), con una motivazione dichiarata: è *«la prova che gli interrupt
+(`server.py · L2010–2023`), con una motivazione dichiarata: è *«la prova che gli interrupt
 sopravvivono al restart, invece di sparire con le`* strutture in memoria
-(`server.py · L2015–2017`).
+(`server.py · L2014–2016`).
 
 Una proprietà di durabilità che non si può osservare non si può nemmeno verificare.
 
@@ -174,7 +174,7 @@ lì viveva l'attesa.
 | `src/agent_harness/durable.py` | L427–464 | retry con backoff e dead-letter |
 | `src/agent_harness/durable.py` | L465–493 | recupero da lease scaduto |
 | `src/agent_harness/durable.py` | L528–626 | interrupt persistiti |
-| `src/agent_harness/server.py` | L2011–2024 | endpoint di osservabilità |
+| `src/agent_harness/server.py` | L2010–2023 | endpoint di osservabilità |
 
 **Test:** `tests/test_durable.py`.
 

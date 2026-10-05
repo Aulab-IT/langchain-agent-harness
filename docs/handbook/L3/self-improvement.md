@@ -179,7 +179,7 @@ eventi: delta di streaming e audit storici non falsano le statistiche.
 | `src/agent_harness/evaluation.py` | L144–154 | hash dell'eval set |
 | `src/agent_harness/evaluation.py` | L156–215 | esecuzione dei check e sintesi |
 | `src/agent_harness/evaluation.py` | L216–295 | il gate |
-| `src/agent_harness/evaluation.py` | L297–490 | run appaiato baseline/candidato |
+| `src/agent_harness/evaluation.py` | L297–487 | run appaiato baseline/candidato |
 | `src/agent_harness/canary.py` | L8–13 | eventi rilevanti e minimo per braccio |
 | `src/agent_harness/canary.py` | L16–80 | metriche e accumulatori |
 | `src/agent_harness/canary.py` | L82–180 | attribuzione e analisi |

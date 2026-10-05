@@ -1132,3 +1132,85 @@ async def test_preexisting_artifact_claim_is_rejected_but_modified_hash_is_accep
     router.complete_delegation(modified, result=completed("Aggiornato /workspace/output/deck.pptx"))
     assert modified is not None and modified.status == "completed"
     assert modified.output_artifacts == ["output/deck.pptx"]
+
+
+def _root_tool_call(router: SubagentRouterMiddleware, name: str, output: str) -> ToolMessage:
+    request = ToolCallRequest(  # type: ignore[arg-type]
+        tool_call={"id": f"root-{name}", "name": name, "args": {}},
+        tool=None,
+        state={},
+        runtime=None,
+    )
+    result = router.wrap_tool_call(
+        request,
+        lambda _: ToolMessage(content=output, tool_call_id=f"root-{name}", name=name),
+    )
+    assert isinstance(result, ToolMessage)
+    return result
+
+
+async def _finalized_research_router(goal: str) -> tuple[SubagentRouterMiddleware, Any]:
+    plan = DelegationPlan(delegate=True, rationale="ricerca", tasks=[task("ricerca", "worker-a")])
+    model = FakeModel(plan)
+    router = SubagentRouterMiddleware(model, [profile("worker-a")])  # type: ignore[arg-type]
+    request = ModelRequest(  # type: ignore[arg-type]
+        model=model, messages=[HumanMessage(content=goal)], tools=[]
+    )
+    router.wrap_model_call(request, lambda _: "ok")  # type: ignore[arg-type,return-value]
+    execution, _ = await router.prepare_delegation(
+        "worker-a", "[routing_task_id=ricerca] cerca", "call-one"
+    )
+    # Il ricercatore usa solo il web: nessuna verifica sandbox delegata.
+    router.complete_delegation(execution, result=completed("Fonti raccolte e verificate."))
+    return router, request
+
+
+def _system_text(router: SubagentRouterMiddleware, request: Any) -> str:
+    captured: list[ModelRequest[Any]] = []
+    router.wrap_model_call(  # type: ignore[arg-type]
+        request, lambda next_request: captured.append(next_request) or "ok"
+    )
+    system = captured[0].system_message
+    assert system is not None
+    return system.text
+
+
+@pytest.mark.asyncio
+async def test_finalization_keeps_sandbox_open_while_runner_still_requires_verification() -> None:
+    # Regressione: obiettivo con "creare" + DAG di sola ricerca. La finalizzazione bloccava anche
+    # docker_exec, mentre il runner continuava a esigerlo: run in failed_verification certo.
+    router, request = await _finalized_research_router(
+        "Crea una presentazione sui video generati con IA"
+    )
+
+    assert router.has_successful_environment_verification() is False
+    assert "One success criterion is still open" in _system_text(router, request)
+    assert _root_tool_call(router, "web_search", "risultati").content.startswith("Tool blocked")
+
+    verified = _root_tool_call(router, "docker_exec", "exit_code=0\nSTDOUT: 12 slide")
+    assert verified.content.startswith("exit_code=0")
+
+    # Verifica fatta: il criterio si chiude e la sandbox torna bloccata come ogni altro tool.
+    assert "still open" not in _system_text(router, request)
+    assert _root_tool_call(router, "docker_exec", "exit_code=0").content.startswith(
+        "Tool blocked"
+    )
+
+
+@pytest.mark.asyncio
+async def test_finalization_blocks_sandbox_when_goal_needs_no_verification() -> None:
+    router, request = await _finalized_research_router("Cerca le novità sui video con IA")
+
+    assert "still open" not in _system_text(router, request)
+    assert _root_tool_call(router, "docker_exec", "exit_code=0").content.startswith(
+        "Tool blocked"
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_root_sandbox_run_leaves_verification_pending() -> None:
+    router, request = await _finalized_research_router("Crea un report sui video con IA")
+
+    failed = _root_tool_call(router, "docker_exec", "exit_code=1\nSTDERR: file mancante")
+    assert failed.content.startswith("exit_code=1")
+    assert "One success criterion is still open" in _system_text(router, request)

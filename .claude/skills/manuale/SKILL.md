@@ -75,7 +75,7 @@ Tocca: `src/agent_harness/sandbox.py`.
 ### Stadio 5 · Continuazione e verifica
 
 **5.1 · Continuazione Ralph-style** — Reiniettare l'obiettivo finché il lavoro non supera i controlli, entro un budget; impedire che `[GOAL_COMPLETE]` chiuda un run senza verifica; misurare la difficoltà invece di prevederla, salendo di gradino solo dopo un fallimento osservato.
-Tocca: `src/agent_harness/runner.py`.
+Tocca: `src/agent_harness/runner.py`, `src/agent_harness/outcome_checks.py`.
 → `docs/handbook/L3/continuazione-e-verifica.md`
 
 **5.3 · Budget di run** — Prenotare e contabilizzare token, costo, chiamate e tempo con prenotazioni concorrenti; fermare il run indicando quale dimensione è esaurita.

@@ -13,7 +13,7 @@ un grafo proprio, reinietta il feedback nel budget di continuazione.
 
 ## Il ciclo
 
-**Evidenza:** `runner.py · L200–332`.
+**Evidenza:** `runner.py · L173–305`.
 
 ```
 reset della ladder al gradino basso              L211
@@ -30,7 +30,7 @@ for iteration in 1..harness_max_continuations:   L218
 
 Ogni obiettivo riparte dal gradino più economico: *«l'escalation vale per un obiettivo, non
 per la sessione. Un compito difficile non rende caro quello che viene dopo»*
-(`runner.py · L209–211`).
+(`runner.py · L182–184`).
 
 ---
 
@@ -42,15 +42,21 @@ Il marcatore da solo non basta. Prima passano i controlli euristici, poi il grad
 
 Se l'obiettivo contiene un verbo di produzione, serve una prova d'esecuzione riuscita.
 
-**Evidenza:** `runner.py · L53–77`.
+**Evidenza:** `outcome_checks.py · L29–56`.
 
 I verbi coprono **entrambe le lingue** del progetto, con la motivazione scritta accanto:
 «come il router, non privilegia l'italiano — `write a report` e `scrivi un report` devono
-comportarsi allo stesso modo» (`runner.py · L52–55`).
+comportarsi allo stesso modo» (`outcome_checks.py · L29–31`).
+
+Il predicato vive in `outcome_checks.py` e non in `runner.py` perché lo interroga anche il
+router dei subagenti, che `runner` importa indirettamente: la finalizzazione del DAG deve
+sapere se questa verifica è ancora dovuta, altrimenti chiude la sandbox a un run che la
+esige (vedi [delega a subagenti](delega-a-subagenti.md#finalizzazione-i-tool-si-chiudono)).
+Il confronto è per sottostringa: «creare una presentazione» contiene `crea`.
 
 La prova è un `ToolMessage` di `docker_exec` con `exit_code=0`
-(`runner.py · L93–103`), oppure una verifica delegata a un subagente
-(`runner.py · L125–127`).
+(`runner.py · L66–76`), oppure una verifica delegata a un subagente
+(`runner.py · L98–100`).
 
 ### Il taglio al turno corrente
 
@@ -63,7 +69,7 @@ def _current_turn_messages(messages):
     attuale — l'intera storia del thread è visibile qui."""
 ```
 
-**Evidenza:** `runner.py · L80–91`.
+**Evidenza:** `runner.py · L53–64`.
 
 La verifica cerca solo tra i messaggi successivi all'ultimo `HumanMessage`. Senza,
 il primo obiettivo verificato di un thread renderebbe «verificati» tutti quelli dopo.
@@ -71,7 +77,7 @@ il primo obiettivo verificato di un thread renderebbe «verificati» tutti quell
 ### Controlli estensibili
 
 Oltre a quello d'ambiente, il runner esegue i `completion_checks` registrati sull'harness
-(`runner.py · L245–246`), definiti in `outcome_checks.py`. Ogni check ritorna
+(`runner.py · L218–219`), definiti in `outcome_checks.py`. Ogni check ritorna
 `(passato, messaggio)` e i messaggi dei falliti diventano feedback per l'iterazione
 successiva.
 
@@ -79,12 +85,12 @@ successiva.
 
 ## Grader a rubric
 
-Chiamato solo se i controlli euristici passano **e** c'è testo (`runner.py · L256`): non si
+Chiamato solo se i controlli euristici passano **e** c'è testo (`runner.py · L229`): non si
 paga una valutazione per un output che è già stato scartato.
 
 L'esito distingue tre casi, non due — ed è la parte più fine dell'unità.
 
-**Evidenza:** `runner.py · L252–277`.
+**Evidenza:** `runner.py · L225–250`.
 
 | Esito | Cosa succede |
 |---|---|
@@ -95,7 +101,7 @@ L'esito distingue tre casi, non due — ed è la parte più fine dell'unità.
 Il commento spiega perché: *«Un punteggio sotto la soglia di uscita fa riprovare; solo un
 punteggio sotto la soglia di escalation dice che il gradino non ce la fa. Fra le due,
 l'agente riprova con lo stesso modello: costa una iterazione economica invece che una cara»*
-(`runner.py · L252–254`).
+(`runner.py · L225–227`).
 
 ### Retry della sola risposta
 
@@ -103,11 +109,11 @@ Caso particolare: il lavoro è stato fatto (c'è evidenza di completamento) e il
 segnalato problemi di **sicurezza** né di **aderenza** — entrambi i criteri ≥ 0.5. Allora il
 problema è la risposta finale, non il lavoro.
 
-**Evidenza:** `runner.py · L270–277`.
+**Evidenza:** `runner.py · L243–250`.
 
 In quel caso `fallimento_netto` resta falso — niente escalation — e la continuazione usa
 `FINAL_RESPONSE_FEEDBACK_PROMPT` invece del prompt di verifica generico
-(`runner.py · L290–301`). Si chiede di riscrivere la risposta, non di rifare il lavoro.
+(`runner.py · L263–280`). Si chiede di riscrivere la risposta, non di rifare il lavoro.
 
 I due criteri esclusi dal retry-leggero non sono casuali: sicurezza e aderenza sono quelli
 per cui «rispondi meglio» non è mai la correzione giusta.
@@ -120,20 +126,20 @@ per cui «rispondi meglio» non è mai la correzione giusta.
 salito = self.harness.ladder.escalate() if fallimento_netto else False
 ```
 
-**Evidenza:** `runner.py · L312–314`.
+**Evidenza:** `runner.py · L285–287`.
 
 Il commento è la tesi dell'unità: *«Il gradino ha fallito nettamente: la continuazione la fa
 il gradino sopra. È il cuore dell'escalation: non si prevede la difficoltà, la si misura»*.
 
 Nessuna euristica prova a indovinare dal testo dell'obiettivo se serve un modello forte. Si
 parte dal basso, e si sale solo dopo un fallimento osservato. L'evento `model.escalated`
-finisce nella trace (`runner.py · L316–323`).
+finisce nella trace (`runner.py · L289–296`).
 
 ---
 
 ## Esiti terminali
 
-**Evidenza:** `runner.py · L279–288`.
+**Evidenza:** `runner.py · L252–261`.
 
 | `terminal_status` | Quando |
 |---|---|
@@ -153,18 +159,18 @@ contare come «errore dell'agente» un run semplicemente troppo lungo.
 
 L'evento `assistant.iteration` esiste per un motivo di interfaccia: *«la UI accumula i delta
 di streaming e senza questo marcatore concatenerebbe la risposta di ogni continuazione alla
-precedente»* (`runner.py · L326–328`).
+precedente»* (`runner.py · L299–301`).
 
 ### Limiti di sicurezza
 
-- Obiettivo: 1–20.000 caratteri (`runner.py · L201–203`).
-- `recursion_limit: 200` sul grafo (`runner.py · L205–207`).
+- Obiettivo: 1–20.000 caratteri (`runner.py · L174–176`).
+- `recursion_limit: 200` sul grafo (`runner.py · L178–180`).
 - Budget di continuazione: `harness_max_continuations`.
 
 ### Stato impossibile
 
 Il ciclo termina con `raise AssertionError("Ciclo di continuazione terminato in stato
-impossibile.")` (`runner.py · L333`). Non è codice morto difensivo generico: rende rumoroso
+impossibile.")` (`runner.py · L306`). Non è codice morto difensivo generico: rende rumoroso
 un eventuale futuro `break` che saltasse i due `return`.
 
 ---
@@ -173,18 +179,18 @@ un eventuale futuro `break` che saltasse i due `return`.
 
 | Sito | Righe | Ruolo |
 |---|---|---|
-| `src/agent_harness/runner.py` | L45–50 | estrazione del testo finale |
-| `src/agent_harness/runner.py` | L53–77 | verbi bilingue e trigger di verifica |
-| `src/agent_harness/runner.py` | L80–91 | taglio al turno corrente |
-| `src/agent_harness/runner.py` | L93–103 | prova d'esecuzione riuscita |
-| `src/agent_harness/runner.py` | L200–215 | avvio, reset ladder, limiti |
-| `src/agent_harness/runner.py` | L233–250 | controlli euristici e feedback |
-| `src/agent_harness/runner.py` | L252–277 | grader, tre esiti, retry leggero |
-| `src/agent_harness/runner.py` | L279–288 | esiti terminali |
-| `src/agent_harness/runner.py` | L290–311 | scelta del prompt di continuazione |
-| `src/agent_harness/runner.py` | L312–328 | escalation misurata ed eventi |
-| `src/agent_harness/runner.py` | L335–387 | invocazione del grader |
+| `src/agent_harness/runner.py` | L46–51 | estrazione del testo finale |
+| `src/agent_harness/runner.py` | L53–64 | taglio al turno corrente |
+| `src/agent_harness/runner.py` | L66–76 | prova d'esecuzione riuscita |
+| `src/agent_harness/runner.py` | L173–188 | avvio, reset ladder, limiti |
+| `src/agent_harness/runner.py` | L206–223 | controlli euristici e feedback |
+| `src/agent_harness/runner.py` | L225–250 | grader, tre esiti, retry leggero |
+| `src/agent_harness/runner.py` | L252–261 | esiti terminali |
+| `src/agent_harness/runner.py` | L263–284 | scelta del prompt di continuazione |
+| `src/agent_harness/runner.py` | L285–301 | escalation misurata ed eventi |
+| `src/agent_harness/runner.py` | L308–360 | invocazione del grader |
 | `src/agent_harness/verification.py` | — | `RubricGrader`, rubric congelata |
+| `src/agent_harness/outcome_checks.py` | L29–56 | verbi bilingue e trigger di verifica |
 | `src/agent_harness/outcome_checks.py` | — | check di completamento |
 | `src/agent_harness/prompts.py` | — | i tre prompt di continuazione |
 

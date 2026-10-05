@@ -367,11 +367,8 @@ async def execute_eval_case(
 ) -> CaseResult:
     """Esegue un caso col vero harness in workspace isolato e applica check deterministici."""
     from agent_harness.factory import build_harness
-    from agent_harness.runner import (
-        GoalRunner,
-        has_successful_verification,
-        requires_environment_verification,
-    )
+    from agent_harness.outcome_checks import requires_environment_verification
+    from agent_harness.runner import GoalRunner, has_successful_verification
     from agent_harness.sandbox import session_sandbox_manager
 
     case_root = evaluation_root / arm / case.id

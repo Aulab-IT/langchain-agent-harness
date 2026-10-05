@@ -59,7 +59,7 @@ un futuro refactor della condizione lasci passare questa azione insieme alle alt
 Il grafo si ferma e restituisce uno stato con la chiave `__interrupt__`. `GoalRunner` lo
 gestisce in un `while`, perché un singolo run può sospendersi più volte.
 
-**Evidenza:** `runner.py · L157–198`.
+**Evidenza:** `runner.py · L130–171`.
 
 ```
 _invoke_graph(value)
@@ -88,7 +88,7 @@ Il middleware pretende una decisione per ciascuno; con una sola, `after_model` s
 La soluzione: la UI resta a **una conferma per turno**, e il runner replica quella decisione
 su tutte le tool call pendenti.
 
-**Evidenza:** `runner.py · L186–197`.
+**Evidenza:** `runner.py · L159–170`.
 
 > **Conseguenza da conoscere prima di modificare qui.** L'utente approva o rifiuta *in
 > blocco*. Non può approvare la prima delle tre `docker_exec` di un turno e rifiutare le
@@ -101,14 +101,14 @@ su tutte le tool call pendenti.
 
 | Momento | Cosa cambia | Evidenza |
 |---|---|---|
-| Sospensione | run → `waiting_approval` | `server.py · L1203` |
-| Sospensione | interrupt persistito in SQLite | `server.py · L1204`, `durable.py · L528–564` |
-| Sospensione | notifica push all'utente | `server.py · L1205–1210` |
-| Sospensione | evento `approval.requested` sul flusso SSE | `server.py · L1211` |
-| Risoluzione | `Future` completata dal REST | `server.py · L1693–1698` |
-| Risoluzione | interrupt marcato risolto, idempotente | `server.py · L1218`, `durable.py · L566–608` |
-| Risoluzione | evento `approval.resolved` | `server.py · L1220–1225` |
-| Auto-approvazione | evento `approval.auto`, nessuna sospensione | `server.py · L1199` |
+| Sospensione | run → `waiting_approval` | `server.py · L1202` |
+| Sospensione | interrupt persistito in SQLite | `server.py · L1203`, `durable.py · L528–564` |
+| Sospensione | notifica push all'utente | `server.py · L1204–1209` |
+| Sospensione | evento `approval.requested` sul flusso SSE | `server.py · L1210` |
+| Risoluzione | `Future` completata dal REST | `server.py · L1692–1697` |
+| Risoluzione | interrupt marcato risolto, idempotente | `server.py · L1217`, `durable.py · L566–608` |
+| Risoluzione | evento `approval.resolved` | `server.py · L1219–1224` |
+| Auto-approvazione | evento `approval.auto`, nessuna sospensione | `server.py · L1198` |
 
 Lo stato `WAITING_APPROVAL` è parte della state machine dichiarata in `durable.py · L42`, non
 una stringa ad hoc.
@@ -141,7 +141,7 @@ La funzione vive in `command_review.py` e non nel control plane per una ragione 
 scritta nel suo docstring: **ogni superficie di approvazione deve mostrare le stesse
 informazioni**. Finché questa logica è stata solo lato web, chi approvava da terminale
 decideva senza la classificazione del comando — la stessa decisione di sicurezza presa con
-meno elementi. Il control plane la invoca a `server.py · L1192`, la CLI a `cli.py · L64`.
+meno elementi. Il control plane la invoca a `server.py · L1191`, la CLI a `cli.py · L64`.
 
 `review_command` (`command_review.py · L227`) classifica staticamente il comando: programmi
 invocati, categorie, path toccati, warning. Il commento è preciso sul suo statuto: *«Non è
@@ -150,7 +150,7 @@ decisione informata, non a prenderla.
 
 Per `propose_mcp_server` la ricostruzione è diversa e mostra nome e config del server, con
 la descrizione che dice esplicitamente «Gira sull'host, FUORI dalla sandbox Docker»
-(`server.py · L1152–1164`).
+(`server.py · L1151–1163`).
 
 ---
 
@@ -161,7 +161,7 @@ la descrizione che dice esplicitamente «Gira sull'host, FUORI dalla sandbox Doc
 Letta **live a ogni richiesta**, non catturata all'inizio del run: cambiare la modalità
 mentre il run gira ha effetto immediato sulla richiesta successiva.
 
-**Evidenza:** `server.py · L1194–1199`.
+**Evidenza:** `server.py · L1193–1198`.
 
 L'eccezione è nel codice e nel commento: `if not is_network and ...auto_approve`. La rete
 resta gated anche in autonomia. Stessa invariante espressa due volte, nella policy
@@ -169,7 +169,7 @@ resta gated anche in autonomia. Stessa invariante espressa due volte, nella poli
 
 ### Timeout
 
-L'attesa dell'approvazione ha un limite di **600 secondi** (`server.py · L1213`). Alla
+L'attesa dell'approvazione ha un limite di **600 secondi** (`server.py · L1212`). Alla
 scadenza la future viene rimossa e il run non resta appeso per sempre.
 
 ### Riavvio del processo
@@ -177,7 +177,7 @@ scadenza la future viene rimossa e il run non resta appeso per sempre.
 Gli interrupt pendenti sopravvivono, perché stanno in SQLite e non solo nel dizionario
 `self.approvals` in memoria. `GET /api/durable/interrupts` li elenca dopo il riavvio —
 esiste come prova osservabile della proprietà, non solo come endpoint di comodo
-(`server.py · L2011–2024`, `durable.py · L610–617`).
+(`server.py · L2010–2023`, `durable.py · L610–617`).
 
 Le `Future` in memoria invece **non** sopravvivono: dopo un riavvio l'interrupt risulta
 pendente ma non c'è più nessuno in attesa di quella risposta specifica. Il run va ripreso,
@@ -186,19 +186,19 @@ non semplicemente approvato.
 ### Annullamento durante l'attesa
 
 `cancel` completa la future pendente con `False` — un annullamento vale come rifiuto, non
-lascia il grafo bloccato (`server.py · L1708–1712`).
+lascia il grafo bloccato (`server.py · L1707–1711`).
 
 ### Fine del run con interrupt orfani
 
 `_close_pending_interrupts` risolve tutto ciò che è rimasto pendente con
 `{"cancelled": True}` e `resolved_by="system"`, così un run terminato non lascia righe
-`pending` in SQLite (`server.py · L1676–1691`).
+`pending` in SQLite (`server.py · L1675–1690`).
 
 ### Nessun callback
 
 Se il grafo si sospende ma non è stato fornito un `approval_callback`, il runner solleva
 `RuntimeError("Esecuzione sospesa: manca un callback di approvazione.")` invece di
-proseguire (`runner.py · L175–176`). È il fallback corretto: un harness senza superficie di
+proseguire (`runner.py · L148–149`). È il fallback corretto: un harness senza superficie di
 approvazione non deve poter eseguire azioni sensibili.
 
 ---
@@ -207,12 +207,12 @@ approvazione non deve poter eseguire azioni sensibili.
 
 | | CLI | Control Center |
 |---|---|---|
-| Callback | `ask_approval` (`cli.py · L63–76`) | `approval` (`server.py · L1150`) |
+| Callback | `ask_approval` (`cli.py · L63–76`) | `approval` (`server.py · L1149`) |
 | Riepilogo mostrato | `build_approval_summary` | `build_approval_summary` |
 | Presentazione | Panel Rich (`cli.py · L36–60`) | modale React con badge di rischio |
 | Rete | prompt dedicato, `default=False` (`cli.py · L68–73`) | badge `network` + descrizione dedicata |
 | Auto-approvazione | non disponibile | per sessione, `PATCH /api/sessions/{id}/auto-approve` |
-| Risposta | `typer.confirm` | `POST /api/runs/{id}/approve` \| `/reject` (`server.py · L2539–2549`) |
+| Risposta | `typer.confirm` | `POST /api/runs/{id}/approve` \| `/reject` (`server.py · L2538–2548`) |
 
 **Le due superfici mostrano le stesse informazioni.** Comando, descrizione, categorie, path
 toccati e avvisi passano da `build_approval_summary` in entrambi i casi; cambia solo il
@@ -238,12 +238,12 @@ Sul client, il modale è montato in `App.tsx · L231–239` e implementato in
 | `src/agent_harness/factory.py` | L85–90 | regola di permesso per `docker_exec` |
 | `src/agent_harness/factory.py` | L781–798 | mappa `interrupt_on` |
 | `src/agent_harness/factory.py` | L1043 | iniezione nel grafo |
-| `src/agent_harness/runner.py` | L157–198 | loop di sospensione, decisione, fan-out |
-| `src/agent_harness/server.py` | L1150–1188 | ramo `propose_mcp_server` |
-| `src/agent_harness/server.py` | L1192–1224 | ricostruzione payload, autonomia, attesa |
-| `src/agent_harness/server.py` | L1676–1691 | chiusura interrupt orfani |
-| `src/agent_harness/server.py` | L1693–1698 | risoluzione dal REST |
-| `src/agent_harness/server.py` | L2539–2549 | endpoint approve/reject |
+| `src/agent_harness/runner.py` | L130–171 | loop di sospensione, decisione, fan-out |
+| `src/agent_harness/server.py` | L1149–1187 | ramo `propose_mcp_server` |
+| `src/agent_harness/server.py` | L1191–1223 | ricostruzione payload, autonomia, attesa |
+| `src/agent_harness/server.py` | L1675–1690 | chiusura interrupt orfani |
+| `src/agent_harness/server.py` | L1692–1697 | risoluzione dal REST |
+| `src/agent_harness/server.py` | L2538–2548 | endpoint approve/reject |
 | `src/agent_harness/durable.py` | L42, L207–224, L528–608 | stato, schema, persistenza idempotente |
 | `src/agent_harness/command_review.py` | L164–191 | rete richiesta ed estrazione del comando |
 | `src/agent_harness/command_review.py` | L193–225 | riepilogo mostrato, comune alle superfici |
@@ -264,9 +264,9 @@ Il confine della modifica, se devi toccare questo comportamento:
 - **Mettere un altro tool sotto approvazione** → `factory.py · L781–798`, e valuta se serve una
   ricostruzione dedicata del payload in `server.py` come per `propose_mcp_server`.
 - **Cambiare quando si può auto-approvare** → due siti da tenere allineati,
-  `factory.py · L85–90` e `server.py · L1194–1199`. Toccarne uno solo rompe l'invariante
+  `factory.py · L85–90` e `server.py · L1193–1198`. Toccarne uno solo rompe l'invariante
   senza far fallire nessun test in modo ovvio.
-- **Granularità per-tool-call** → `runner.py · L192–196` più la UI. Non il middleware.
+- **Granularità per-tool-call** → `runner.py · L165–169` più la UI. Non il middleware.
 - **Nuova superficie di approvazione** → un callback con la firma
   `async (payload: dict) -> bool` passato al `GoalRunner`, che rende
   `build_approval_summary(payload)`. Non serve toccare il grafo — ma **non costruire un

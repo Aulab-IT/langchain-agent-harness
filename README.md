@@ -234,16 +234,24 @@ shell locale non viene usato dal progetto finale.
 
 ## Comandi
 
+`make` (o `make help`) stampa la guida completa: setup, uso, e per ogni funzionalità il test
+offline che la verifica e come vederla funzionare dal vivo. `make targets` dà l'elenco compatto.
+
 ```bash
+make help       # guida all'uso e alla verifica (target predefinito)
+make ci         # gli stessi controlli offline della CI: lint, mypy, manuale, test, client
 make install    # dipendenze Python + client React
 make test       # test offline
 make lint       # analisi statica
 make format     # ruff format + fix automatico
 make sandbox-image # immagine Docker riproducibile
 make handbook   # rigenera le ancore del manuale e i suoi artefatti
+make handbook-serve # manuale navigabile su http://127.0.0.1:8765 (HANDBOOK_PORT=... per cambiarla)
 make run        # check immagine sandbox, poi API + Control Center
 make chat       # chat interattiva CLI
 make smoke      # run singolo di verifica end-to-end
+make reset      # azzera i dati delle sessioni (API spenta; DRY=1 per vedere prima)
+make reset-all  # in più la configurazione fatta dal Control Center
 ```
 
 ## Percorso consigliato

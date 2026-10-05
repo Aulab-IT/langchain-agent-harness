@@ -26,6 +26,36 @@ _REUSE_MARKER = re.compile(
 )
 
 
+# Verbi che segnalano un compito di produzione/modifica di artefatti, quindi da verificare in
+# sandbox. Coperte le due lingue del progetto: come il router, non privilegia l'italiano —
+# `write a report` e `scrivi un report` devono comportarsi allo stesso modo.
+# Sta qui e non in `runner.py` perché la usa anche il router dei subagenti, che `runner`
+# importa indirettamente (runner → factory → subagent_routing): da lì sarebbe un ciclo.
+_VERIFICATION_VERBS: tuple[str, ...] = (
+    "crea",
+    "scrivi",
+    "modifica",
+    "implementa",
+    "correggi",
+    "aggiorna",
+    "genera",
+    "create",
+    "write",
+    "modify",
+    "implement",
+    "fix",
+    "update",
+    "generate",
+    "build",
+    "refactor",
+)
+
+
+def requires_environment_verification(goal: str) -> bool:
+    normalized = goal.casefold()
+    return any(verb in normalized for verb in _VERIFICATION_VERBS)
+
+
 def requires_skill_catalog_change(goal: str) -> bool:
     """True solo per richieste esplicite di creazione/install/update di una skill."""
     return bool(_SKILL_WORD.search(goal) and _SKILL_ACTION.search(goal))

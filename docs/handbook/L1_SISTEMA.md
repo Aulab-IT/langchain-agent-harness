@@ -24,7 +24,7 @@ cui una regola di sicurezza scritta nel grafo vale automaticamente su entrambe: 
 un percorso «CLI» che salti i controlli del percorso «web».
 
 - CLI: `cli.py · L77–83` costruisce `GoalRunner(harness, ask_approval)`.
-- Control plane: `server.py · L1322` costruisce `GoalRunner(harness, approval, agent_event, interaction)`.
+- Control plane: `server.py · L1321` costruisce `GoalRunner(harness, approval, agent_event, interaction)`.
 
 ## Gli stadi
 
@@ -54,7 +54,7 @@ Il grafo Deep Agent chiama il modello, stream dei delta, raccoglie le tool call.
 (`middleware.py`) sceglie il gradino della ladder chiamata per chiamata: il modello passato
 a `create_deep_agent` è solo il punto di partenza, ed è il più economico (`factory.py · L1032–1035`).
 
-Lo streaming passa da `GoalRunner._invoke_graph` (`runner.py · L129–155`), che emette
+Lo streaming passa da `GoalRunner._invoke_graph` (`runner.py · L102–128`), che emette
 `assistant.delta` e snapshot di usage mentre il grafo avanza.
 
 Prima di ogni chiamata i blocchi-file allegati vengono ispezionati, perché un allegato
@@ -74,7 +74,7 @@ implementazione. → [L2](L2_UNITA.md#stadio-4--esecuzione-guardata-degli-effett
 
 Il run non finisce quando il modello smette di parlare. `GoalRunner` reinietta l'obiettivo
 finché non compare il marcatore `[GOAL_COMPLETE]` **e** la verifica è passata, entro un
-budget di continuazione configurabile (`runner.py · L200–334`). Un grader a rubric valuta
+budget di continuazione configurabile (`runner.py · L173–307`). Un grader a rubric valuta
 l'output e reinietta feedback (`verification.py`).
 
 ### 6 · Persistenza e proiezione
@@ -86,7 +86,7 @@ per thread. Il client riceve tutto via SSE.
 ### 7 · Chiusura
 
 Alla fine del run il control plane chiude gli interrupt durevoli rimasti pendenti e
-rilascia le future di approvazione (`server.py · L1676–1691`). Un run terminato non deve
+rilascia le future di approvazione (`server.py · L1675–1690`). Un run terminato non deve
 lasciare interrupt orfani in SQLite.
 
 ## Strati trasversali

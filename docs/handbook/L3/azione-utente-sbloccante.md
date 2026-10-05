@@ -40,7 +40,7 @@ all'utente (`interaction.py · L83–91`).
 
 `request_user_action` chiama `interrupt()` di LangGraph con un payload marcato
 `"type": "user_action"` (`interaction.py · L57–65`). È quel marcatore a discriminare il
-ramo nel loop del runner (`runner.py · L169–174`):
+ramo nel loop del runner (`runner.py · L142–147`):
 
 ```
 "__interrupt__" in result
@@ -76,12 +76,12 @@ percorso bloccato.
 
 | Momento | Cosa cambia | Evidenza |
 |---|---|---|
-| Sospensione | run → `waiting_action` (non `waiting_approval`) | `server.py · L1243` |
-| Sospensione | interrupt durevole di tipo `user_action` | `server.py · L1244` |
-| Sospensione | notifica «serve un'azione da te» | `server.py · L1245–1250` |
-| Sospensione | evento `action.requested` | `server.py · L1251` |
-| Risoluzione | interrupt risolto, run → `running` | `server.py · L1258–1259` |
-| Annullamento | `terminal_hint = "blocked_needs_human"` | `server.py · L1266–1268` |
+| Sospensione | run → `waiting_action` (non `waiting_approval`) | `server.py · L1242` |
+| Sospensione | interrupt durevole di tipo `user_action` | `server.py · L1243` |
+| Sospensione | notifica «serve un'azione da te» | `server.py · L1244–1249` |
+| Sospensione | evento `action.requested` | `server.py · L1250` |
+| Risoluzione | interrupt risolto, run → `running` | `server.py · L1257–1258` |
+| Annullamento | `terminal_hint = "blocked_needs_human"` | `server.py · L1265–1267` |
 
 L'ultimo è il più interessante per chi verifica: un run annullato qui non finisce come
 «fallito» generico ma come **bloccato in attesa di un umano**, con una motivazione
@@ -95,7 +95,7 @@ altrimenti conterebbe come errore dell'agente qualcosa che errore non è.
 ### L'autonomia non si applica
 
 Il commento nel codice è netto: *«si attende SEMPRE l'utente (l'autonomia non può svolgere
-un'azione reale come un consenso OAuth nel browser)»* (`server.py · L1232–1233`).
+un'azione reale come un consenso OAuth nel browser)»* (`server.py · L1231–1232`).
 
 Non esiste un ramo di auto-risoluzione. È una differenza sostanziale rispetto a 4.1, dove
 la modalità autonoma salta le approvazioni locali: qui non c'è niente da saltare, perché
@@ -103,7 +103,7 @@ non c'è nessuna decisione da prendere — c'è un'azione fisica che manca.
 
 ### Timeout lungo
 
-**1.800 secondi**, trenta minuti (`server.py · L1254`), contro i 600 dell'approvazione. La
+**1.800 secondi**, trenta minuti (`server.py · L1253`), contro i 600 dell'approvazione. La
 proporzione riflette il compito: approvare è un clic, completare un flusso OAuth su un
 altro dispositivo no. Alla scadenza il risultato è `{"cancelled": True}` — stessa strada
 dell'annullamento esplicito.
@@ -111,20 +111,20 @@ dell'annullamento esplicito.
 ### Troncamento difensivo
 
 Il control plane ritronca `title` e `instructions` ai limiti dello schema
-(`server.py · L1235–1240`) anche se `UserActionInput` li ha già validati. Ridondanza
+(`server.py · L1234–1239`) anche se `UserActionInput` li ha già validati. Ridondanza
 deliberata: il payload che arriva alla UI non dipende dalla fiducia in un validatore a
 monte.
 
 ### Nessun callback
 
-`RuntimeError("Azione utente richiesta ma manca il callback.")` (`runner.py · L170–171`).
+`RuntimeError("Azione utente richiesta ma manca il callback.")` (`runner.py · L143–144`).
 Come per 4.1: senza superficie di interazione, il run si ferma invece di proseguire alla
 cieca.
 
 ### Annullamento del run
 
 `cancel` completa anche la future di interazione con `{"cancelled": True}`, non solo quella
-di approvazione (`server.py · L1714–1716`).
+di approvazione (`server.py · L1713–1715`).
 
 ---
 
@@ -135,10 +135,10 @@ di approvazione (`server.py · L1714–1716`).
 | `src/agent_harness/interaction.py` | L21–47 | schema tipizzato dell'input |
 | `src/agent_harness/interaction.py` | L50–76 | interrupt e traduzione della risposta |
 | `src/agent_harness/interaction.py` | L79–93 | esposizione come tool |
-| `src/agent_harness/runner.py` | L169–174 | ramo dedicato nel loop di sospensione |
-| `src/agent_harness/server.py` | L1231–1269 | callback, stato, timeout, hint terminale |
-| `src/agent_harness/server.py` | L1700–1706 | risoluzione dal REST |
-| `src/agent_harness/server.py` | L2551–2555 | endpoint `POST /api/runs/{id}/action` |
+| `src/agent_harness/runner.py` | L142–147 | ramo dedicato nel loop di sospensione |
+| `src/agent_harness/server.py` | L1230–1268 | callback, stato, timeout, hint terminale |
+| `src/agent_harness/server.py` | L1699–1705 | risoluzione dal REST |
+| `src/agent_harness/server.py` | L2550–2554 | endpoint `POST /api/runs/{id}/action` |
 | `client/src/components/shared/UserActionDialog.tsx` | L1–184 | modale con istruzioni e input |
 | `client/src/App.tsx` | L241–245 | montaggio del modale |
 

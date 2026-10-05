@@ -77,18 +77,18 @@ Un trigger rotto non ferma lo scheduler.
 
 ### Autenticazione per token
 
-`POST /api/triggers/{trigger_id}/webhook` (`server.py · L2673–2719`). Il token può stare
+`POST /api/triggers/{trigger_id}/webhook` (`server.py · L2672–2718`). Il token può stare
 nell'header `X-Trigger-Token` o come parametro, per essere chiamabile da `curl` e da sistemi
 che non impostano header.
 
 Il commento sul CORS chiarisce il modello di sicurezza: i webhook *«sono autenticati dal
 token, non dall'origine: sono pensati per essere chiamati»* da qualunque origine
-(`server.py · L1907–1910`, `server.py · L2633–2639`). Il preflight aperto non è una svista:
+(`server.py · L1906–1909`, `server.py · L2632–2638`). Il preflight aperto non è una svista:
 è la conseguenza coerente dell'aver scelto il token come unico fattore.
 
 ### Il payload è dato, mai istruzione
 
-**Evidenza:** `server.py · L1748–1754`.
+**Evidenza:** `server.py · L1747–1753`.
 
 > «Costruisce il goal del run; il payload webhook è allegato come dato **NON attendibile**.»
 
@@ -102,7 +102,7 @@ canale di comando remoto verso l'agente.
 fresh_each_fire = trigger.get("kind") == "webhook"
 ```
 
-**Evidenza:** `server.py · L1772–1779`.
+**Evidenza:** `server.py · L1771–1778`.
 
 I webhook aprono una sessione nuova a ogni evento. Due conseguenze: un evento non vede il
 contesto di quello precedente (nessun accumulo di payload non attendibili nello stesso
@@ -123,10 +123,10 @@ continuità è utile.
 | `src/agent_harness/triggers.py` | L138–160 | scheduler e reclamo durevole |
 | `src/agent_harness/triggers.py` | L161–200 | chiave UTC, doppia difesa, potatura |
 | `src/agent_harness/triggers.py` | L202–222 | loop resiliente e avvio/stop |
-| `src/agent_harness/server.py` | L1748–1754 | payload come dato non attendibile |
-| `src/agent_harness/server.py` | L1772–1779 | sessione fresca per i webhook |
-| `src/agent_harness/server.py` | L2633–2639 | preflight CORS aperto |
-| `src/agent_harness/server.py` | L2673–2719 | endpoint webhook con token |
+| `src/agent_harness/server.py` | L1747–1753 | payload come dato non attendibile |
+| `src/agent_harness/server.py` | L1771–1778 | sessione fresca per i webhook |
+| `src/agent_harness/server.py` | L2632–2638 | preflight CORS aperto |
+| `src/agent_harness/server.py` | L2672–2718 | endpoint webhook con token |
 | `src/agent_harness/durable.py` | L277–328 | garanzia «una volta sola» |
 
 **Test:** `tests/test_triggers.py`, `tests/test_server.py`.

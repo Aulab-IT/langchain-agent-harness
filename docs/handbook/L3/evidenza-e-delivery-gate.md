@@ -128,17 +128,17 @@ esiste un'approvazione «in bianco» che copra modifiche successive.
 
 ### L'endpoint
 
-`POST /api/runs/{run_id}/delivery-gate` (`server.py · L2425–2483`) rifiuta di approvare se:
+`POST /api/runs/{run_id}/delivery-gate` (`server.py · L2424–2482`) rifiuta di approvare se:
 
-- il run non è `completed` → 409 (`server.py · L2448–2452`);
+- il run non è `completed` → 409 (`server.py · L2447–2451`);
 - integrità non valida, oppure checker assente o fallito → 409
-  (`server.py · L2453–2458`).
+  (`server.py · L2452–2457`).
 
 Un umano **non può** approvare un run le cui evidenze non tornano. Il gate non è un veto
 opzionale sopra una decisione automatica: è una condizione che si aggiunge a quelle
 automatiche.
 
-`requires_human_gate` determina se il gate si applica (`server.py · L2436–2437`);
+`requires_human_gate` determina se il gate si applica (`server.py · L2435–2436`);
 `delivery_boundary` (`evidence.py · L240–252`) decide dall'obiettivo e dalla provenienza se
 il run ha una rilevanza di delivery. Un run che non produce niente di consegnabile non
 chiede un'approvazione inutile.
@@ -159,8 +159,8 @@ chiede un'approvazione inutile.
 | `src/agent_harness/evidence.py` | L477–534 | creazione del bundle |
 | `src/agent_harness/evidence.py` | L536–568 | checker indipendente e read-only |
 | `src/agent_harness/evidence.py` | L570–647 | valutazione della prontezza |
-| `src/agent_harness/server.py` | L2389–2423 | lettura delle evidenze |
-| `src/agent_harness/server.py` | L2425–2483 | gate di delivery |
+| `src/agent_harness/server.py` | L2388–2422 | lettura delle evidenze |
+| `src/agent_harness/server.py` | L2424–2482 | gate di delivery |
 
 **Test:** `tests/test_evidence.py`, `tests/test_server.py`.
 

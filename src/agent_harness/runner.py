@@ -17,6 +17,7 @@ from langgraph.types import Command
 
 from agent_harness.factory import Harness
 from agent_harness.model_errors import invoke_with_model_retry
+from agent_harness.outcome_checks import requires_environment_verification
 from agent_harness.prompts import (
     CONTINUATION_PROMPT,
     FINAL_RESPONSE_FEEDBACK_PROMPT,
@@ -47,34 +48,6 @@ def final_text(messages: list[BaseMessage]) -> str:
         if isinstance(message, AIMessage):
             return message.text
     return ""
-
-
-# Verbi che segnalano un compito di produzione/modifica di artefatti, quindi da verificare in
-# sandbox. Coperte le due lingue del progetto: come il router, non privilegia l'italiano —
-# `write a report` e `scrivi un report` devono comportarsi allo stesso modo.
-_VERIFICATION_VERBS: tuple[str, ...] = (
-    "crea",
-    "scrivi",
-    "modifica",
-    "implementa",
-    "correggi",
-    "aggiorna",
-    "genera",
-    "create",
-    "write",
-    "modify",
-    "implement",
-    "fix",
-    "update",
-    "generate",
-    "build",
-    "refactor",
-)
-
-
-def requires_environment_verification(goal: str) -> bool:
-    normalized = goal.casefold()
-    return any(verb in normalized for verb in _VERIFICATION_VERBS)
 
 
 def _current_turn_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
